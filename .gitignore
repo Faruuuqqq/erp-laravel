@@ -1,6 +1,53 @@
-AGENTS.md
-prompt.xml
-.env
-.env.example
-referensi/
-.opencode/
+1: AGENTS.md
+2: prompt.xml
+3: .env
+4: .env.example
+5: referensi/
+6: .opencode/
+
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Frontend
+frontend.v2/node_modules/
+frontend.v2/.pnpm-store/
+
+# IDE
+.vscode/*
+!.vscode/extensions.json
+.idea
+
+# OS
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Build
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+
+# OS
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

@@ -67,14 +67,15 @@ class DashboardController extends Controller
 
         return response()->json([
             'data' => [
-                'totalSalesToday'     => (float) $salesTotal,
-                'salesGrowth'         => $salesGrowth,
-                'totalPurchasesToday' => (float) $purchasesTotal,
-                'purchasesGrowth'     => $purchasesGrowth,
-                'totalProducts'       => $totalProducts,
-                'stockValue'          => (float) Product::selectRaw('SUM(stock * buy_price) as val')->value('val'),
-                'activeCustomers'     => $activeCustomers,
-                'customersGrowth'     => $customersGrowth,
+                'totalSalesToday'        => (float) $salesTotal,
+                'salesGrowth'            => $salesGrowth,
+                'totalPurchasesToday'    => (float) $purchasesTotal,
+                'purchasesGrowth'        => $purchasesGrowth,
+                'totalProducts'          => $totalProducts,
+                'stockValue'             => (float) Product::selectRaw('SUM(stock * buy_price) as val')->value('val'),
+                'activeCustomers'        => $activeCustomers,
+                'customersGrowth'        => $customersGrowth,
+                'totalTransactionsToday' => $salesCount + $purchasesCount,
             ],
         ]);
     }

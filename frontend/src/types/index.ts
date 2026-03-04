@@ -54,6 +54,7 @@ export interface Supplier {
   totalTransactions: number;
   createdAt?: string;
   updatedAt?: string;
+  kode?: string;
 }
 
 export interface SupplierFormData {
@@ -254,6 +255,20 @@ export interface DashboardStats {
   stockValue: number;
   activeCustomers: number;
   customersGrowth: number;
+  totalTransactionsToday: number;
+}
+
+export interface FinancialSummary {
+  totalReceivables: number;
+  overdueReceivables: number;
+  totalPayables: number;
+  pendingPayments: number;
+}
+
+export interface SalesTrendData {
+  name: string;
+  sales: number;
+  purchases: number;
 }
 
 // RecentTransaction = same shape as Transaction (from TransactionResource)
@@ -266,6 +281,8 @@ export interface LowStockItem {
   minStock: number;
   unit: string;
   category?: string;
+  daysRemaining?: number | null;
+  urgency?: 'critical' | 'warning' | 'moderate';
 }
 
 // ─── Reports ──────────────────────────────────────────────────────────────────
