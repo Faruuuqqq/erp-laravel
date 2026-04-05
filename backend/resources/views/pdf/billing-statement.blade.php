@@ -106,8 +106,8 @@
                         <td>{{ $transaction->invoice_number }}</td>
                         <td>
                             {{ ucfirst(str_replace('_', ' ', $transaction->type)) }}
-                            @if($transaction->items)
-                                ({{ $transaction->items->count() }} item)
+                            @if($transaction->details)
+                                ({{ $transaction->details->count() }} item)
                             @endif
                         </td>
                         <td class="text-right">Rp {{ number_format($transaction->remaining, 0, ',', '.') }}</td>

@@ -30,6 +30,7 @@ import SaldoStok from "./pages/laporan/SaldoStok";
 import KartuStok from "./pages/laporan/KartuStok";
 import LaporanHarian from "./pages/laporan/LaporanHarian";
 import Pengaturan from "./pages/Pengaturan";
+import AdminManagement from "./pages/pengaturan/AdminManagement";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -95,6 +96,7 @@ const AppRoutes = () => {
       <Route path="/laporan/kartu-stok" element={<ProtectedRoute><KartuStok /></ProtectedRoute>} />
       <Route path="/laporan/laporan-harian" element={<ProtectedRoute><LaporanHarian /></ProtectedRoute>} />
       <Route path="/pengaturan" element={<ProtectedRoute><Pengaturan /></ProtectedRoute>} />
+      <Route path="/pengaturan/admin" element={<ProtectedRoute ownerOnly><AdminManagement /></ProtectedRoute>} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );

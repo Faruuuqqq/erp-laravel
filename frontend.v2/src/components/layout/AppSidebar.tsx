@@ -24,6 +24,7 @@ import {
   AlertTriangle,
   Bell,
   Zap,
+  Shield,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -88,6 +89,7 @@ const buildMenu = (isOwner: boolean): MenuItem[] => [
     ],
   },
   { title: 'Pengaturan', icon: Settings, path: '/pengaturan' },
+  ...(isOwner ? [{ title: 'Kelola Admin', icon: Shield, path: '/pengaturan/admin' }] : []),
 ];
 
 interface NavGroupProps {

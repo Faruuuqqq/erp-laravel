@@ -15,67 +15,72 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Plus, Search, Pencil, Trash2, Phone, MapPin, AlertCircle, Download, Users } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { StatCard } from '@/components/ui/StatCard';
-import { CUSTOMERS, Customer as CustomerType, formatRupiah } from '@/data/mockData';
 import { useToast } from '@/hooks/use-toast';
+import { useCustomers, useCreateCustomer, useUpdateCustomer, useDeleteCustomer } from '@/hooks/api/useCustomers';
+import type { Customer } from '@/types';
 
-const Customer = () => {
-  const [customers, setCustomers] = useState<CustomerType[]>(CUSTOMERS);
+const formatRupiah = (value: number) =>
+  new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(value);
+
+const CustomerPage = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState('all');
   const [isAddOpen, setIsAddOpen] = useState(false);
-  const [editItem, setEditItem] = useState<CustomerType | null>(null);
-  const [form, setForm] = useState({ nama: '', telepon: '', email: '', alamat: '', limitKredit: '10000000' });
+  const [editItem, setEditItem] = useState<Customer | null>(null);
+  const [form, setForm] = useState({ name: '', phone: '', email: '', address: '', credit_limit: '10000000' });
   const { toast } = useToast();
 
-  const filtered = customers.filter(c => {
-    const matchSearch = c.nama.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.kode.toLowerCase().includes(searchTerm.toLowerCase());
-    if (activeTab === 'piutang') return matchSearch && c.totalPiutang > 0;
-    if (activeTab === 'overlimit') return matchSearch && c.totalPiutang > c.limitKredit;
-    return matchSearch;
-  });
+  const { data, isLoading, refetch } = useCustomers({ per_page: 100, search: searchTerm });
+  const createMutation = useCreateCustomer();
+  const updateMutation = useUpdateCustomer();
+  const deleteMutation = useDeleteCustomer();
 
-  const totalPiutang = customers.reduce((s, c) => s + c.totalPiutang, 0);
-  const withPiutang = customers.filter(c => c.totalPiutang > 0).length;
-  const overLimit = customers.filter(c => c.totalPiutang > c.limitKredit).length;
+  const customers = (data?.data?.data ?? []) as Customer[];
 
-  const openEdit = (c: CustomerType) => {
+  const totalPiutang = customers.reduce((s, c) => s + (c.balance || 0), 0);
+  const overLimit = customers.filter(c => (c.creditLimit || 0) > 0 && (c.balance || 0) > (c.creditLimit || 0)).length;
+
+  const openEdit = (c: Customer) => {
     setEditItem(c);
-    setForm({ nama: c.nama, telepon: c.telepon, email: c.email, alamat: c.alamat, limitKredit: String(c.limitKredit) });
+    setForm({ name: c.name, phone: c.phone || '', email: c.email || '', address: c.address || '', credit_limit: String(c.creditLimit || 0) });
   };
 
-  const handleSave = () => {
-    if (!form.nama.trim()) return;
-    if (editItem) {
-      setCustomers(prev => prev.map(c => c.id === editItem.id
-        ? { ...c, ...form, limitKredit: Number(form.limitKredit) } : c));
-      toast({ title: 'Customer diperbarui', description: `${form.nama} berhasil diperbarui.` });
-      setEditItem(null);
-    } else {
-      const newC: CustomerType = {
-        id: `cus${Date.now()}`,
-        kode: `CUS-${String(customers.length + 1).padStart(3, '0')}`,
-        ...form,
-        limitKredit: Number(form.limitKredit),
-        totalPiutang: 0,
-        totalTransaksi: 0,
-        createdAt: new Date().toISOString().slice(0, 10),
-      };
-      setCustomers(prev => [...prev, newC]);
-      toast({ title: 'Customer ditambahkan', description: `${form.nama} berhasil ditambahkan.` });
-      setIsAddOpen(false);
+  const handleSave = async () => {
+    if (!form.name.trim()) return;
+    try {
+      if (editItem) {
+        await updateMutation.mutateAsync({
+          id: editItem.id,
+          data: { name: form.name, phone: form.phone, email: form.email, address: form.address, credit_limit: Number(form.credit_limit) },
+        });
+        toast({ title: 'Customer diperbarui', description: `${form.name} berhasil diperbarui.` });
+        setEditItem(null);
+      } else {
+        await createMutation.mutateAsync({ name: form.name, phone: form.phone, email: form.email, address: form.address, credit_limit: Number(form.credit_limit) });
+        toast({ title: 'Customer ditambahkan', description: `${form.name} berhasil ditambahkan.` });
+        setIsAddOpen(false);
+      }
+      setForm({ name: '', phone: '', email: '', address: '', credit_limit: '10000000' });
+      refetch();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Gagal menyimpan customer';
+      toast({ title: 'Error', description: msg, variant: 'destructive' });
     }
-    setForm({ nama: '', telepon: '', email: '', alamat: '', limitKredit: '10000000' });
   };
 
-  const handleDelete = (id: string, nama: string) => {
-    setCustomers(prev => prev.filter(c => c.id !== id));
-    toast({ title: 'Customer dihapus', description: `${nama} telah dihapus.`, variant: 'destructive' });
+  const handleDelete = async (id: string, name: string) => {
+    try {
+      await deleteMutation.mutateAsync(id);
+      toast({ title: 'Customer dihapus', description: `${name} telah dihapus.`, variant: 'destructive' });
+      refetch();
+    } catch {
+      toast({ title: 'Error', description: 'Gagal menghapus customer', variant: 'destructive' });
+    }
   };
 
   const handleExport = () => {
-    const rows = [['Kode', 'Nama', 'Telepon', 'Email', 'Total Piutang', 'Limit Kredit'],
-    ...filtered.map(c => [c.kode, c.nama, c.telepon, c.email, formatRupiah(c.totalPiutang), formatRupiah(c.limitKredit)])];
+    const rows = [['Kode', 'Nama', 'Telepon', 'Email', 'Alamat', 'Total Piutang', 'Limit Kredit'],
+    ...customers.map(c => [`CUS-${c.id}`, c.name, c.phone, c.email || '', c.address || '', formatRupiah(c.balance), formatRupiah(c.creditLimit || 0)])];
     const csv = rows.map(r => r.join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -89,20 +94,20 @@ const Customer = () => {
         <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
         <div className="space-y-4 pt-1">
           <div className="space-y-1.5"><Label>Nama Customer *</Label>
-            <Input placeholder="Nama customer" value={form.nama} onChange={e => setForm(p => ({ ...p, nama: e.target.value }))} /></div>
+            <Input placeholder="Nama customer" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} /></div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5"><Label>No. Telepon</Label>
-              <Input placeholder="08..." value={form.telepon} onChange={e => setForm(p => ({ ...p, telepon: e.target.value }))} /></div>
+              <Input placeholder="08..." value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} /></div>
             <div className="space-y-1.5"><Label>Email</Label>
               <Input type="email" placeholder="email@..." value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} /></div>
           </div>
           <div className="space-y-1.5"><Label>Alamat</Label>
-            <Input placeholder="Alamat lengkap" value={form.alamat} onChange={e => setForm(p => ({ ...p, alamat: e.target.value }))} /></div>
+            <Input placeholder="Alamat lengkap" value={form.address} onChange={e => setForm(p => ({ ...p, address: e.target.value }))} /></div>
           <div className="space-y-1.5"><Label>Limit Kredit (Rp)</Label>
-            <Input type="number" placeholder="10000000" value={form.limitKredit} onChange={e => setForm(p => ({ ...p, limitKredit: e.target.value }))} /></div>
+            <Input type="number" placeholder="10000000" value={form.credit_limit} onChange={e => setForm(p => ({ ...p, credit_limit: e.target.value }))} /></div>
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => onOpenChange(false)}>Batal</Button>
-            <Button onClick={handleSave}>Simpan</Button>
+            <Button onClick={handleSave} disabled={createMutation.isPending || updateMutation.isPending}>Simpan</Button>
           </div>
         </div>
       </DialogContent>
@@ -126,86 +131,104 @@ const Customer = () => {
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="h-9">
               <TabsTrigger value="all" className="text-xs">Semua ({customers.length})</TabsTrigger>
-              <TabsTrigger value="piutang" className="text-xs">Piutang ({withPiutang})</TabsTrigger>
+              <TabsTrigger value="piutang" className="text-xs">Piutang ({customers.filter(c => c.balance > 0).length})</TabsTrigger>
               <TabsTrigger value="overlimit" className="text-xs text-destructive">Over Limit ({overLimit})</TabsTrigger>
             </TabsList>
           </Tabs>
         </div>
         <div className="flex gap-2 shrink-0">
           <Button variant="outline" size="sm" onClick={handleExport}><Download className="mr-1.5 h-4 w-4" />Export CSV</Button>
-          <Button size="sm" onClick={() => { setForm({ nama: '', telepon: '', email: '', alamat: '', limitKredit: '10000000' }); setIsAddOpen(true); }}>
+          <Button size="sm" onClick={() => { setForm({ name: '', phone: '', email: '', address: '', credit_limit: '10000000' }); setIsAddOpen(true); }}>
             <Plus className="mr-1.5 h-4 w-4" />Tambah Customer
           </Button>
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {filtered.length === 0 ? (
-          <div className="col-span-3 py-12 text-center text-muted-foreground">Tidak ada customer yang sesuai.</div>
-        ) : filtered.map(c => {
-          const isOverLimit = c.totalPiutang > c.limitKredit;
-          return (
-            <Card key={c.id} className={`transition-shadow hover:shadow-md ${isOverLimit ? 'border-destructive/40' : ''}`}>
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-xs text-muted-foreground font-mono">{c.kode}</span>
-                      {c.totalPiutang > 0 && (
-                        <Badge variant={isOverLimit ? 'destructive' : 'outline'} className={`text-xs ${!isOverLimit ? 'text-warning border-warning' : ''}`}>
-                          <AlertCircle className="mr-1 h-3 w-3" />
-                          {isOverLimit ? 'Over Limit' : 'Piutang'}
-                        </Badge>
-                      )}
-                    </div>
-                    <CardTitle className="mt-1 text-base">{c.nama}</CardTitle>
-                  </div>
-                  <div className="flex gap-1 shrink-0">
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(c)}><Pencil className="h-3.5 w-3.5" /></Button>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Hapus Customer</AlertDialogTitle>
-                          <AlertDialogDescription>Apakah Anda yakin ingin menghapus <strong>{c.nama}</strong>?</AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Batal</AlertDialogCancel>
-                          <AlertDialogAction className="bg-destructive hover:bg-destructive/90" onClick={() => handleDelete(c.id, c.nama)}>Hapus</AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Phone className="h-3.5 w-3.5 shrink-0" />{c.telepon}
-                </div>
-                <div className="flex items-start gap-2 text-sm text-muted-foreground">
-                  <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                  <span className="line-clamp-1">{c.alamat}</span>
-                </div>
-                <div className="grid grid-cols-2 gap-2 border-t pt-2.5 mt-2">
-                  <div>
-                    <p className="text-xs text-muted-foreground">Total Transaksi</p>
-                    <p className="font-semibold text-primary text-sm">{formatRupiah(c.totalTransaksi)}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Piutang / Limit</p>
-                    <p className={`font-semibold text-sm ${c.totalPiutang > 0 ? (isOverLimit ? 'text-destructive' : 'text-warning') : 'text-muted-foreground'}`}>
-                      {formatRupiah(c.totalPiutang)}
-                    </p>
-                    <p className="text-xs text-muted-foreground">/ {formatRupiah(c.limitKredit)}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
+      {isLoading ? (
+        <div className="py-12 text-center text-muted-foreground">Loading...</div>
+      ) : (
+        <Card>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-muted/40 text-xs text-muted-foreground">
+                    <th className="px-4 py-3 text-left font-semibold">ID</th>
+                    <th className="px-4 py-3 text-left font-semibold">Nama</th>
+                    <th className="px-4 py-3 text-left font-semibold">Telepon</th>
+                    <th className="px-4 py-3 text-left font-semibold">Email</th>
+                    <th className="px-4 py-3 text-left font-semibold">Alamat</th>
+                    <th className="px-4 py-3 text-right font-semibold">Total Piutang</th>
+                    <th className="px-4 py-3 text-right font-semibold">Limit Kredit</th>
+                    <th className="px-4 py-3 text-right font-semibold">Transaksi</th>
+                    <th className="px-4 py-3 text-center font-semibold">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {customers.length === 0 ? (
+                    <tr><td colSpan={9} className="px-4 py-10 text-center text-muted-foreground">Tidak ada customer yang sesuai.</td></tr>
+                  ) : (
+                    customers.filter(c => {
+                      if (activeTab === 'piutang') return c.balance > 0;
+                      if (activeTab === 'overlimit') return (c.creditLimit || 0) > 0 && c.balance > (c.creditLimit || 0);
+                      return true;
+                    }).map(c => {
+                      const isOverLimit = (c.creditLimit || 0) > 0 && c.balance > (c.creditLimit || 0);
+                      return (
+                        <tr key={c.id} className={`border-b transition-colors hover:bg-muted/20 ${isOverLimit ? 'bg-destructive/5' : ''}`}>
+                          <td className="px-4 py-3 font-mono text-xs text-primary">CUS-{c.id}</td>
+                          <td className="px-4 py-3 font-medium">{c.name}</td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-1.5 text-muted-foreground">
+                              <Phone className="h-3.5 w-3.5 shrink-0" />{c.phone || '-'}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-muted-foreground">{c.email || '-'}</td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-start gap-1.5 text-muted-foreground max-w-48">
+                              <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                              <span className="line-clamp-2">{c.address || '-'}</span>
+                            </div>
+                          </td>
+                          <td className={`px-4 py-3 text-right font-semibold tabular-nums ${c.balance > 0 ? 'text-warning' : 'text-muted-foreground'}`}>
+                            {formatRupiah(c.balance)}
+                          </td>
+                          <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
+                            {formatRupiah(c.creditLimit || 0)}
+                          </td>
+                          <td className="px-4 py-3 text-right tabular-nums">
+                            {c.totalTransactions || 0}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex justify-center gap-1">
+                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(c)}><Pencil className="h-3.5 w-3.5" /></Button>
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Hapus Customer</AlertDialogTitle>
+                                    <AlertDialogDescription>Apakah Anda yakin ingin menghapus <strong>{c.name}</strong>?</AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Batal</AlertDialogCancel>
+                                    <AlertDialogAction className="bg-destructive hover:bg-destructive/90" onClick={() => handleDelete(c.id, c.name)}>Hapus</AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <FormDialog open={isAddOpen} onOpenChange={setIsAddOpen} title="Tambah Customer Baru" />
       <FormDialog open={!!editItem} onOpenChange={v => { if (!v) setEditItem(null); }} title="Edit Customer" />
@@ -213,4 +236,4 @@ const Customer = () => {
   );
 };
 
-export default Customer;
+export default CustomerPage;

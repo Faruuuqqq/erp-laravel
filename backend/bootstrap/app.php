@@ -18,6 +18,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // Alias middleware role untuk digunakan di routes
         $middleware->alias([
             'role' => \App\Http\Middleware\CheckRole::class,
+            'permission' => \App\Http\Middleware\CheckPermission::class,
         ]);
 
         // Tambahkan CORS headers untuk semua API responses

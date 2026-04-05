@@ -56,7 +56,7 @@ class KontraBonController extends Controller
 
         $customer = Customer::find($validated['customer_id']);
         $transactions = Transaction::whereIn('id', $validated['transaction_ids'])
-            ->with('items')
+            ->with('details')
             ->get();
 
         $totalAmount = $transactions->sum('remaining');
@@ -113,7 +113,7 @@ class KontraBonController extends Controller
 
         $customer = Customer::find($validated['customer_id']);
         
-        $transactions = Transaction::with('items')
+        $transactions = Transaction::with('details')
             ->where('customer_id', $customer->id)
             ->where('remaining', '>', 0)
             ->orderBy('date')

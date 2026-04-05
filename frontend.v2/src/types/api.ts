@@ -4,6 +4,7 @@ export interface User {
   email: string;
   role: 'owner' | 'admin';
   avatar?: string;
+  permissions?: Record<string, Record<string, boolean>>;
 }
 
 export interface LoginRequest {
@@ -60,6 +61,10 @@ export interface Customer {
   email?: string;
   address?: string;
   balance: number;
+  creditLimit: number;
+  totalTransactions?: number;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Supplier {

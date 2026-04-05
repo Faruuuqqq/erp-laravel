@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import apiClient from '@/lib/api-client';
 
 export const useDailyReport = (date?: string) => {
   return useQuery({
@@ -8,18 +9,33 @@ export const useDailyReport = (date?: string) => {
   });
 };
 
-export const useStockReport = (params?: { page?: number; perPage?: number }) => {
+export const useStockReport = () => {
   return useQuery({
-    queryKey: ['reports', 'stock', params],
-    queryFn: () => api.get<{ data: any; meta: any }>('/reports/stock', params),
+    queryKey: ['reports', 'stock'],
+    queryFn: () => api.get<{ data: { items: any[]; totalValue: number } }>('/reports/stock'),
   });
 };
 
-export const useBalanceReport = (params?: any) => {
+export const useBalanceReport = (params?: { from?: string; to?: string }) => {
   return useQuery({
     queryKey: ['reports', 'balance', params],
     queryFn: () => api.get('/reports/balance', params),
   });
+};
+
+export const printStockReport = async (): Promise<string> => {
+  const response = await apiClient.get<{ url: string; filename: string }>('/reports/stock/print');
+  return response.data.url;
+};
+
+export const printDailyReport = async (date?: string): Promise<string> => {
+  const response = await apiClient.get<{ url: string; filename: string }>('/reports/daily/print', { params: { date } });
+  return response.data.url;
+};
+
+export const printBalanceReport = async (from?: string, to?: string): Promise<string> => {
+  const response = await apiClient.get<{ url: string; filename: string }>('/reports/balance/print', { params: { from, to } });
+  return response.data.url;
 };
 
 export const useHistoryPembelian = (params?: { from?: string; to?: string; page?: number; perPage?: number }) => {

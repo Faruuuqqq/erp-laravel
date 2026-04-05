@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\AdminManagementController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\CustomerController;
@@ -70,32 +71,16 @@ Route::middleware(['auth:sanctum', 'throttle:60,1'])->group(function () {
     Route::apiResource('delivery-notes', DeliveryNoteController::class);
     Route::get('delivery-notes/{id}/print', [DeliveryNoteController::class, 'print']);
 
-
-
-    // ── Owner Only (Laporan & Info Finansial) ─────────────────────────────────
-    Route::middleware('role:owner')->group(function () {
-
-        Route::prefix('reports')->group(function () {
-            Route::get('daily', [ReportController::class, 'daily']);
-            Route::get('stock', [ReportController::class, 'stock']);
-            Route::get('balance', [ReportController::class, 'balance']);
-            Route::get('history/pembelian', [ReportController::class, 'historyPembelian']);
-            Route::get('history/penjualan', [ReportController::class, 'historyPenjualan']);
-        });
-
-        Route::prefix('info')->group(function () {
-     });
-
-    // ── Dashboard (Admin & Owner) ─────────────────────────────────────────────────────────────────────
+    // ── Dashboard (Admin & Owner) ────────────────────────────────────
     Route::prefix('dashboard')->group(function () {
-         Route::get('stats', [DashboardController::class, 'stats']);
-         Route::get('recent-transactions', [DashboardController::class, 'recentTransactions']);
-         Route::get('low-stock', [DashboardController::class, 'lowStock']);
-         Route::get('financial-summary', [DashboardController::class, 'financialSummary']);
-         Route::get('sales-trend', [DashboardController::class, 'salesTrend']);
-     });
+        Route::get('stats', [DashboardController::class, 'stats']);
+        Route::get('recent-transactions', [DashboardController::class, 'recentTransactions']);
+        Route::get('low-stock', [DashboardController::class, 'lowStock']);
+        Route::get('financial-summary', [DashboardController::class, 'financialSummary']);
+        Route::get('sales-trend', [DashboardController::class, 'salesTrend']);
+    });
 
-    // ── Owner Only (Laporan & Info Financial) ──────────────────────────────────────────────────────────
+    // ── Owner Only (Laporan & Info Finansial) ────────────────────────
     Route::middleware('role:owner')->group(function () {
         Route::prefix('reports')->group(function () {
             Route::get('daily', [ReportController::class, 'daily']);
@@ -115,17 +100,26 @@ Route::middleware(['auth:sanctum', 'throttle:60,1'])->group(function () {
             Route::get('kartu-stok', [InfoController::class, 'kartuStok']);
             Route::get('laporan-harian', [InfoController::class, 'laporanHarian']);
         });
+
+        // ── Admin Management (Owner Only) ─────────────────────────────
+        Route::get('/admins', [AdminManagementController::class, 'index']);
+        Route::post('/admins', [AdminManagementController::class, 'store']);
+        Route::get('/admins/{admin}', [AdminManagementController::class, 'show']);
+        Route::put('/admins/{admin}', [AdminManagementController::class, 'update']);
+        Route::put('/admins/{admin}/permissions', [AdminManagementController::class, 'updatePermissions']);
+        Route::patch('/admins/{admin}/toggle-active', [AdminManagementController::class, 'toggleActive']);
+        Route::delete('/admins/{admin}', [AdminManagementController::class, 'destroy']);
+        Route::get('/admin-presets', [AdminManagementController::class, 'permissionPresets']);
     });
 
-    // ─── Catch-all route for unmatched API routes ─────────────────────────────────────────────
+    // ─── Catch-all route for unmatched API routes ───────────────────
     Route::fallback(function () {
         return response()->json([
             'error' => [
                 'message' => 'API endpoint not found',
-                'path' => $request->path(),
-                'method' => $request->method(),
+                'path' => request()->path(),
+                'method' => request()->method(),
             ],
         ], 404);
     });
-});
 });

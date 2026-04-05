@@ -92,13 +92,13 @@ class DeliveryNoteController extends Controller
 
     public function print(DeliveryNote $deliveryNote)
     {
-        $deliveryNote->load(['transaction', 'customer', 'transaction.items']);
+        $deliveryNote->load(['transaction.details', 'customer']);
 
         $pdf = Pdf::loadView('pdf.delivery-note', compact([
             'deliveryNote' => $deliveryNote,
             'transaction' => $deliveryNote->transaction,
             'customer' => $deliveryNote->customer,
-            'items' => $deliveryNote->transaction->items ?? [],
+            'items' => $deliveryNote->transaction->details ?? [],
         ]))->setPaper('a4')->setOption('isHtml5ParserEnabled', true);
 
         $filename = "surat-jalan-{$deliveryNote->delivery_number}.pdf";

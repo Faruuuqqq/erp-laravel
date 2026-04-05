@@ -64,7 +64,7 @@
             </div>
         </div>
 
-        @foreach($transaction->items as $item)
+        @foreach($transaction->details as $item)
             <div class="product-row">
                 <span class="product-name">{{ $item->productName }}</span>
                 <span class="product-qty">{{ $item->quantity }}</span>

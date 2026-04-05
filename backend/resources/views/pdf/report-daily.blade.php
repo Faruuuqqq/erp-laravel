@@ -106,7 +106,7 @@
                                 Umum
                             @endif
                         </td>
-                        <td>{{ $transaction->items?->sum('quantity') ?? 0 }}</td>
+                        <td>{{ $transaction->details?->sum('quantity') ?? 0 }}</td>
                         <td class="text-right">Rp {{ number_format($transaction->total, 0, ',', '.') }}</td>
                         <td>
                             <span class="type-badge {{ $transaction->status === 'completed' ? 'type-penjualan' : 'type-pembelian' }}">

@@ -15,6 +15,7 @@ class CustomerResource extends JsonResource
             'email'             => $this->email ?? '',
             'address'           => $this->address ?? '',
             'balance'           => (float) $this->balance,
+            'creditLimit'       => (float) ($this->credit_limit ?? 0),
             'totalTransactions' => $this->transactions()->count(),
             'createdAt'         => $this->created_at?->toISOString(),
             'updatedAt'         => $this->updated_at?->toISOString(),

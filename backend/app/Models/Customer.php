@@ -9,9 +9,9 @@ class Customer extends Model
 {
     use SoftDeletes;
 
-    protected $fillable = ['name', 'phone', 'email', 'address', 'balance'];
+    protected $fillable = ['name', 'phone', 'email', 'address', 'balance', 'credit_limit'];
 
-    protected $casts = ['balance' => 'decimal:2'];
+    protected $casts = ['balance' => 'decimal:2', 'credit_limit' => 'decimal:2'];
 
     public function transactions()
     {

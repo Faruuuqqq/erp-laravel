@@ -15,6 +15,7 @@ interface CreateCustomerRequest {
   phone: string;
   email?: string;
   address?: string;
+  credit_limit?: number;
 }
 
 interface UpdateCustomerRequest {
@@ -22,6 +23,7 @@ interface UpdateCustomerRequest {
   phone?: string;
   email?: string;
   address?: string;
+  credit_limit?: number;
 }
 
 export const useCustomers = (params?: CustomerQueryParams) => {

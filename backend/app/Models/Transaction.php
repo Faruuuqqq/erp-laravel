@@ -32,6 +32,11 @@ class Transaction extends Model
         return $this->hasMany(TransactionDetail::class);
     }
 
+    public function items()
+    {
+        return $this->details();
+    }
+
     public function supplier()
     {
         return $this->belongsTo(Supplier::class);

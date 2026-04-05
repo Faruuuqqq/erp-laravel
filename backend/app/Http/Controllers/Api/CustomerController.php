@@ -23,6 +23,7 @@ class CustomerController extends Controller
             'phone'   => ['nullable', 'string', 'max:20'],
             'email'   => ['nullable', 'email'],
             'address' => ['nullable', 'string'],
+            'credit_limit' => ['nullable', 'numeric', 'min:0'],
         ], [
             'name.required' => 'Nama customer wajib diisi.',
         ]);
@@ -44,6 +45,7 @@ class CustomerController extends Controller
             'phone'   => ['nullable', 'string', 'max:20'],
             'email'   => ['nullable', 'email'],
             'address' => ['nullable', 'string'],
+            'credit_limit' => ['nullable', 'numeric', 'min:0'],
         ]);
         $customer->update($data);
         return response()->json(['data' => new CustomerResource($customer->fresh()), 'message' => 'Customer berhasil diperbarui.']);

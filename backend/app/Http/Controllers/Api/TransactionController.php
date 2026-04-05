@@ -210,7 +210,7 @@ class TransactionController extends Controller
     // ─── Print Invoice PDF (GET /transactions/{id}/print/invoice) ────────────
     public function printInvoice(Transaction $transaction): JsonResponse
     {
-        $transaction->load(['items', 'customer', 'supplier', 'sales']);
+        $transaction->load(['details', 'customer', 'supplier', 'salesRep']);
         
         // Get store settings
         $storeSettings = [
@@ -238,7 +238,7 @@ class TransactionController extends Controller
     // ─── Print Receipt PDF (GET /transactions/{id}/print/receipt) ────────────
     public function printReceipt(Transaction $transaction): JsonResponse
     {
-        $transaction->load(['items', 'customer', 'supplier']);
+        $transaction->load(['details', 'customer', 'supplier']);
         
         // Get store settings
         $storeSettings = [

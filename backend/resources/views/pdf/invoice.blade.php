@@ -92,7 +92,7 @@
             </thead>
             <tbody>
                 @php($no = 1)
-                @foreach($transaction->items as $item)
+                @foreach($transaction->details as $item)
                     <tr>
                         <td>{{ $no++ }}</td>
                         <td>{{ $item->productName }}</td>

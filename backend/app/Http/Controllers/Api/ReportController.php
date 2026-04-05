@@ -147,7 +147,7 @@ class ReportController extends Controller
             'grossProfit' => (float) ($totalSales - $totalPurchases),
             'salesCount' => $sales->count(),
             'purchasesCount' => $purchases->count(),
-            'transactions' => $sales->concat($purchases)->load(['customer', 'supplier', 'items']),
+            'transactions' => $sales->concat($purchases)->load(['customer', 'supplier', 'details']),
         ];
 
         $storeSettings = [

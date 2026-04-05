@@ -147,7 +147,7 @@
             </div>
         </div>
 
-        @if($transaction && count($transaction->items) > 0)
+        @if($transaction && count($transaction->details) > 0)
         <div class="section">
             <div class="section-title">DETAIL BARANG</div>
             <table class="table">
@@ -161,7 +161,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach($transaction->items as $index => $item)
+                    @foreach($transaction->details as $index => $item)
                     <tr>
                         <td>{{ $index + 1 }}</td>
                         <td>{{ $item->product_name }}</td>
