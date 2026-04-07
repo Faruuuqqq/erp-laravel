@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
@@ -14,8 +13,13 @@ import {
   AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Plus, Trash2, RotateCcw, FileDown, CheckCircle2, AlertTriangle } from 'lucide-react';
-import { SUPPLIERS, TRANSACTIONS, PRODUCTS, formatRupiah } from '@/data/mockData';
 import { useToast } from '@/hooks/use-toast';
+import { useSuppliers } from '@/hooks/api/useSuppliers';
+import { useProducts } from '@/hooks/api/useProducts';
+import type { Supplier, Product } from '@/types';
+
+const formatRupiah = (value: number) =>
+  new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(value);
 
 interface ReturItem { productId: string; nama: string; qty: number; harga: number; satuan: string; subtotal: number; }
 
@@ -23,28 +27,29 @@ const ReturPembelian = () => {
   const { toast } = useToast();
   const [items, setItems] = useState<ReturItem[]>([]);
   const [selectedSupplier, setSelectedSupplier] = useState('');
-  const [selectedFaktur, setSelectedFaktur] = useState('');
   const [selectedProduct, setSelectedProduct] = useState('');
   const [qty, setQty] = useState('1');
   const [alasan, setAlasan] = useState('');
   const [catatan, setCatatan] = useState('');
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [lastRetur, setLastRetur] = useState('');
+
+  const { data: suppliersData } = useSuppliers({ per_page: 100 });
+  const { data: productsData } = useProducts({ per_page: 200 });
+  const suppliers = (suppliersData?.data?.data ?? []) as Supplier[];
+  const products = (productsData?.data?.data ?? []) as Product[];
 
   const noRetur = `RTB-${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}-${String(Math.floor(Math.random()*900)+100)}`;
-  const pembelianFakturs = TRANSACTIONS.filter(t => t.tipe === 'pembelian' && (!selectedSupplier || t.supplierId === selectedSupplier));
-  const selectedTrx = TRANSACTIONS.find(t => t.noFaktur === selectedFaktur);
 
   const addItem = () => {
-    const product = PRODUCTS.find(p => p.id === selectedProduct);
+    const product = products.find(p => p.id === selectedProduct);
     if (!product) return toast({ title: 'Pilih produk', variant: 'destructive' });
     const qtyNum = parseInt(qty) || 1;
     if (qtyNum <= 0) return toast({ title: 'Qty harus > 0', variant: 'destructive' });
-    const trxItem = selectedTrx?.items.find(i => i.productId === selectedProduct);
-    const harga = trxItem?.harga || product.hargaBeli;
-    setItems([...items, { productId: product.id, nama: product.nama, qty: qtyNum, harga, satuan: product.satuan, subtotal: harga * qtyNum }]);
+    setItems([...items, { productId: product.id, nama: product.name, qty: qtyNum, harga: product.buyPrice, satuan: product.unit, subtotal: product.buyPrice * qtyNum }]);
     setSelectedProduct(''); setQty('1');
-    toast({ title: `${product.nama} ditambahkan ke retur` });
+    toast({ title: `${product.name} ditambahkan ke retur` });
   };
 
   const removeItem = (idx: number) => setItems(items.filter((_, i) => i !== idx));
@@ -58,6 +63,7 @@ const ReturPembelian = () => {
 
   const confirmSave = () => {
     setConfirmOpen(false);
+    setLastRetur(noRetur);
     setSaved(true);
     toast({ title: 'Retur pembelian berhasil', description: noRetur });
   };
@@ -71,13 +77,13 @@ const ReturPembelian = () => {
           </div>
           <div className="text-center">
             <h2 className="text-2xl font-bold">Retur Berhasil Diproses</h2>
-            <p className="text-muted-foreground mt-1">No. Retur: <span className="font-mono font-semibold text-primary">{noRetur}</span></p>
+            <p className="text-muted-foreground mt-1">No. Retur: <span className="font-mono font-semibold text-primary">{lastRetur}</span></p>
             <p className="text-3xl font-bold text-destructive mt-3">{formatRupiah(totalNilai)}</p>
             <p className="text-sm text-muted-foreground">Nilai retur dikurangi dari utang</p>
           </div>
           <div className="flex gap-3">
-            <Button variant="outline" onClick={() => toast({ title: 'Mengekspor PDF...' })}><FileDown className="mr-2 h-4 w-4" />Export PDF</Button>
-            <Button onClick={() => { setItems([]); setSaved(false); setSelectedFaktur(''); setSelectedSupplier(''); setAlasan(''); setCatatan(''); }}>Retur Baru</Button>
+            <Button variant="outline" onClick={() => window.print()}><FileDown className="mr-2 h-4 w-4" />Export PDF</Button>
+            <Button onClick={() => { setItems([]); setSaved(false); setSelectedSupplier(''); setAlasan(''); setCatatan(''); }}>Retur Baru</Button>
           </div>
         </div>
       </MainLayout>
@@ -113,22 +119,12 @@ const ReturPembelian = () => {
                   <Select value={selectedSupplier} onValueChange={setSelectedSupplier}>
                     <SelectTrigger className="text-xs"><SelectValue placeholder="Pilih supplier" /></SelectTrigger>
                     <SelectContent>
-                      {SUPPLIERS.map(s => <SelectItem key={s.id} value={s.id}>{s.nama}</SelectItem>)}
+                      {suppliers.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
               </div>
               <div className="grid gap-3 md:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">No. Faktur Pembelian</Label>
-                  <Select value={selectedFaktur} onValueChange={setSelectedFaktur}>
-                    <SelectTrigger className="text-xs"><SelectValue placeholder="Pilih faktur" /></SelectTrigger>
-                    <SelectContent>
-                      {pembelianFakturs.map(t => <SelectItem key={t.id} value={t.noFaktur}>{t.noFaktur} - {t.supplierNama}</SelectItem>)}
-                      <SelectItem value="manual">Input Manual</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">Alasan Retur</Label>
                   <Select value={alasan} onValueChange={setAlasan}>
@@ -150,8 +146,8 @@ const ReturPembelian = () => {
                     <Select value={selectedProduct} onValueChange={setSelectedProduct}>
                       <SelectTrigger className="text-xs h-8"><SelectValue placeholder="Pilih produk" /></SelectTrigger>
                       <SelectContent>
-                        {(selectedTrx?.items ?? PRODUCTS.map(p => ({ productId: p.id, productNama: p.nama, qty: 0, harga: p.hargaBeli, satuan: p.satuan, diskon: 0, subtotal: 0 }))).map(i => (
-                          <SelectItem key={i.productId} value={i.productId}>{i.productNama}</SelectItem>
+                        {products.map(p => (
+                          <SelectItem key={p.id} value={p.id}>{p.code} - {p.name}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -161,36 +157,36 @@ const ReturPembelian = () => {
                 </div>
               </div>
               <div className="rounded-md border overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/50">
-                      <TableHead className="text-xs w-8">No</TableHead>
-                      <TableHead className="text-xs">Produk</TableHead>
-                      <TableHead className="text-xs text-right">Qty</TableHead>
-                      <TableHead className="text-xs text-right">Harga</TableHead>
-                      <TableHead className="text-xs text-right">Subtotal</TableHead>
-                      <TableHead className="w-8"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-muted/50 text-xs text-muted-foreground">
+                      <th className="px-3 py-2 text-left w-8">No</th>
+                      <th className="px-3 py-2 text-left">Produk</th>
+                      <th className="px-3 py-2 text-right">Qty</th>
+                      <th className="px-3 py-2 text-right">Harga</th>
+                      <th className="px-3 py-2 text-right">Subtotal</th>
+                      <th className="w-8"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
                     {items.length === 0 ? (
-                      <TableRow><TableCell colSpan={6} className="text-center text-sm text-muted-foreground py-8">Belum ada barang retur</TableCell></TableRow>
+                      <tr><td colSpan={6} className="text-center text-sm text-muted-foreground py-8">Belum ada barang retur</td></tr>
                     ) : (
                       items.map((item, idx) => (
-                        <TableRow key={idx} className="text-sm">
-                          <TableCell className="text-xs">{idx + 1}</TableCell>
-                          <TableCell className="font-medium">{item.nama}<p className="text-xs text-muted-foreground">{item.satuan}</p></TableCell>
-                          <TableCell className="text-right tabular-nums">{item.qty}</TableCell>
-                          <TableCell className="text-right tabular-nums text-xs">{formatRupiah(item.harga)}</TableCell>
-                          <TableCell className="text-right font-semibold tabular-nums text-destructive">{formatRupiah(item.subtotal)}</TableCell>
-                          <TableCell>
+                        <tr key={idx} className="border-b text-sm">
+                          <td className="px-3 py-2 text-xs">{idx + 1}</td>
+                          <td className="px-3 py-2 font-medium">{item.nama}<p className="text-xs text-muted-foreground">{item.satuan}</p></td>
+                          <td className="px-3 py-2 text-right tabular-nums">{item.qty}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-xs">{formatRupiah(item.harga)}</td>
+                          <td className="px-3 py-2 text-right font-semibold tabular-nums text-destructive">{formatRupiah(item.subtotal)}</td>
+                          <td className="px-3 py-2">
                             <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:bg-destructive/10" onClick={() => removeItem(idx)}><Trash2 className="h-3.5 w-3.5" /></Button>
-                          </TableCell>
-                        </TableRow>
+                          </td>
+                        </tr>
                       ))
                     )}
-                  </TableBody>
-                </Table>
+                  </tbody>
+                </table>
               </div>
             </CardContent>
           </Card>
@@ -210,10 +206,10 @@ const ReturPembelian = () => {
                 <Input value={catatan} onChange={e => setCatatan(e.target.value)} placeholder="Catatan retur..." className="text-xs h-8" />
               </div>
               <div className="flex gap-2 pt-1">
-                <Button variant="outline" className="flex-1 h-9 text-sm" onClick={() => { setItems([]); setSelectedFaktur(''); setAlasan(''); }}>Reset</Button>
+                <Button variant="outline" className="flex-1 h-9 text-sm" onClick={() => { setItems([]); setAlasan(''); }}>Reset</Button>
                 <Button className="flex-1 h-9 text-sm" onClick={handleSave} disabled={items.length === 0}>Simpan</Button>
               </div>
-              <Button variant="outline" className="w-full h-8 text-xs" onClick={() => toast({ title: 'Mengekspor PDF...' })}><FileDown className="mr-1.5 h-3.5 w-3.5" />Export PDF</Button>
+              <Button variant="outline" className="w-full h-8 text-xs" onClick={() => window.print()}><FileDown className="mr-1.5 h-3.5 w-3.5" />Export PDF</Button>
             </CardContent>
           </Card>
         </div>
