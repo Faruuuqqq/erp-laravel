@@ -1,16 +1,20 @@
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Plus, Trash2, FileText, Printer, Truck, FileDown, Eye } from 'lucide-react';
-import { PRODUCTS, CUSTOMERS, SALES_REPS, WAREHOUSES, formatRupiah } from '@/data/mockData';
 import { useToast } from '@/hooks/use-toast';
+import { useProducts } from '@/hooks/api/useProducts';
+import { useCustomers } from '@/hooks/api/useCustomers';
+import { useSalesReps } from '@/hooks/api/useSalesReps';
+import { useWarehouses } from '@/hooks/api/useWarehouses';
+import { useCreateDeliveryNote, printDeliveryNote } from '@/hooks/api/useDeliveryNotes';
+import type { Product, Customer, SalesRep, Warehouse } from '@/types';
 
 interface SJItem {
   productId: string;
@@ -33,35 +37,186 @@ const SuratJalan = () => {
   const [pengirim, setPengirim] = useState('');
   const [catatan, setCatatan] = useState('');
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [lastSJ, setLastSJ] = useState('');
+  const [isPrinting, setIsPrinting] = useState(false);
+
+  const { data: productsData } = useProducts({ per_page: 200 });
+  const { data: customersData } = useCustomers({ per_page: 100 });
+  const { data: salesData } = useSalesReps({ per_page: 100 });
+  const { data: warehousesData } = useWarehouses({ per_page: 100 });
+  const createMutation = useCreateDeliveryNote();
+
+  const products = (productsData?.data?.data ?? []) as Product[];
+  const customers = (customersData?.data?.data ?? []) as Customer[];
+  const sales = (salesData?.data?.data ?? []) as SalesRep[];
+  const warehouses = (warehousesData?.data?.data ?? []) as Warehouse[];
 
   const noSJ = `SJ-${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}-${String(Math.floor(Math.random()*900)+100)}`;
-  const customer = CUSTOMERS.find(c => c.id === selectedCustomer);
-  const gudang = WAREHOUSES.find(g => g.id === selectedGudang);
-  const sales = SALES_REPS.find(s => s.id === selectedSales);
+  const customer = customers.find(c => c.id === selectedCustomer);
+  const gudang = warehouses.find(w => w.id === selectedGudang);
+  const salesRep = sales.find(s => s.id === selectedSales);
   const today = new Date().toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
   const addItem = () => {
-    const product = PRODUCTS.find(p => p.id === selectedProduct);
+    const product = products.find(p => p.id === selectedProduct);
     if (!product) return toast({ title: 'Pilih produk terlebih dahulu', variant: 'destructive' });
     const qtyNum = parseInt(qty) || 1;
     if (qtyNum <= 0) return toast({ title: 'Qty harus lebih dari 0', variant: 'destructive' });
-    setItems([...items, { productId: product.id, nama: product.nama, qty: qtyNum, satuan: product.satuan, keterangan }]);
+    setItems([...items, { productId: product.id, nama: product.name, qty: qtyNum, satuan: product.unit, keterangan }]);
     setSelectedProduct(''); setQty('1'); setKeterangan('');
-    toast({ title: `${product.nama} ditambahkan` });
+    toast({ title: `${product.name} ditambahkan` });
   };
 
   const removeItem = (idx: number) => setItems(items.filter((_, i) => i !== idx));
   const totalQty = items.reduce((s, i) => s + i.qty, 0);
 
-  const handlePrint = () => {
-    setPreviewOpen(false);
-    setTimeout(() => window.print(), 200);
-    toast({ title: 'Mencetak Surat Jalan...' });
+  const handleSave = async () => {
+    if (items.length === 0) return toast({ title: 'Belum ada barang', variant: 'destructive' });
+    if (!selectedCustomer) return toast({ title: 'Pilih customer', variant: 'destructive' });
+
+    try {
+      await createMutation.mutateAsync({
+        delivery_number: noSJ,
+        date: new Date().toISOString().slice(0, 10),
+        customer_id: selectedCustomer,
+        driver: pengirim,
+        vehicle_plate: '',
+        notes: catatan,
+        status: 'delivered',
+        items: items.map(item => ({
+          product_id: item.productId,
+          quantity: item.qty,
+          notes: item.keterangan,
+        })),
+      });
+      setLastSJ(noSJ);
+      setSaved(true);
+      toast({ title: 'Surat Jalan disimpan', description: noSJ });
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Gagal menyimpan surat jalan';
+      toast({ title: 'Error', description: msg, variant: 'destructive' });
+    }
   };
 
-  const handleExportPdf = () => {
-    toast({ title: 'Mengekspor ke PDF...', description: `${noSJ}.pdf` });
+  const handlePrint = async () => {
+    try {
+      setIsPrinting(true);
+      setPreviewOpen(false);
+      toast({ title: 'Mencetak Surat Jalan...' });
+      setTimeout(() => window.print(), 200);
+    } finally {
+      setIsPrinting(false);
+    }
   };
+
+  const handleExportPdf = async () => {
+    try {
+      setIsPrinting(true);
+      const lastDelivery = createMutation.data?.data;
+      if (lastDelivery?.id) {
+        const url = await printDeliveryNote(lastDelivery.id);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `surat-jalan-${noSJ}.pdf`;
+        link.click();
+        toast({ title: 'PDF berhasil diunduh' });
+      } else {
+        toast({ title: 'Simpan surat jalan terlebih dahulu', variant: 'destructive' });
+      }
+    } catch {
+      toast({ title: 'Error', description: 'Gagal mengunduh PDF', variant: 'destructive' });
+    } finally {
+      setIsPrinting(false);
+    }
+  };
+
+  if (saved) {
+    return (
+      <MainLayout title="Surat Jalan" subtitle="Surat jalan berhasil dibuat">
+        <div className="flex flex-col items-center justify-center py-16 gap-6">
+          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/10">
+            <Truck className="h-10 w-10 text-primary" />
+          </div>
+          <div className="text-center">
+            <h2 className="text-2xl font-bold">Surat Jalan Berhasil Dibuat</h2>
+            <p className="text-muted-foreground mt-1">No. Surat Jalan: <span className="font-mono font-semibold text-primary">{lastSJ}</span></p>
+            <p className="text-sm text-muted-foreground mt-1">{items.length} produk, {totalQty} qty total</p>
+          </div>
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={() => setPreviewOpen(true)}><Eye className="mr-2 h-4 w-4" />Preview</Button>
+            <Button variant="outline" onClick={handlePrint}><Printer className="mr-2 h-4 w-4" />Cetak</Button>
+            <Button onClick={() => { setItems([]); setSaved(false); setSelectedCustomer(''); setSelectedGudang(''); setAlamatKirim(''); setPengirim(''); setCatatan(''); }}>Surat Jalan Baru</Button>
+          </div>
+        </div>
+
+        <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader><DialogTitle>Preview Surat Jalan</DialogTitle></DialogHeader>
+            <div className="border rounded-lg p-6 bg-white text-black" id="surat-jalan-print">
+              <div className="text-center border-b-2 border-black pb-4 mb-4">
+                <h1 className="text-2xl font-bold">SURAT JALAN</h1>
+                <p className="text-sm">TokoSync ERP - Sistem Manajemen Toko</p>
+              </div>
+              <div className="grid grid-cols-2 gap-4 mb-4 text-sm">
+                <div>
+                  <p><strong>No. Surat Jalan:</strong> {lastSJ}</p>
+                  <p><strong>Tanggal:</strong> {today}</p>
+                  <p><strong>Sales:</strong> {salesRep?.name || '-'}</p>
+                </div>
+                <div>
+                  <p><strong>Kepada:</strong> {customer?.name || '-'}</p>
+                  <p><strong>Alamat:</strong> {alamatKirim || customer?.address || '-'}</p>
+                  <p><strong>Gudang:</strong> {gudang?.name || '-'}</p>
+                </div>
+              </div>
+              {pengirim && <p className="text-sm mb-4"><strong>Pengirim/Driver:</strong> {pengirim}</p>}
+              <table className="w-full border-collapse border border-black text-sm mb-4">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="border border-black px-2 py-1 text-left">No</th>
+                    <th className="border border-black px-2 py-1 text-left">Nama Barang</th>
+                    <th className="border border-black px-2 py-1 text-right">Qty</th>
+                    <th className="border border-black px-2 py-1 text-left">Satuan</th>
+                    <th className="border border-black px-2 py-1 text-left">Keterangan</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((item, idx) => (
+                    <tr key={idx}>
+                      <td className="border border-black px-2 py-1">{idx + 1}</td>
+                      <td className="border border-black px-2 py-1">{item.nama}</td>
+                      <td className="border border-black px-2 py-1 text-right">{item.qty}</td>
+                      <td className="border border-black px-2 py-1">{item.satuan}</td>
+                      <td className="border border-black px-2 py-1">{item.keterangan || '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td colSpan={2} className="border border-black px-2 py-1 font-bold text-right">Total</td>
+                    <td className="border border-black px-2 py-1 text-right font-bold">{totalQty}</td>
+                    <td colSpan={2} className="border border-black px-2 py-1"></td>
+                  </tr>
+                </tfoot>
+              </table>
+              {catatan && <p className="text-sm mb-4 italic">Catatan: {catatan}</p>}
+              <div className="grid grid-cols-3 gap-4 mt-8 text-sm text-center">
+                <div><p className="mb-16">Pengirim</p><p>(_____________)</p><p>{pengirim || '...'}</p></div>
+                <div><p className="mb-16">Penerima</p><p>(_____________)</p><p>{customer?.name || '...'}</p></div>
+                <div><p className="mb-16">Diketahui Oleh</p><p>(_____________)</p><p>Admin / Owner</p></div>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 mt-2">
+              <Button variant="outline" onClick={() => setPreviewOpen(false)}>Tutup</Button>
+              <Button variant="outline" onClick={handleExportPdf}><FileDown className="mr-1.5 h-4 w-4" />Export PDF</Button>
+              <Button onClick={handlePrint}><Printer className="mr-1.5 h-4 w-4" />Cetak</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout title="Surat Jalan" subtitle="Buat surat jalan untuk pengiriman barang">
@@ -95,12 +250,12 @@ const SuratJalan = () => {
                   <Label className="text-xs">Customer / Penerima</Label>
                   <Select value={selectedCustomer} onValueChange={(v) => {
                     setSelectedCustomer(v);
-                    const c = CUSTOMERS.find(c => c.id === v);
-                    if (c) setAlamatKirim(c.alamat);
+                    const c = customers.find(c => c.id === v);
+                    if (c) setAlamatKirim(c.address || '');
                   }}>
                     <SelectTrigger className="text-xs"><SelectValue placeholder="Pilih customer" /></SelectTrigger>
                     <SelectContent>
-                      {CUSTOMERS.map(c => <SelectItem key={c.id} value={c.id}>{c.nama}</SelectItem>)}
+                      {customers.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -116,7 +271,7 @@ const SuratJalan = () => {
                   <Select value={selectedGudang} onValueChange={setSelectedGudang}>
                     <SelectTrigger className="text-xs"><SelectValue placeholder="Pilih gudang" /></SelectTrigger>
                     <SelectContent>
-                      {WAREHOUSES.filter(g => g.status === 'aktif').map(g => <SelectItem key={g.id} value={g.id}>{g.nama}</SelectItem>)}
+                      {warehouses.filter(w => w.status === 'active').map(w => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -132,7 +287,7 @@ const SuratJalan = () => {
                   <Select value={selectedSales} onValueChange={setSelectedSales}>
                     <SelectTrigger className="text-xs"><SelectValue placeholder="Pilih sales" /></SelectTrigger>
                     <SelectContent>
-                      {SALES_REPS.filter(s => s.status === 'aktif').map(s => <SelectItem key={s.id} value={s.id}>{s.nama}</SelectItem>)}
+                      {sales.filter(s => s.status === 'active').map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -145,7 +300,7 @@ const SuratJalan = () => {
                     <Select value={selectedProduct} onValueChange={setSelectedProduct}>
                       <SelectTrigger className="text-xs h-8"><SelectValue placeholder="Pilih produk" /></SelectTrigger>
                       <SelectContent>
-                        {PRODUCTS.map(p => <SelectItem key={p.id} value={p.id}>{p.nama} (Stok: {p.stok})</SelectItem>)}
+                        {products.map(p => <SelectItem key={p.id} value={p.id}>{p.name} (Stok: {p.stock})</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
@@ -156,38 +311,38 @@ const SuratJalan = () => {
               </div>
 
               <div className="rounded-md border overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/50">
-                      <TableHead className="text-xs w-8">No</TableHead>
-                      <TableHead className="text-xs">Nama Barang</TableHead>
-                      <TableHead className="text-xs text-right">Qty</TableHead>
-                      <TableHead className="text-xs">Satuan</TableHead>
-                      <TableHead className="text-xs">Keterangan</TableHead>
-                      <TableHead className="w-8"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-muted/50 text-xs text-muted-foreground">
+                      <th className="px-3 py-2 text-left w-8">No</th>
+                      <th className="px-3 py-2 text-left">Nama Barang</th>
+                      <th className="px-3 py-2 text-right">Qty</th>
+                      <th className="px-3 py-2 text-left">Satuan</th>
+                      <th className="px-3 py-2 text-left">Keterangan</th>
+                      <th className="w-8"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
                     {items.length === 0 ? (
-                      <TableRow><TableCell colSpan={6} className="text-center text-sm text-muted-foreground py-8">Belum ada barang ditambahkan</TableCell></TableRow>
+                      <tr><td colSpan={6} className="text-center text-sm text-muted-foreground py-8">Belum ada barang ditambahkan</td></tr>
                     ) : (
                       items.map((item, idx) => (
-                        <TableRow key={idx} className="text-sm">
-                          <TableCell className="text-xs text-muted-foreground">{idx + 1}</TableCell>
-                          <TableCell className="font-medium">{item.nama}</TableCell>
-                          <TableCell className="text-right tabular-nums font-semibold">{item.qty}</TableCell>
-                          <TableCell className="text-xs text-muted-foreground">{item.satuan}</TableCell>
-                          <TableCell className="text-xs text-muted-foreground">{item.keterangan || '-'}</TableCell>
-                          <TableCell>
+                        <tr key={idx} className="border-b text-sm">
+                          <td className="px-3 py-2 text-xs text-muted-foreground">{idx + 1}</td>
+                          <td className="px-3 py-2 font-medium">{item.nama}</td>
+                          <td className="px-3 py-2 text-right tabular-nums font-semibold">{item.qty}</td>
+                          <td className="px-3 py-2 text-xs text-muted-foreground">{item.satuan}</td>
+                          <td className="px-3 py-2 text-xs text-muted-foreground">{item.keterangan || '-'}</td>
+                          <td className="px-3 py-2">
                             <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:bg-destructive/10" onClick={() => removeItem(idx)}>
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>
-                          </TableCell>
-                        </TableRow>
+                          </td>
+                        </tr>
                       ))
                     )}
-                  </TableBody>
-                </Table>
+                  </tbody>
+                </table>
               </div>
             </CardContent>
           </Card>
@@ -209,11 +364,11 @@ const SuratJalan = () => {
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Penerima</span>
-                <span className="font-medium truncate max-w-[120px]">{customer?.nama || '-'}</span>
+                <span className="font-medium truncate max-w-[120px]">{customer?.name || '-'}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Gudang</span>
-                <span className="font-medium truncate max-w-[120px]">{gudang?.nama || '-'}</span>
+                <span className="font-medium truncate max-w-[120px]">{gudang?.name || '-'}</span>
               </div>
 
               <div className="space-y-1.5 pt-1">
@@ -223,18 +378,14 @@ const SuratJalan = () => {
 
               <div className="flex gap-2 pt-2">
                 <Button variant="outline" className="flex-1 h-9 text-sm" onClick={() => { setItems([]); setSelectedCustomer(''); setSelectedGudang(''); setAlamatKirim(''); setPengirim(''); }}>Reset</Button>
-                <Button className="flex-1 h-9 text-sm" onClick={() => {
-                  if (items.length === 0) return toast({ title: 'Belum ada barang', variant: 'destructive' });
-                  if (!selectedCustomer) return toast({ title: 'Pilih customer', variant: 'destructive' });
-                  toast({ title: 'Surat Jalan disimpan', description: noSJ });
-                }}>Simpan</Button>
+                <Button className="flex-1 h-9 text-sm" onClick={handleSave} disabled={items.length === 0 || createMutation.isPending}>Simpan</Button>
               </div>
 
               <div className="grid grid-cols-1 gap-2">
                 <Button variant="outline" className="h-9 text-sm" onClick={() => setPreviewOpen(true)}>
                   <Eye className="mr-1.5 h-3.5 w-3.5" />Preview & Cetak
                 </Button>
-                <Button variant="outline" className="h-8 text-xs" onClick={handleExportPdf}>
+                <Button variant="outline" className="h-8 text-xs" onClick={handleExportPdf} disabled={!saved || isPrinting}>
                   <FileDown className="mr-1.5 h-3.5 w-3.5" />Export PDF
                 </Button>
               </div>
@@ -243,13 +394,10 @@ const SuratJalan = () => {
         </div>
       </div>
 
-      {/* Print Preview Dialog */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Preview Surat Jalan</DialogTitle>
-          </DialogHeader>
-          <div className="border rounded-lg p-6 bg-white text-black print:shadow-none" id="surat-jalan-print">
+          <DialogHeader><DialogTitle>Preview Surat Jalan</DialogTitle></DialogHeader>
+          <div className="border rounded-lg p-6 bg-white text-black" id="surat-jalan-print">
             <div className="text-center border-b-2 border-black pb-4 mb-4">
               <h1 className="text-2xl font-bold">SURAT JALAN</h1>
               <p className="text-sm">TokoSync ERP - Sistem Manajemen Toko</p>
@@ -258,12 +406,12 @@ const SuratJalan = () => {
               <div>
                 <p><strong>No. Surat Jalan:</strong> {noSJ}</p>
                 <p><strong>Tanggal:</strong> {today}</p>
-                <p><strong>Sales:</strong> {sales?.nama || '-'}</p>
+                <p><strong>Sales:</strong> {salesRep?.name || '-'}</p>
               </div>
               <div>
-                <p><strong>Kepada:</strong> {customer?.nama || '-'}</p>
-                <p><strong>Alamat:</strong> {alamatKirim || customer?.alamat || '-'}</p>
-                <p><strong>Gudang:</strong> {gudang?.nama || '-'}</p>
+                <p><strong>Kepada:</strong> {customer?.name || '-'}</p>
+                <p><strong>Alamat:</strong> {alamatKirim || customer?.address || '-'}</p>
+                <p><strong>Gudang:</strong> {gudang?.name || '-'}</p>
               </div>
             </div>
             {pengirim && <p className="text-sm mb-4"><strong>Pengirim/Driver:</strong> {pengirim}</p>}
@@ -299,14 +447,14 @@ const SuratJalan = () => {
             {catatan && <p className="text-sm mb-4 italic">Catatan: {catatan}</p>}
             <div className="grid grid-cols-3 gap-4 mt-8 text-sm text-center">
               <div><p className="mb-16">Pengirim</p><p>(_____________)</p><p>{pengirim || '...'}</p></div>
-              <div><p className="mb-16">Penerima</p><p>(_____________)</p><p>{customer?.nama || '...'}</p></div>
+              <div><p className="mb-16">Penerima</p><p>(_____________)</p><p>{customer?.name || '...'}</p></div>
               <div><p className="mb-16">Diketahui Oleh</p><p>(_____________)</p><p>Admin / Owner</p></div>
             </div>
           </div>
           <div className="flex justify-end gap-2 mt-2">
             <Button variant="outline" onClick={() => setPreviewOpen(false)}>Tutup</Button>
-            <Button variant="outline" onClick={handleExportPdf}><FileDown className="mr-1.5 h-4 w-4" />Export PDF</Button>
-            <Button onClick={handlePrint}><Printer className="mr-1.5 h-4 w-4" />Cetak</Button>
+            <Button variant="outline" onClick={handleExportPdf} disabled={isPrinting}><FileDown className="mr-1.5 h-4 w-4" />Export PDF</Button>
+            <Button onClick={handlePrint} disabled={isPrinting}><Printer className="mr-1.5 h-4 w-4" />Cetak</Button>
           </div>
         </DialogContent>
       </Dialog>

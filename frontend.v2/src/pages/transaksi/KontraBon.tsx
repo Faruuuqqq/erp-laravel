@@ -5,60 +5,100 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import {
-  Accordion, AccordionContent, AccordionItem, AccordionTrigger,
-} from '@/components/ui/accordion';
 import { Search, ClipboardList, FileDown, Printer } from 'lucide-react';
-import { Badge as BadgeUi } from '@/components/ui/badge';
-import { CUSTOMERS, formatRupiah } from '@/data/mockData';
 import { useToast } from '@/hooks/use-toast';
+import { useCustomers } from '@/hooks/api/useCustomers';
+import { useKontraBon, printKontraBon } from '@/hooks/api/useKontraBon';
+import type { Customer } from '@/types';
 
-interface KontraBonItem {
+const formatRupiah = (value: number) =>
+  new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(value);
+
+interface Invoice {
   id: string;
-  customerId: string;
-  customer: string;
-  faktur: string;
-  tanggal: string;
-  jumlah: number;
-  status: 'belum_lunas' | 'sebagian';
+  invoice_number: string;
+  customer_id: string;
+  customer: { id: string; name: string };
+  date: string;
+  total: number;
+  paid: number;
+  remaining: number;
+  type: string;
 }
-
-const kontraBonData: KontraBonItem[] = [
-  { id: '1', customerId: 'cus1', customer: 'Toko Makmur Jaya', faktur: 'PJ-2025-027-001', tanggal: '27-02-2025', jumlah: 4_600_000, status: 'belum_lunas' },
-  { id: '2', customerId: 'cus1', customer: 'Toko Makmur Jaya', faktur: 'PK-2025-020-003', tanggal: '20-02-2025', jumlah: 2_900_000, status: 'sebagian' },
-  { id: '3', customerId: 'cus5', customer: 'UD Berkah Bersama', faktur: 'PJ-2025-026-005', tanggal: '26-02-2025', jumlah: 4_560_000, status: 'belum_lunas' },
-  { id: '4', customerId: 'cus5', customer: 'UD Berkah Bersama', faktur: 'PK-2025-015-001', tanggal: '15-02-2025', jumlah: 17_540_000, status: 'belum_lunas' },
-  { id: '5', customerId: 'cus3', customer: 'CV Sumber Rejeki', faktur: 'PK-2025-022-001', tanggal: '22-02-2025', jumlah: 1_200_000, status: 'belum_lunas' },
-  { id: '6', customerId: 'cus4', customer: 'Toko Aneka Sembako', faktur: 'PK-2025-010-002', tanggal: '10-02-2025', jumlah: 4_200_000, status: 'belum_lunas' },
-];
 
 const KontraBon = () => {
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCustomer, setFilterCustomer] = useState('all');
+  const [isPrinting, setIsPrinting] = useState(false);
 
-  const grouped = kontraBonData.reduce<Record<string, KontraBonItem[]>>((acc, item) => {
-    if (!acc[item.customer]) acc[item.customer] = [];
-    acc[item.customer].push(item);
+  const { data: customersData } = useCustomers({ per_page: 100 });
+  const { data, isLoading, refetch } = useKontraBon({ perPage: 100 });
+  const customers = (customersData?.data?.data ?? []) as Customer[];
+  const invoices = (data?.data ?? []) as Invoice[];
+
+  const grouped = invoices.reduce<Record<string, Invoice[]>>((acc, item) => {
+    const customerName = item.customer?.name || 'Unknown';
+    if (!acc[customerName]) acc[customerName] = [];
+    acc[customerName].push(item);
     return acc;
   }, {});
 
   const filteredGrouped = Object.entries(grouped).filter(([customer, items]) => {
     const matchSearch = customer.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchCustomer = filterCustomer === 'all' || items[0].customerId === filterCustomer;
+    const matchCustomer = filterCustomer === 'all' || items[0].customer_id === filterCustomer;
     return matchSearch && matchCustomer;
   });
 
-  const totalNilai = kontraBonData.reduce((s, i) => s + i.jumlah, 0);
-  const uniqueCustomers = [...new Set(kontraBonData.map(i => i.customerId))].length;
+  const totalNilai = invoices.reduce((s, i) => s + (i.remaining || 0), 0);
+  const uniqueCustomers = [...new Set(invoices.map(i => i.customer_id))].length;
+
+  const handlePrint = async (customerId: string, transactionIds: string[]) => {
+    try {
+      setIsPrinting(true);
+      const result = await printKontraBon({
+        customer_id: customerId,
+        transaction_ids: transactionIds,
+        interest_rate: 0,
+      });
+      window.open(result.url, '_blank');
+      toast({ title: 'PDF berhasil dibuat', description: `Billing: ${result.billing_number}` });
+    } catch {
+      toast({ title: 'Error', description: 'Gagal membuat PDF billing', variant: 'destructive' });
+    } finally {
+      setIsPrinting(false);
+    }
+  };
+
+  const handleExportAll = async () => {
+    try {
+      setIsPrinting(true);
+      if (invoices.length > 0) {
+        const firstCustomerId = invoices[0].customer_id;
+        const allIds = invoices.map(i => i.id);
+        const result = await printKontraBon({
+          customer_id: firstCustomerId,
+          transaction_ids: allIds,
+          interest_rate: 0,
+        });
+        const link = document.createElement('a');
+        link.href = result.url;
+        link.download = result.filename;
+        link.click();
+        toast({ title: 'PDF berhasil diunduh' });
+      }
+    } catch {
+      toast({ title: 'Error', description: 'Gagal mengunduh PDF', variant: 'destructive' });
+    } finally {
+      setIsPrinting(false);
+    }
+  };
 
   return (
     <MainLayout title="Kontra Bon" subtitle="Bon yang belum dilunasi per customer">
-      {/* Summary */}
       <div className="mb-4 grid gap-3 md:grid-cols-3">
         <Card><CardContent className="p-3"><p className="text-xs text-muted-foreground">Customer Dengan Bon</p><p className="text-2xl font-bold">{uniqueCustomers}</p></CardContent></Card>
-        <Card><CardContent className="p-3"><p className="text-xs text-muted-foreground">Total Bon Aktif</p><p className="text-2xl font-bold">{kontraBonData.length}</p></CardContent></Card>
+        <Card><CardContent className="p-3"><p className="text-xs text-muted-foreground">Total Bon Aktif</p><p className="text-2xl font-bold">{invoices.length}</p></CardContent></Card>
         <Card><CardContent className="p-3"><p className="text-xs text-muted-foreground">Total Nilai</p><p className="text-2xl font-bold text-warning tabular-nums">{formatRupiah(totalNilai)}</p></CardContent></Card>
       </div>
 
@@ -72,14 +112,14 @@ const KontraBon = () => {
             <SelectTrigger className="w-44 text-xs h-8"><SelectValue placeholder="Semua Customer" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Semua Customer</SelectItem>
-              {CUSTOMERS.filter(c => kontraBonData.some(k => k.customerId === c.id)).map(c => (
-                <SelectItem key={c.id} value={c.id}>{c.nama}</SelectItem>
+              {customers.filter(c => invoices.some(k => k.customer_id === c.id)).map(c => (
+                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
               ))}
             </SelectContent>
           </Select>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={() => toast({ title: 'Mengekspor PDF...' })}>
+          <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={handleExportAll} disabled={isPrinting || invoices.length === 0}>
             <FileDown className="h-3.5 w-3.5" />Export PDF
           </Button>
           <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={() => window.print()}>
@@ -96,73 +136,92 @@ const KontraBon = () => {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {filteredGrouped.length === 0 ? (
+          {isLoading ? (
+            <div className="text-center py-12 text-muted-foreground">Loading...</div>
+          ) : filteredGrouped.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <ClipboardList className="h-12 w-12 mx-auto mb-3 opacity-20" />
               <p>Tidak ada kontra bon</p>
             </div>
           ) : (
-            <Accordion type="multiple" defaultValue={filteredGrouped.map(([c]) => c)} className="w-full space-y-2">
+            <div className="space-y-3">
               {filteredGrouped.map(([customer, items]) => {
-                const totalCustomer = items.reduce((s, i) => s + i.jumlah, 0);
-                const customer_ = CUSTOMERS.find(c => c.id === items[0].customerId);
-                const isOverLimit = customer_ && customer_.totalPiutang > customer_.limitKredit;
+                const totalCustomer = items.reduce((s, i) => s + (i.remaining || 0), 0);
+                const customerData = customers.find(c => c.id === items[0].customer_id);
+                const isOverLimit = customerData && (customerData.creditLimit || 0) > 0 && (customerData.balance || 0) > (customerData.creditLimit || 0);
+                const transactionIds = items.map(i => i.id);
+
                 return (
-                  <AccordionItem key={customer} value={customer} className="border rounded-lg overflow-hidden">
-                    <AccordionTrigger className="hover:no-underline px-4 py-3 hover:bg-muted/30">
-                      <div className="flex w-full items-center justify-between pr-3">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
-                            {customer.charAt(0)}
-                          </div>
-                          <div className="text-left">
-                            <div className="flex items-center gap-2">
-                              <span className="font-semibold text-sm">{customer}</span>
-                              {isOverLimit && <Badge variant="destructive" className="text-[9px] h-4 px-1">Over Limit</Badge>}
-                            </div>
-                            <p className="text-xs text-muted-foreground">{items.length} bon aktif</p>
-                          </div>
+                  <div key={customer} className="border rounded-lg overflow-hidden">
+                    <div
+                      className="flex w-full items-center justify-between px-4 py-3 hover:bg-muted/30 cursor-pointer"
+                      onClick={() => {
+                        const el = document.getElementById(`kb-${customer}`);
+                        if (el) el.classList.toggle('hidden');
+                      }}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                          {customer.charAt(0)}
                         </div>
-                        <span className="text-base font-bold text-warning tabular-nums">{formatRupiah(totalCustomer)}</span>
+                        <div className="text-left">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-sm">{customer}</span>
+                            {isOverLimit && <Badge variant="destructive" className="text-[9px] h-4 px-1">Over Limit</Badge>}
+                          </div>
+                          <p className="text-xs text-muted-foreground">{items.length} bon aktif</p>
+                        </div>
                       </div>
-                    </AccordionTrigger>
-                    <AccordionContent className="px-4 pb-3">
-                      {customer_ && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-base font-bold text-warning tabular-nums">{formatRupiah(totalCustomer)}</span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={(e) => { e.stopPropagation(); handlePrint(items[0].customer_id, transactionIds); }}
+                          disabled={isPrinting}
+                        >
+                          Cetak
+                        </Button>
+                      </div>
+                    </div>
+                    <div id={`kb-${customer}`} className="hidden px-4 pb-3">
+                      {customerData && (
                         <div className="mb-3 grid grid-cols-3 gap-2 text-xs rounded-lg bg-muted/30 p-2.5">
-                          <div><p className="text-muted-foreground">Limit Kredit</p><p className="font-semibold">{formatRupiah(customer_.limitKredit)}</p></div>
-                          <div><p className="text-muted-foreground">Total Piutang</p><p className={`font-semibold ${isOverLimit ? 'text-destructive' : 'text-warning'}`}>{formatRupiah(customer_.totalPiutang)}</p></div>
-                          <div><p className="text-muted-foreground">Sisa Limit</p><p className={`font-semibold ${customer_.limitKredit - customer_.totalPiutang < 0 ? 'text-destructive' : 'text-success'}`}>{formatRupiah(customer_.limitKredit - customer_.totalPiutang)}</p></div>
+                          <div><p className="text-muted-foreground">Limit Kredit</p><p className="font-semibold">{formatRupiah(customerData.creditLimit || 0)}</p></div>
+                          <div><p className="text-muted-foreground">Total Piutang</p><p className={`font-semibold ${(customerData.balance || 0) > (customerData.creditLimit || 0) ? 'text-destructive' : 'text-warning'}`}>{formatRupiah(customerData.balance || 0)}</p></div>
+                          <div><p className="text-muted-foreground">Sisa Limit</p><p className={`font-semibold ${((customerData.creditLimit || 0) - (customerData.balance || 0)) < 0 ? 'text-destructive' : 'text-success'}`}>{formatRupiah((customerData.creditLimit || 0) - (customerData.balance || 0))}</p></div>
                         </div>
                       )}
-                      <Table>
-                        <TableHeader>
-                          <TableRow className="bg-muted/50">
-                            <TableHead className="text-xs">No. Faktur</TableHead>
-                            <TableHead className="text-xs">Tanggal</TableHead>
-                            <TableHead className="text-xs text-right">Jumlah</TableHead>
-                            <TableHead className="text-xs">Status</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="bg-muted/50 text-xs text-muted-foreground">
+                            <th className="px-3 py-2 text-left">No. Faktur</th>
+                            <th className="px-3 py-2 text-left">Tanggal</th>
+                            <th className="px-3 py-2 text-left">Tipe</th>
+                            <th className="px-3 py-2 text-right">Total</th>
+                            <th className="px-3 py-2 text-right">Terbayar</th>
+                            <th className="px-3 py-2 text-right">Sisa</th>
+                          </tr>
+                        </thead>
+                        <tbody>
                           {items.map(item => (
-                            <TableRow key={item.id} className="text-sm">
-                              <TableCell className="font-mono text-xs text-primary font-semibold">{item.faktur}</TableCell>
-                              <TableCell className="text-xs text-muted-foreground">{item.tanggal}</TableCell>
-                              <TableCell className="text-right font-semibold tabular-nums">{formatRupiah(item.jumlah)}</TableCell>
-                              <TableCell>
-                                <Badge variant={item.status === 'belum_lunas' ? 'destructive' : 'outline'} className="text-xs">
-                                  {item.status === 'belum_lunas' ? 'Belum Lunas' : 'Sebagian'}
-                                </Badge>
-                              </TableCell>
-                            </TableRow>
+                            <tr key={item.id} className="border-b text-sm">
+                              <td className="px-3 py-2 font-mono text-xs text-primary font-semibold">{item.invoice_number}</td>
+                              <td className="px-3 py-2 text-xs text-muted-foreground">{item.date}</td>
+                              <td className="px-3 py-2 text-xs">{item.type === 'penjualan_tunai' ? 'Penjualan Tunai' : 'Penjualan Kredit'}</td>
+                              <td className="px-3 py-2 text-right tabular-nums text-xs">{formatRupiah(item.total)}</td>
+                              <td className="px-3 py-2 text-right tabular-nums text-xs text-success">{formatRupiah(item.paid)}</td>
+                              <td className="px-3 py-2 text-right font-semibold tabular-nums text-warning">{formatRupiah(item.remaining)}</td>
+                            </tr>
                           ))}
-                        </TableBody>
-                      </Table>
-                    </AccordionContent>
-                  </AccordionItem>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                 );
               })}
-            </Accordion>
+            </div>
           )}
         </CardContent>
       </Card>
