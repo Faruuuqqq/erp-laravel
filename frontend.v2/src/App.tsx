@@ -23,6 +23,10 @@ import SuratJalan from "./pages/transaksi/SuratJalan";
 import KontraBon from "./pages/transaksi/KontraBon";
 import HistoriPembelian from "./pages/informasi/HistoriPembelian";
 import HistoriPenjualan from "./pages/informasi/HistoriPenjualan";
+import HistoriReturPembelian from "./pages/informasi/HistoriReturPembelian";
+import HistoriReturPenjualan from "./pages/informasi/HistoriReturPenjualan";
+import HistoriPembayaranUtang from "./pages/informasi/HistoriPembayaranUtang";
+import HistoriPembayaranPiutang from "./pages/informasi/HistoriPembayaranPiutang";
 import BiayaJasa from "./pages/informasi/BiayaJasa";
 import SaldoPiutang from "./pages/laporan/SaldoPiutang";
 import SaldoUtang from "./pages/laporan/SaldoUtang";
@@ -85,11 +89,11 @@ const AppRoutes = () => {
       <Route path="/transaksi/kontra-bon" element={<ProtectedRoute><KontraBon /></ProtectedRoute>} />
       <Route path="/informasi/pembelian" element={<ProtectedRoute><HistoriPembelian /></ProtectedRoute>} />
       <Route path="/informasi/penjualan" element={<ProtectedRoute><HistoriPenjualan /></ProtectedRoute>} />
-      <Route path="/informasi/retur-pembelian" element={<ProtectedRoute><HistoriPembelian /></ProtectedRoute>} />
-      <Route path="/informasi/retur-penjualan" element={<ProtectedRoute><HistoriPenjualan /></ProtectedRoute>} />
+      <Route path="/informasi/retur-pembelian" element={<ProtectedRoute><HistoriReturPembelian /></ProtectedRoute>} />
+      <Route path="/informasi/retur-penjualan" element={<ProtectedRoute><HistoriReturPenjualan /></ProtectedRoute>} />
       <Route path="/informasi/biaya-jasa" element={<ProtectedRoute><BiayaJasa /></ProtectedRoute>} />
-      <Route path="/informasi/pembayaran-utang" element={<ProtectedRoute><HistoriPembelian /></ProtectedRoute>} />
-      <Route path="/informasi/pembayaran-piutang" element={<ProtectedRoute><HistoriPenjualan /></ProtectedRoute>} />
+      <Route path="/informasi/pembayaran-utang" element={<ProtectedRoute><HistoriPembayaranUtang /></ProtectedRoute>} />
+      <Route path="/informasi/pembayaran-piutang" element={<ProtectedRoute><HistoriPembayaranPiutang /></ProtectedRoute>} />
       <Route path="/laporan/saldo-piutang" element={<ProtectedRoute><SaldoPiutang /></ProtectedRoute>} />
       <Route path="/laporan/saldo-utang" element={<ProtectedRoute><SaldoUtang /></ProtectedRoute>} />
       <Route path="/laporan/saldo-stok" element={<ProtectedRoute ownerOnly><SaldoStok /></ProtectedRoute>} />

@@ -128,6 +128,74 @@ class ReportController extends Controller
     }
 
     /**
+     * GET /api/reports/history/retur-pembelian
+     */
+    public function historyReturPembelian(Request $request): JsonResponse
+    {
+        $transactions = Transaction::with(['supplier'])
+            ->where('type', 'retur_pembelian')
+            ->when($request->from, fn($q) => $q->whereDate('date', '>=', $request->from))
+            ->when($request->to, fn($q) => $q->whereDate('date', '<=', $request->to))
+            ->latest()
+            ->paginate($request->perPage ?? 25);
+
+        return response()->json([
+            'data' => TransactionResource::collection($transactions)->response()->getData(),
+        ]);
+    }
+
+    /**
+     * GET /api/reports/history/retur-penjualan
+     */
+    public function historyReturPenjualan(Request $request): JsonResponse
+    {
+        $transactions = Transaction::with(['customer'])
+            ->where('type', 'retur_penjualan')
+            ->when($request->from, fn($q) => $q->whereDate('date', '>=', $request->from))
+            ->when($request->to, fn($q) => $q->whereDate('date', '<=', $request->to))
+            ->latest()
+            ->paginate($request->perPage ?? 25);
+
+        return response()->json([
+            'data' => TransactionResource::collection($transactions)->response()->getData(),
+        ]);
+    }
+
+    /**
+     * GET /api/reports/history/pembayaran-utang
+     */
+    public function historyPembayaranUtang(Request $request): JsonResponse
+    {
+        $transactions = Transaction::with(['supplier'])
+            ->where('type', 'pembayaran_utang')
+            ->when($request->from, fn($q) => $q->whereDate('date', '>=', $request->from))
+            ->when($request->to, fn($q) => $q->whereDate('date', '<=', $request->to))
+            ->latest()
+            ->paginate($request->perPage ?? 25);
+
+        return response()->json([
+            'data' => TransactionResource::collection($transactions)->response()->getData(),
+        ]);
+    }
+
+    /**
+     * GET /api/reports/history/pembayaran-piutang
+     */
+    public function historyPembayaranPiutang(Request $request): JsonResponse
+    {
+        $transactions = Transaction::with(['customer'])
+            ->where('type', 'pembayaran_piutang')
+            ->when($request->from, fn($q) => $q->whereDate('date', '>=', $request->from))
+            ->when($request->to, fn($q) => $q->whereDate('date', '<=', $request->to))
+            ->latest()
+            ->paginate($request->perPage ?? 25);
+
+        return response()->json([
+            'data' => TransactionResource::collection($transactions)->response()->getData(),
+        ]);
+    }
+
+    /**
      * GET /api/reports/daily/print?date=2026-02-28
      */
     public function printDaily(Request $request): JsonResponse

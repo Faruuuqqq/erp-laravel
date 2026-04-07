@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\ExpenseController;
 use App\Http\Controllers\Api\AdminManagementController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CategoryController;
@@ -80,6 +81,10 @@ Route::middleware(['auth:sanctum', 'throttle:60,1'])->group(function () {
         Route::get('sales-trend', [DashboardController::class, 'salesTrend']);
     });
 
+    // ── Expenses (Admin & Owner) ─────────────────────────────────────
+    Route::apiResource('expenses', ExpenseController::class);
+    Route::get('expenses/categories', [ExpenseController::class, 'categories']);
+
     // ── Owner Only (Laporan & Info Finansial) ────────────────────────
     Route::middleware('role:owner')->group(function () {
         Route::prefix('reports')->group(function () {
@@ -88,6 +93,10 @@ Route::middleware(['auth:sanctum', 'throttle:60,1'])->group(function () {
             Route::get('balance', [ReportController::class, 'balance']);
             Route::get('history/pembelian', [ReportController::class, 'historyPembelian']);
             Route::get('history/penjualan', [ReportController::class, 'historyPenjualan']);
+            Route::get('history/retur-pembelian', [ReportController::class, 'historyReturPembelian']);
+            Route::get('history/retur-penjualan', [ReportController::class, 'historyReturPenjualan']);
+            Route::get('history/pembayaran-utang', [ReportController::class, 'historyPembayaranUtang']);
+            Route::get('history/pembayaran-piutang', [ReportController::class, 'historyPembayaranPiutang']);
             Route::get('daily/print', [ReportController::class, 'printDaily']);
             Route::get('stock/print', [ReportController::class, 'printStock']);
             Route::get('balance/print', [ReportController::class, 'printBalance']);
