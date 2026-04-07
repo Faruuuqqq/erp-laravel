@@ -5,12 +5,18 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Plus, Trash2, ShoppingCart, Calculator, FileDown, CheckCircle2, Search } from 'lucide-react';
-import { PRODUCTS, SUPPLIERS, WAREHOUSES, formatRupiah } from '@/data/mockData';
 import { useToast } from '@/hooks/use-toast';
+import { useProducts } from '@/hooks/api/useProducts';
+import { useSuppliers } from '@/hooks/api/useSuppliers';
+import { useWarehouses } from '@/hooks/api/useWarehouses';
+import { useCreateTransaction } from '@/hooks/api/useTransactions';
+import type { Product, Supplier, Warehouse } from '@/types';
+
+const formatRupiah = (value: number) =>
+  new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(value);
 
 interface CartItem {
   productId: string;
@@ -33,19 +39,29 @@ const Pembelian = () => {
   const [diskon, setDiskon] = useState('0');
   const [searchProduct, setSearchProduct] = useState('');
   const [saved, setSaved] = useState(false);
+  const [lastInvoice, setLastInvoice] = useState('');
+
+  const { data: productsData } = useProducts({ per_page: 200 });
+  const { data: suppliersData } = useSuppliers({ per_page: 100 });
+  const { data: warehousesData } = useWarehouses({ per_page: 100 });
+  const createMutation = useCreateTransaction();
+
+  const products = (productsData?.data?.data ?? []) as Product[];
+  const suppliers = (suppliersData?.data?.data ?? []) as Supplier[];
+  const warehouses = (warehousesData?.data?.data ?? []) as Warehouse[];
 
   const noFaktur = `PB-${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}-${String(Math.floor(Math.random()*900)+100)}`;
-  const supplier = SUPPLIERS.find(s => s.id === selectedSupplier);
+  const supplier = suppliers.find(s => s.id === selectedSupplier);
 
-  const filteredProducts = PRODUCTS.filter(p =>
-    p.nama.toLowerCase().includes(searchProduct.toLowerCase()) || p.kode.toLowerCase().includes(searchProduct.toLowerCase())
+  const filteredProducts = products.filter(p =>
+    p.name.toLowerCase().includes(searchProduct.toLowerCase()) || p.code.toLowerCase().includes(searchProduct.toLowerCase())
   );
 
   const addToCart = () => {
-    const product = PRODUCTS.find(p => p.id === selectedProduct);
+    const product = products.find(p => p.id === selectedProduct);
     if (!product) return toast({ title: 'Pilih produk terlebih dahulu', variant: 'destructive' });
     const qtyNum = parseInt(qty) || 1;
-    const hargaNum = parseFloat(harga) || product.hargaBeli;
+    const hargaNum = parseFloat(harga) || product.buyPrice;
     if (qtyNum <= 0) return toast({ title: 'Qty harus lebih dari 0', variant: 'destructive' });
     const subtotal = hargaNum * qtyNum;
     const existing = cart.findIndex(c => c.productId === selectedProduct);
@@ -55,10 +71,10 @@ const Pembelian = () => {
       updated[existing].subtotal = updated[existing].harga * updated[existing].qty;
       setCart(updated);
     } else {
-      setCart([...cart, { productId: product.id, nama: product.nama, satuan: product.satuan, qty: qtyNum, harga: hargaNum, subtotal }]);
+      setCart([...cart, { productId: product.id, nama: product.name, satuan: product.unit, qty: qtyNum, harga: hargaNum, subtotal }]);
     }
     setSelectedProduct(''); setQty('1'); setHarga(''); setSearchProduct('');
-    toast({ title: `${product.nama} ditambahkan` });
+    toast({ title: `${product.name} ditambahkan` });
   };
 
   const removeItem = (idx: number) => setCart(cart.filter((_, i) => i !== idx));
@@ -66,11 +82,41 @@ const Pembelian = () => {
   const diskonNum = parseFloat(diskon) || 0;
   const grandTotal = subtotal - diskonNum;
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (cart.length === 0) return toast({ title: 'Keranjang masih kosong', variant: 'destructive' });
     if (!selectedSupplier) return toast({ title: 'Pilih supplier terlebih dahulu', variant: 'destructive' });
-    setSaved(true);
-    toast({ title: 'Pembelian berhasil disimpan', description: `No. Faktur: ${noFaktur}` });
+
+    try {
+      const payload = {
+        type: 'pembelian',
+        invoiceNumber: noFaktur,
+        date: new Date().toISOString().slice(0, 10),
+        supplierId: selectedSupplier,
+        warehouseId: selectedGudang || null,
+        subtotal,
+        discount: diskonNum,
+        tax: 0,
+        total: grandTotal,
+        paid: metodePembayaran === 'tunai' || metodePembayaran === 'transfer' ? grandTotal : 0,
+        remaining: metodePembayaran === 'kredit' ? grandTotal : 0,
+        status: 'completed',
+        notes: metodePembayaran === 'kredit' ? 'Dicatat sebagai utang' : '',
+        items: cart.map(item => ({
+          productId: item.productId,
+          quantity: item.qty,
+          price: item.harga,
+          discount: 0,
+        })),
+      };
+
+      await createMutation.mutateAsync(payload);
+      setLastInvoice(noFaktur);
+      setSaved(true);
+      toast({ title: 'Pembelian berhasil disimpan', description: `No. Faktur: ${noFaktur}` });
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Gagal menyimpan pembelian';
+      toast({ title: 'Error', description: msg, variant: 'destructive' });
+    }
   };
 
   if (saved) {
@@ -83,7 +129,7 @@ const Pembelian = () => {
           </div>
           <div className="text-center">
             <h2 className="text-2xl font-bold">Pembelian Berhasil Disimpan</h2>
-            <p className="text-muted-foreground mt-1">No. Faktur: <span className="font-mono font-semibold text-primary">{noFaktur}</span></p>
+            <p className="text-muted-foreground mt-1">No. Faktur: <span className="font-mono font-semibold text-primary">{lastInvoice}</span></p>
             <p className="text-3xl font-bold text-primary mt-3">{formatRupiah(grandTotal)}</p>
             {isKredit && <Badge variant="outline" className="mt-2 text-warning border-warning">Dicatat sebagai Utang</Badge>}
           </div>
@@ -122,10 +168,10 @@ const Pembelian = () => {
                   <Select value={selectedSupplier} onValueChange={setSelectedSupplier}>
                     <SelectTrigger className="text-xs"><SelectValue placeholder="Pilih supplier" /></SelectTrigger>
                     <SelectContent>
-                      {SUPPLIERS.map(s => (
+                      {suppliers.map(s => (
                         <SelectItem key={s.id} value={s.id}>
-                          <span>{s.nama}</span>
-                          {s.totalUtang > 0 && <Badge variant="outline" className="ml-2 text-[9px] h-3.5 px-1 text-warning border-warning">Utang: {formatRupiah(s.totalUtang)}</Badge>}
+                          <span>{s.name}</span>
+                          {(s.balance || 0) > 0 && <Badge variant="outline" className="ml-2 text-[9px] h-3.5 px-1 text-warning border-warning">Utang: {formatRupiah(s.balance || 0)}</Badge>}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -135,9 +181,9 @@ const Pembelian = () => {
 
               {supplier && (
                 <div className="rounded-lg border bg-muted/30 p-3 text-xs grid grid-cols-3 gap-3">
-                  <div><p className="text-muted-foreground">Total Utang</p><p className="font-semibold text-warning">{formatRupiah(supplier.totalUtang)}</p></div>
-                  <div><p className="text-muted-foreground">Telepon</p><p className="font-semibold">{supplier.telepon}</p></div>
-                  <div><p className="text-muted-foreground">Total Transaksi</p><p className="font-semibold text-success">{formatRupiah(supplier.totalTransaksi)}</p></div>
+                  <div><p className="text-muted-foreground">Total Utang</p><p className="font-semibold text-warning">{formatRupiah(supplier.balance || 0)}</p></div>
+                  <div><p className="text-muted-foreground">Telepon</p><p className="font-semibold">{supplier.phone || '-'}</p></div>
+                  <div><p className="text-muted-foreground">Total Transaksi</p><p className="font-semibold text-success">{supplier.totalTransactions || 0}</p></div>
                 </div>
               )}
 
@@ -146,7 +192,7 @@ const Pembelian = () => {
                 <Select value={selectedGudang} onValueChange={setSelectedGudang}>
                   <SelectTrigger className="text-xs"><SelectValue placeholder="Pilih gudang" /></SelectTrigger>
                   <SelectContent>
-                    {WAREHOUSES.filter(g => g.status === 'aktif').map(g => <SelectItem key={g.id} value={g.id}>{g.nama} - {g.alamat}</SelectItem>)}
+                    {warehouses.filter(w => w.status === 'aktif').map(w => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -161,15 +207,15 @@ const Pembelian = () => {
                     </div>
                     <Select value={selectedProduct} onValueChange={(v) => {
                       setSelectedProduct(v);
-                      const p = PRODUCTS.find(p => p.id === v);
-                      if (p) setHarga(String(p.hargaBeli));
+                      const p = products.find(p => p.id === v);
+                      if (p) setHarga(String(p.buyPrice));
                     }}>
                       <SelectTrigger className="text-xs h-8"><SelectValue placeholder="Pilih produk" /></SelectTrigger>
                       <SelectContent>
                         {filteredProducts.map(p => (
                           <SelectItem key={p.id} value={p.id}>
-                            {p.kode} - {p.nama}
-                            <Badge variant="secondary" className="ml-2 text-[9px] h-3.5 px-1">Stok: {p.stok}</Badge>
+                            {p.code} - {p.name}
+                            <Badge variant="secondary" className="ml-2 text-[9px] h-3.5 px-1">Stok: {p.stock}</Badge>
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -190,38 +236,38 @@ const Pembelian = () => {
               </div>
 
               <div className="rounded-md border overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/50">
-                      <TableHead className="text-xs w-8">No</TableHead>
-                      <TableHead className="text-xs">Produk</TableHead>
-                      <TableHead className="text-xs text-right">Qty</TableHead>
-                      <TableHead className="text-xs text-right">Harga Beli</TableHead>
-                      <TableHead className="text-xs text-right">Subtotal</TableHead>
-                      <TableHead className="w-8"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-muted/50 text-xs text-muted-foreground">
+                      <th className="px-3 py-2 text-left w-8">No</th>
+                      <th className="px-3 py-2 text-left">Produk</th>
+                      <th className="px-3 py-2 text-right">Qty</th>
+                      <th className="px-3 py-2 text-right">Harga Beli</th>
+                      <th className="px-3 py-2 text-right">Subtotal</th>
+                      <th className="w-8"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
                     {cart.length === 0 ? (
-                      <TableRow><TableCell colSpan={6} className="text-center text-sm text-muted-foreground py-8">Keranjang kosong</TableCell></TableRow>
+                      <tr><td colSpan={6} className="text-center text-sm text-muted-foreground py-8">Keranjang kosong</td></tr>
                     ) : (
                       cart.map((item, idx) => (
-                        <TableRow key={item.productId} className="text-sm">
-                          <TableCell className="text-xs text-muted-foreground">{idx + 1}</TableCell>
-                          <TableCell><p className="font-medium">{item.nama}</p><p className="text-xs text-muted-foreground">{item.satuan}</p></TableCell>
-                          <TableCell className="text-right tabular-nums">{item.qty}</TableCell>
-                          <TableCell className="text-right tabular-nums text-xs">{formatRupiah(item.harga)}</TableCell>
-                          <TableCell className="text-right font-semibold tabular-nums">{formatRupiah(item.subtotal)}</TableCell>
-                          <TableCell>
+                        <tr key={item.productId} className="border-b text-sm">
+                          <td className="px-3 py-2 text-xs text-muted-foreground">{idx + 1}</td>
+                          <td className="px-3 py-2"><p className="font-medium">{item.nama}</p><p className="text-xs text-muted-foreground">{item.satuan}</p></td>
+                          <td className="px-3 py-2 text-right tabular-nums">{item.qty}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-xs">{formatRupiah(item.harga)}</td>
+                          <td className="px-3 py-2 text-right font-semibold tabular-nums">{formatRupiah(item.subtotal)}</td>
+                          <td className="px-3 py-2">
                             <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:bg-destructive/10" onClick={() => removeItem(idx)}>
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>
-                          </TableCell>
-                        </TableRow>
+                          </td>
+                        </tr>
                       ))
                     )}
-                  </TableBody>
-                </Table>
+                  </tbody>
+                </table>
               </div>
             </CardContent>
           </Card>
@@ -270,7 +316,7 @@ const Pembelian = () => {
 
               <div className="flex gap-2 pt-2">
                 <Button variant="outline" className="flex-1 h-9 text-sm" onClick={() => { setCart([]); setDiskon('0'); setSelectedSupplier(''); setSelectedGudang(''); setMetodePembayaran(''); }}>Reset</Button>
-                <Button className="flex-1 h-9 text-sm" onClick={handleSave} disabled={cart.length === 0}>Simpan</Button>
+                <Button className="flex-1 h-9 text-sm" onClick={handleSave} disabled={cart.length === 0 || createMutation.isPending}>Simpan</Button>
               </div>
               <Button variant="outline" className="w-full h-8 text-xs" onClick={() => toast({ title: 'Mengekspor ke PDF...' })}>
                 <FileDown className="mr-1.5 h-3.5 w-3.5" />Export PDF

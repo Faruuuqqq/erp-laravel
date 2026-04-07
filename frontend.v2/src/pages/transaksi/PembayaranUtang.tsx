@@ -5,31 +5,27 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Search, Receipt, Check, FileDown } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
-import { SUPPLIERS, formatRupiah } from '@/data/mockData';
 import { useToast } from '@/hooks/use-toast';
+import { useSuppliers } from '@/hooks/api/useSuppliers';
+import { useCreateTransaction } from '@/hooks/api/useTransactions';
+import type { Supplier } from '@/types';
+
+const formatRupiah = (value: number) =>
+  new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(value);
 
 interface UtangItem {
   id: string;
-  faktur: string;
+  invoiceNumber: string;
   supplierId: string;
   supplierNama: string;
-  tanggal: string;
+  date: string;
   total: number;
-  terbayar: number;
-  sisa: number;
-  overdue: boolean;
+  paid: number;
+  remaining: number;
 }
-
-const utangData: UtangItem[] = [
-  { id: 'u1', faktur: 'PB-2025-027-001', supplierId: 'sup1', supplierNama: 'PT Indofood Sukses Makmur', tanggal: '27-02-2025', total: 1_450_000, terbayar: 0, sisa: 1_450_000, overdue: false },
-  { id: 'u2', faktur: 'PB-2025-015-001', supplierId: 'sup1', supplierNama: 'PT Indofood Sukses Makmur', tanggal: '15-02-2025', total: 12_500_000, terbayar: 1_450_000, sisa: 11_050_000, overdue: true },
-  { id: 'u3', faktur: 'PB-2025-010-002', supplierId: 'sup3', supplierNama: 'CV Distributor Sembako Jaya', tanggal: '10-02-2025', total: 8_200_000, terbayar: 0, sisa: 8_200_000, overdue: true },
-  { id: 'u4', faktur: 'PB-2025-005-003', supplierId: 'sup4', supplierNama: 'PT Wings Surya', tanggal: '05-02-2025', total: 3_800_000, terbayar: 0, sisa: 3_800_000, overdue: true },
-];
 
 const PembayaranUtang = () => {
   const { toast } = useToast();
@@ -40,26 +36,78 @@ const PembayaranUtang = () => {
   const [jumlahBayar, setJumlahBayar] = useState('');
   const [catatan, setCatatan] = useState('');
   const [saved, setSaved] = useState(false);
+  const [lastAmount, setLastAmount] = useState(0);
+  const [lastCount, setLastCount] = useState(0);
+
+  const { data: suppliersData } = useSuppliers({ per_page: 100 });
+  const suppliers = (suppliersData?.data?.data ?? []) as Supplier[];
+  const createMutation = useCreateTransaction();
+
+  const utangData: UtangItem[] = suppliers
+    .filter(s => (s.balance || 0) > 0)
+    .map(s => ({
+      id: `utang-${s.id}`,
+      invoiceNumber: `PB-UTG-${s.id}`,
+      supplierId: s.id,
+      supplierNama: s.name,
+      date: new Date().toISOString().slice(0, 10),
+      total: s.balance || 0,
+      paid: 0,
+      remaining: s.balance || 0,
+    }));
 
   const filtered = utangData.filter(u => {
-    const matchSearch = u.faktur.toLowerCase().includes(searchTerm.toLowerCase()) || u.supplierNama.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchSearch = u.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) || u.supplierNama.toLowerCase().includes(searchTerm.toLowerCase());
     const matchSupplier = filterSupplier === 'all' || u.supplierId === filterSupplier;
     return matchSearch && matchSupplier;
   });
 
-  const totalSelected = utangData.filter(u => selectedItems.includes(u.id)).reduce((s, u) => s + u.sisa, 0);
+  const totalSelected = utangData.filter(u => selectedItems.includes(u.id)).reduce((s, u) => s + u.remaining, 0);
   const jumlahBayarNum = parseFloat(jumlahBayar) || 0;
 
   const toggleItem = (id: string) => {
     setSelectedItems(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (selectedItems.length === 0) return toast({ title: 'Pilih faktur terlebih dahulu', variant: 'destructive' });
     if (!metodePembayaran) return toast({ title: 'Pilih metode pembayaran', variant: 'destructive' });
     if (jumlahBayarNum <= 0) return toast({ title: 'Masukkan jumlah yang dibayar', variant: 'destructive' });
-    setSaved(true);
-    toast({ title: 'Pembayaran utang berhasil dicatat', description: `${selectedItems.length} faktur dibayar` });
+
+    try {
+      const selectedUtang = utangData.filter(u => selectedItems.includes(u.id));
+      const firstSupplier = selectedUtang[0];
+
+      await createMutation.mutateAsync({
+        type: 'pembayaran_utang',
+        invoiceNumber: `BYR-UTG-${new Date().getTime()}`,
+        date: new Date().toISOString().slice(0, 10),
+        supplierId: firstSupplier.supplierId,
+        subtotal: jumlahBayarNum,
+        discount: 0,
+        tax: 0,
+        total: jumlahBayarNum,
+        paid: jumlahBayarNum,
+        remaining: 0,
+        status: 'completed',
+        notes: catatan,
+        items: selectedUtang.map(u => ({
+          productId: null,
+          quantity: 1,
+          price: u.remaining,
+          discount: 0,
+          description: `Pembayaran utang ${u.invoiceNumber}`,
+        })),
+      });
+
+      setLastAmount(jumlahBayarNum);
+      setLastCount(selectedItems.length);
+      setSaved(true);
+      toast({ title: 'Pembayaran utang berhasil dicatat', description: `${selectedItems.length} faktur dibayar` });
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Gagal menyimpan pembayaran';
+      toast({ title: 'Error', description: msg, variant: 'destructive' });
+    }
   };
 
   if (saved) {
@@ -71,11 +119,11 @@ const PembayaranUtang = () => {
           </div>
           <div className="text-center">
             <h2 className="text-2xl font-bold">Pembayaran Berhasil</h2>
-            <p className="text-3xl font-bold text-primary mt-3">{formatRupiah(jumlahBayarNum)}</p>
-            <p className="text-sm text-muted-foreground mt-1">{selectedItems.length} faktur utang diselesaikan</p>
+            <p className="text-3xl font-bold text-primary mt-3">{formatRupiah(lastAmount)}</p>
+            <p className="text-sm text-muted-foreground mt-1">{lastCount} faktur utang diselesaikan</p>
           </div>
           <div className="flex gap-3">
-            <Button variant="outline" onClick={() => toast({ title: 'Mengekspor PDF...' })}><FileDown className="mr-2 h-4 w-4" />Export PDF</Button>
+            <Button variant="outline" onClick={() => window.print()}><FileDown className="mr-2 h-4 w-4" />Export PDF</Button>
             <Button onClick={() => { setSelectedItems([]); setSaved(false); setJumlahBayar(''); setMetodePembayaran(''); setCatatan(''); }}>Input Baru</Button>
           </div>
         </div>
@@ -103,7 +151,7 @@ const PembayaranUtang = () => {
                     <SelectTrigger className="w-40 text-xs h-8"><SelectValue placeholder="Semua" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Semua Supplier</SelectItem>
-                      {SUPPLIERS.map(s => <SelectItem key={s.id} value={s.id}>{s.nama}</SelectItem>)}
+                      {suppliers.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -111,38 +159,34 @@ const PembayaranUtang = () => {
             </CardHeader>
             <CardContent>
               <div className="rounded-md border overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/50">
-                      <TableHead className="w-10 text-xs"></TableHead>
-                      <TableHead className="text-xs">No. Faktur</TableHead>
-                      <TableHead className="text-xs">Supplier</TableHead>
-                      <TableHead className="text-xs">Tanggal</TableHead>
-                      <TableHead className="text-xs text-right">Total</TableHead>
-                      <TableHead className="text-xs text-right">Terbayar</TableHead>
-                      <TableHead className="text-xs text-right">Sisa</TableHead>
-                      <TableHead className="text-xs">Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filtered.map(item => (
-                      <TableRow key={item.id} className={`text-sm cursor-pointer ${selectedItems.includes(item.id) ? 'bg-primary/5' : ''}`} onClick={() => toggleItem(item.id)}>
-                        <TableCell><Checkbox checked={selectedItems.includes(item.id)} onCheckedChange={() => toggleItem(item.id)} /></TableCell>
-                        <TableCell className="font-mono text-xs text-primary font-semibold">{item.faktur}</TableCell>
-                        <TableCell className="font-medium max-w-[140px] truncate">{item.supplierNama}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{item.tanggal}</TableCell>
-                        <TableCell className="text-right tabular-nums text-xs">{formatRupiah(item.total)}</TableCell>
-                        <TableCell className="text-right tabular-nums text-xs text-success">{formatRupiah(item.terbayar)}</TableCell>
-                        <TableCell className="text-right tabular-nums font-semibold text-destructive">{formatRupiah(item.sisa)}</TableCell>
-                        <TableCell>
-                          <Badge variant={item.overdue ? 'destructive' : 'secondary'} className="text-xs">
-                            {item.overdue ? 'Jatuh Tempo' : 'Aktif'}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-muted/50 text-xs text-muted-foreground">
+                      <th className="px-3 py-2 w-10"></th>
+                      <th className="px-3 py-2 text-left">No. Faktur</th>
+                      <th className="px-3 py-2 text-left">Supplier</th>
+                      <th className="px-3 py-2 text-left">Tanggal</th>
+                      <th className="px-3 py-2 text-right">Total</th>
+                      <th className="px-3 py-2 text-right">Sisa</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.length === 0 ? (
+                      <tr><td colSpan={6} className="text-center text-sm text-muted-foreground py-8">Tidak ada utang.</td></tr>
+                    ) : (
+                      filtered.map(item => (
+                        <tr key={item.id} className={`border-b cursor-pointer ${selectedItems.includes(item.id) ? 'bg-primary/5' : ''}`} onClick={() => toggleItem(item.id)}>
+                          <td className="px-3 py-2"><Checkbox checked={selectedItems.includes(item.id)} onCheckedChange={() => toggleItem(item.id)} /></td>
+                          <td className="px-3 py-2 font-mono text-xs text-primary font-semibold">{item.invoiceNumber}</td>
+                          <td className="px-3 py-2 font-medium max-w-[140px] truncate">{item.supplierNama}</td>
+                          <td className="px-3 py-2 text-xs text-muted-foreground">{item.date}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-xs">{formatRupiah(item.total)}</td>
+                          <td className="px-3 py-2 text-right tabular-nums font-semibold text-destructive">{formatRupiah(item.remaining)}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
               </div>
             </CardContent>
           </Card>
@@ -183,11 +227,11 @@ const PembayaranUtang = () => {
               </div>
               <div className="flex gap-2 pt-1">
                 <Button variant="outline" className="flex-1 h-9 text-sm" onClick={() => setSelectedItems([])}>Batal</Button>
-                <Button className="flex-1 h-9 text-sm" onClick={handleSave} disabled={selectedItems.length === 0}>
+                <Button className="flex-1 h-9 text-sm" onClick={handleSave} disabled={selectedItems.length === 0 || createMutation.isPending}>
                   <Check className="mr-1.5 h-4 w-4" />Bayar
                 </Button>
               </div>
-              <Button variant="outline" className="w-full h-8 text-xs" onClick={() => toast({ title: 'Mengekspor PDF...' })}>
+              <Button variant="outline" className="w-full h-8 text-xs" onClick={() => window.print()}>
                 <FileDown className="mr-1.5 h-3.5 w-3.5" />Export PDF
               </Button>
             </CardContent>

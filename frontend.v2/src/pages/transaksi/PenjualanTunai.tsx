@@ -5,12 +5,22 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Plus, Trash2, Banknote, Calculator, Printer, FileDown, CheckCircle2, Search } from 'lucide-react';
-import { PRODUCTS, CUSTOMERS, SALES_REPS, formatRupiah } from '@/data/mockData';
 import { useToast } from '@/hooks/use-toast';
+import { useProducts } from '@/hooks/api/useProducts';
+import { useCustomers } from '@/hooks/api/useCustomers';
+import { useSalesReps } from '@/hooks/api/useSalesReps';
+import { useCreateTransaction } from '@/hooks/api/useTransactions';
+import type { Product, Customer, SalesRep } from '@/types';
+
+const formatRupiah = (value: number) =>
+  new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(value);
+
+function cn(...classes: (string | boolean | undefined)[]) {
+  return classes.filter(Boolean).join(' ');
+}
 
 interface CartItem {
   productId: string;
@@ -34,23 +44,33 @@ const PenjualanTunai = () => {
   const [diskonTotal, setDiskonTotal] = useState('0');
   const [searchProduct, setSearchProduct] = useState('');
   const [saved, setSaved] = useState(false);
+  const [lastInvoice, setLastInvoice] = useState('');
+
+  const { data: productsData } = useProducts({ per_page: 200 });
+  const { data: customersData } = useCustomers({ per_page: 100 });
+  const { data: salesData } = useSalesReps({ per_page: 100 });
+  const createMutation = useCreateTransaction();
+
+  const products = (productsData?.data?.data ?? []) as Product[];
+  const customers = (customersData?.data?.data ?? []) as Customer[];
+  const sales = (salesData?.data?.data ?? []) as SalesRep[];
 
   const noFaktur = `PJ-${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}-${String(Math.floor(Math.random()*900)+100)}`;
 
-  const filteredProducts = PRODUCTS.filter(p =>
-    p.nama.toLowerCase().includes(searchProduct.toLowerCase()) ||
-    p.kode.toLowerCase().includes(searchProduct.toLowerCase())
+  const filteredProducts = products.filter(p =>
+    p.name.toLowerCase().includes(searchProduct.toLowerCase()) ||
+    p.code.toLowerCase().includes(searchProduct.toLowerCase())
   );
 
   const addToCart = () => {
-    const product = PRODUCTS.find(p => p.id === selectedProduct);
+    const product = products.find(p => p.id === selectedProduct);
     if (!product) return toast({ title: 'Pilih produk terlebih dahulu', variant: 'destructive' });
     const qtyNum = parseInt(qty) || 1;
     if (qtyNum <= 0) return toast({ title: 'Qty harus lebih dari 0', variant: 'destructive' });
-    if (qtyNum > product.stok) return toast({ title: `Stok tidak cukup. Stok tersedia: ${product.stok} ${product.satuan}`, variant: 'destructive' });
+    if (qtyNum > product.stock) return toast({ title: `Stok tidak cukup. Stok tersedia: ${product.stock} ${product.unit}`, variant: 'destructive' });
 
     const diskonNum = parseFloat(diskon) || 0;
-    const subtotal = product.hargaJual * qtyNum * (1 - diskonNum / 100);
+    const subtotal = product.sellPrice * qtyNum * (1 - diskonNum / 100);
 
     const existing = cart.findIndex(c => c.productId === selectedProduct);
     if (existing >= 0) {
@@ -60,12 +80,12 @@ const PenjualanTunai = () => {
       setCart(updated);
     } else {
       setCart([...cart, {
-        productId: product.id, nama: product.nama, satuan: product.satuan,
-        qty: qtyNum, harga: product.hargaJual, diskon: diskonNum, subtotal,
+        productId: product.id, nama: product.name, satuan: product.unit,
+        qty: qtyNum, harga: product.sellPrice, diskon: diskonNum, subtotal,
       }]);
     }
     setSelectedProduct(''); setQty('1'); setDiskon('0'); setSearchProduct('');
-    toast({ title: `${product.nama} ditambahkan ke keranjang` });
+    toast({ title: `${product.name} ditambahkan ke keranjang` });
   };
 
   const removeItem = (idx: number) => setCart(cart.filter((_, i) => i !== idx));
@@ -75,21 +95,42 @@ const PenjualanTunai = () => {
   const grandTotal = subtotal - diskonTotalNum;
   const kembalian = (parseFloat(bayar) || 0) - grandTotal;
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (cart.length === 0) return toast({ title: 'Keranjang masih kosong', variant: 'destructive' });
-    if (!selectedCustomer) return toast({ title: 'Pilih customer terlebih dahulu', variant: 'destructive' });
-    setSaved(true);
-    toast({ title: 'Transaksi berhasil disimpan', description: `No. Faktur: ${noFaktur}` });
+
+    try {
+      const payload = {
+        type: 'penjualan_tunai',
+        invoiceNumber: noFaktur,
+        date: new Date().toISOString().slice(0, 10),
+        customerId: selectedCustomer || null,
+        salesRepId: selectedSales || null,
+        subtotal,
+        discount: diskonTotalNum,
+        tax: 0,
+        total: grandTotal,
+        paid: parseFloat(bayar) || grandTotal,
+        remaining: 0,
+        status: 'completed',
+        items: cart.map(item => ({
+          productId: item.productId,
+          quantity: item.qty,
+          price: item.harga,
+          discount: item.diskon,
+        })),
+      };
+
+      await createMutation.mutateAsync(payload);
+      setLastInvoice(noFaktur);
+      setSaved(true);
+      toast({ title: 'Transaksi berhasil disimpan', description: `No. Faktur: ${noFaktur}` });
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Gagal menyimpan transaksi';
+      toast({ title: 'Error', description: msg, variant: 'destructive' });
+    }
   };
 
-  const handlePrint = () => {
-    window.print();
-    toast({ title: 'Mencetak struk...' });
-  };
-
-  const handleExportPdf = () => {
-    toast({ title: 'Mengekspor ke PDF...', description: `${noFaktur}.pdf` });
-  };
+  const handlePrint = () => window.print();
 
   if (saved) {
     return (
@@ -100,13 +141,13 @@ const PenjualanTunai = () => {
           </div>
           <div className="text-center">
             <h2 className="text-2xl font-bold">Transaksi Berhasil</h2>
-            <p className="text-muted-foreground mt-1">No. Faktur: <span className="font-mono font-semibold text-primary">{noFaktur}</span></p>
+            <p className="text-muted-foreground mt-1">No. Faktur: <span className="font-mono font-semibold text-primary">{lastInvoice}</span></p>
             <p className="text-3xl font-bold text-success mt-3">{formatRupiah(grandTotal)}</p>
             {kembalian > 0 && <p className="text-muted-foreground mt-1">Kembalian: <span className="font-semibold text-success">{formatRupiah(kembalian)}</span></p>}
           </div>
           <div className="flex gap-3">
             <Button variant="outline" onClick={handlePrint}><Printer className="mr-2 h-4 w-4" />Cetak Struk</Button>
-            <Button variant="outline" onClick={handleExportPdf}><FileDown className="mr-2 h-4 w-4" />Export PDF</Button>
+            <Button variant="outline" onClick={() => window.print()}><FileDown className="mr-2 h-4 w-4" />Export PDF</Button>
             <Button onClick={() => { setCart([]); setSaved(false); setBayar(''); setDiskonTotal('0'); setSelectedCustomer(''); setSelectedSales(''); }}>
               Transaksi Baru
             </Button>
@@ -119,7 +160,6 @@ const PenjualanTunai = () => {
   return (
     <MainLayout title="Penjualan Tunai" subtitle="Buat transaksi penjualan tunai">
       <div className="grid gap-5 lg:grid-cols-3">
-        {/* Left: Form */}
         <div className="lg:col-span-2 space-y-4">
           <Card>
             <CardHeader className="pb-3">
@@ -144,7 +184,7 @@ const PenjualanTunai = () => {
                     <SelectTrigger className="text-xs"><SelectValue placeholder="Pilih customer" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="walk-in">Walk-in Customer</SelectItem>
-                      {CUSTOMERS.map(c => <SelectItem key={c.id} value={c.id}>{c.nama}</SelectItem>)}
+                      {customers.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -153,35 +193,29 @@ const PenjualanTunai = () => {
                   <Select value={selectedSales} onValueChange={setSelectedSales}>
                     <SelectTrigger className="text-xs"><SelectValue placeholder="Pilih sales" /></SelectTrigger>
                     <SelectContent>
-                      {SALES_REPS.filter(s => s.status === 'aktif').map(s => <SelectItem key={s.id} value={s.id}>{s.nama}</SelectItem>)}
+                      {sales.filter(s => s.status === 'active').map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
               </div>
 
-              {/* Add Product */}
               <div className="rounded-lg border bg-muted/30 p-3.5">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Tambah Produk</p>
                 <div className="grid gap-2 md:grid-cols-6">
                   <div className="md:col-span-3 space-y-1">
                     <div className="relative">
                       <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                      <Input
-                        placeholder="Cari produk..."
-                        value={searchProduct}
-                        onChange={e => setSearchProduct(e.target.value)}
-                        className="pl-8 text-xs h-8"
-                      />
+                      <Input placeholder="Cari produk..." value={searchProduct} onChange={e => setSearchProduct(e.target.value)} className="pl-8 text-xs h-8" />
                     </div>
                     <Select value={selectedProduct} onValueChange={setSelectedProduct}>
                       <SelectTrigger className="text-xs h-8"><SelectValue placeholder="Pilih produk" /></SelectTrigger>
                       <SelectContent>
                         {filteredProducts.map(p => (
                           <SelectItem key={p.id} value={p.id}>
-                            <span>{p.nama}</span>
-                            <span className="ml-2 text-muted-foreground">{formatRupiah(p.hargaJual)}</span>
-                            <Badge variant={p.stok <= p.stokMinimum ? 'destructive' : 'secondary'} className="ml-2 text-[9px] h-3.5 px-1">
-                              Stok: {p.stok}
+                            <span>{p.name}</span>
+                            <span className="ml-2 text-muted-foreground">{formatRupiah(p.sellPrice)}</span>
+                            <Badge variant={p.stock <= p.minStock ? 'destructive' : 'secondary'} className="ml-2 text-[9px] h-3.5 px-1">
+                              Stok: {p.stock}
                             </Badge>
                           </SelectItem>
                         ))}
@@ -204,55 +238,46 @@ const PenjualanTunai = () => {
                 </div>
               </div>
 
-              {/* Cart Table */}
               <div className="rounded-md border overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/50">
-                      <TableHead className="text-xs w-8">No</TableHead>
-                      <TableHead className="text-xs">Produk</TableHead>
-                      <TableHead className="text-xs text-right">Qty</TableHead>
-                      <TableHead className="text-xs text-right">Harga</TableHead>
-                      <TableHead className="text-xs text-right">Disc%</TableHead>
-                      <TableHead className="text-xs text-right">Subtotal</TableHead>
-                      <TableHead className="w-8"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-muted/50 text-xs text-muted-foreground">
+                      <th className="px-3 py-2 text-left w-8">No</th>
+                      <th className="px-3 py-2 text-left">Produk</th>
+                      <th className="px-3 py-2 text-right">Qty</th>
+                      <th className="px-3 py-2 text-right">Harga</th>
+                      <th className="px-3 py-2 text-right">Disc%</th>
+                      <th className="px-3 py-2 text-right">Subtotal</th>
+                      <th className="w-8"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
                     {cart.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-8">
-                          Keranjang masih kosong. Tambahkan produk di atas.
-                        </TableCell>
-                      </TableRow>
+                      <tr><td colSpan={7} className="text-center text-sm text-muted-foreground py-8">Keranjang masih kosong</td></tr>
                     ) : (
                       cart.map((item, idx) => (
-                        <TableRow key={item.productId} className="text-sm">
-                          <TableCell className="text-xs text-muted-foreground">{idx + 1}</TableCell>
-                          <TableCell>
-                            <p className="font-medium text-sm">{item.nama}</p>
-                            <p className="text-xs text-muted-foreground">{item.satuan}</p>
-                          </TableCell>
-                          <TableCell className="text-right tabular-nums">{item.qty}</TableCell>
-                          <TableCell className="text-right tabular-nums text-xs">{formatRupiah(item.harga)}</TableCell>
-                          <TableCell className="text-right tabular-nums text-xs">{item.diskon > 0 ? `${item.diskon}%` : '-'}</TableCell>
-                          <TableCell className="text-right font-semibold tabular-nums">{formatRupiah(item.subtotal)}</TableCell>
-                          <TableCell>
+                        <tr key={item.productId} className="border-b text-sm">
+                          <td className="px-3 py-2 text-xs text-muted-foreground">{idx + 1}</td>
+                          <td className="px-3 py-2"><p className="font-medium text-sm">{item.nama}</p><p className="text-xs text-muted-foreground">{item.satuan}</p></td>
+                          <td className="px-3 py-2 text-right tabular-nums">{item.qty}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-xs">{formatRupiah(item.harga)}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-xs">{item.diskon > 0 ? `${item.diskon}%` : '-'}</td>
+                          <td className="px-3 py-2 text-right font-semibold tabular-nums">{formatRupiah(item.subtotal)}</td>
+                          <td className="px-3 py-2">
                             <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:bg-destructive/10" onClick={() => removeItem(idx)}>
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>
-                          </TableCell>
-                        </TableRow>
+                          </td>
+                        </tr>
                       ))
                     )}
-                  </TableBody>
-                </Table>
+                  </tbody>
+                </table>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Right: Summary */}
         <div>
           <Card className="sticky top-20">
             <CardHeader className="pb-3">
@@ -268,14 +293,7 @@ const PenjualanTunai = () => {
               </div>
               <div className="flex items-center gap-2 text-sm">
                 <span className="text-muted-foreground flex-1">Diskon</span>
-                <Input
-                  type="number"
-                  value={diskonTotal}
-                  onChange={e => setDiskonTotal(e.target.value)}
-                  className="w-32 h-7 text-right text-xs"
-                  min="0"
-                  placeholder="0"
-                />
+                <Input type="number" value={diskonTotal} onChange={e => setDiskonTotal(e.target.value)} className="w-32 h-7 text-right text-xs" min="0" placeholder="0" />
               </div>
               <Separator />
               <div className="flex justify-between items-center">
@@ -285,13 +303,7 @@ const PenjualanTunai = () => {
 
               <div className="space-y-1.5 pt-2">
                 <Label className="text-xs">Jumlah Bayar (Rp)</Label>
-                <Input
-                  type="number"
-                  value={bayar}
-                  onChange={e => setBayar(e.target.value)}
-                  placeholder="0"
-                  className="text-right text-lg font-bold h-10"
-                />
+                <Input type="number" value={bayar} onChange={e => setBayar(e.target.value)} placeholder="0" className="text-right text-lg font-bold h-10" />
               </div>
 
               {parseFloat(bayar) > 0 && (
@@ -309,19 +321,15 @@ const PenjualanTunai = () => {
               )}
 
               <div className="flex gap-2 pt-2">
-                <Button variant="outline" className="flex-1 h-9 text-sm" onClick={() => { setCart([]); setBayar(''); setDiskonTotal('0'); }}>
-                  Reset
-                </Button>
-                <Button className="flex-1 h-9 text-sm" onClick={handleSave} disabled={cart.length === 0}>
-                  Simpan
-                </Button>
+                <Button variant="outline" className="flex-1 h-9 text-sm" onClick={() => { setCart([]); setBayar(''); setDiskonTotal('0'); }}>Reset</Button>
+                <Button className="flex-1 h-9 text-sm" onClick={handleSave} disabled={cart.length === 0 || createMutation.isPending}>Simpan</Button>
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <Button variant="outline" className="w-full h-8 text-xs" onClick={handlePrint}>
                   <Printer className="mr-1.5 h-3.5 w-3.5" />Cetak Struk
                 </Button>
-                <Button variant="outline" className="w-full h-8 text-xs" onClick={handleExportPdf}>
+                <Button variant="outline" className="w-full h-8 text-xs" onClick={() => window.print()}>
                   <FileDown className="mr-1.5 h-3.5 w-3.5" />Export PDF
                 </Button>
               </div>
@@ -332,9 +340,5 @@ const PenjualanTunai = () => {
     </MainLayout>
   );
 };
-
-function cn(...classes: (string | boolean | undefined)[]) {
-  return classes.filter(Boolean).join(' ');
-}
 
 export default PenjualanTunai;

@@ -5,13 +5,20 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
 import { Plus, Trash2, CreditCard, Calculator, Printer, FileDown, CheckCircle2, AlertCircle, Search } from 'lucide-react';
-import { PRODUCTS, CUSTOMERS, SALES_REPS, WAREHOUSES, formatRupiah } from '@/data/mockData';
 import { useToast } from '@/hooks/use-toast';
+import { useProducts } from '@/hooks/api/useProducts';
+import { useCustomers } from '@/hooks/api/useCustomers';
+import { useSalesReps } from '@/hooks/api/useSalesReps';
+import { useWarehouses } from '@/hooks/api/useWarehouses';
+import { useCreateTransaction } from '@/hooks/api/useTransactions';
+import type { Product, Customer, SalesRep, Warehouse } from '@/types';
+
+const formatRupiah = (value: number) =>
+  new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(value);
 
 interface CartItem {
   productId: string;
@@ -37,17 +44,33 @@ const PenjualanKredit = () => {
   const [diskonTotal, setDiskonTotal] = useState('0');
   const [searchProduct, setSearchProduct] = useState('');
   const [saved, setSaved] = useState(false);
+  const [lastInvoice, setLastInvoice] = useState('');
+
+  const { data: productsData } = useProducts({ per_page: 200 });
+  const { data: customersData } = useCustomers({ per_page: 100 });
+  const { data: salesData } = useSalesReps({ per_page: 100 });
+  const { data: warehousesData } = useWarehouses({ per_page: 100 });
+  const createMutation = useCreateTransaction();
+
+  const products = (productsData?.data?.data ?? []) as Product[];
+  const customers = (customersData?.data?.data ?? []) as Customer[];
+  const sales = (salesData?.data?.data ?? []) as SalesRep[];
+  const warehouses = (warehousesData?.data?.data ?? []) as Warehouse[];
 
   const noFaktur = `PK-${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}-${String(Math.floor(Math.random()*900)+100)}`;
-  const customer = CUSTOMERS.find(c => c.id === selectedCustomer);
+  const customer = customers.find(c => c.id === selectedCustomer);
+
+  const filteredProducts = products.filter(p =>
+    p.name.toLowerCase().includes(searchProduct.toLowerCase()) || p.code.toLowerCase().includes(searchProduct.toLowerCase())
+  );
 
   const addToCart = () => {
-    const product = PRODUCTS.find(p => p.id === selectedProduct);
+    const product = products.find(p => p.id === selectedProduct);
     if (!product) return toast({ title: 'Pilih produk terlebih dahulu', variant: 'destructive' });
     const qtyNum = parseInt(qty) || 1;
-    if (qtyNum > product.stok) return toast({ title: `Stok tidak cukup. Tersedia: ${product.stok}`, variant: 'destructive' });
+    if (qtyNum > product.stock) return toast({ title: `Stok tidak cukup. Tersedia: ${product.stock}`, variant: 'destructive' });
     const diskonNum = parseFloat(diskon) || 0;
-    const subtotal = product.hargaJual * qtyNum * (1 - diskonNum / 100);
+    const subtotal = product.sellPrice * qtyNum * (1 - diskonNum / 100);
     const existing = cart.findIndex(c => c.productId === selectedProduct);
     if (existing >= 0) {
       const updated = [...cart];
@@ -55,10 +78,10 @@ const PenjualanKredit = () => {
       updated[existing].subtotal = updated[existing].harga * updated[existing].qty * (1 - updated[existing].diskon / 100);
       setCart(updated);
     } else {
-      setCart([...cart, { productId: product.id, nama: product.nama, satuan: product.satuan, qty: qtyNum, harga: product.hargaJual, diskon: diskonNum, subtotal }]);
+      setCart([...cart, { productId: product.id, nama: product.name, satuan: product.unit, qty: qtyNum, harga: product.sellPrice, diskon: diskonNum, subtotal }]);
     }
     setSelectedProduct(''); setQty('1'); setDiskon('0'); setSearchProduct('');
-    toast({ title: `${product.nama} ditambahkan` });
+    toast({ title: `${product.name} ditambahkan` });
   };
 
   const removeItem = (idx: number) => setCart(cart.filter((_, i) => i !== idx));
@@ -68,19 +91,46 @@ const PenjualanKredit = () => {
   const grandTotal = subtotal - diskonTotalNum;
   const dpNum = parseFloat(dp) || 0;
   const sisaPiutang = grandTotal - dpNum;
-  const newPiutang = (customer?.totalPiutang ?? 0) + sisaPiutang;
-  const isOverLimit = customer && newPiutang > customer.limitKredit;
+  const newPiutang = (customer?.balance || 0) + sisaPiutang;
+  const isOverLimit = customer && (customer.creditLimit || 0) > 0 && newPiutang > (customer.creditLimit || 0);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (cart.length === 0) return toast({ title: 'Keranjang masih kosong', variant: 'destructive' });
     if (!selectedCustomer) return toast({ title: 'Pilih customer terlebih dahulu', variant: 'destructive' });
-    setSaved(true);
-    toast({ title: 'Penjualan kredit berhasil disimpan', description: `No. Faktur: ${noFaktur}` });
-  };
 
-  const filteredProducts = PRODUCTS.filter(p =>
-    p.nama.toLowerCase().includes(searchProduct.toLowerCase()) || p.kode.toLowerCase().includes(searchProduct.toLowerCase())
-  );
+    try {
+      const payload = {
+        type: 'penjualan_kredit',
+        invoiceNumber: noFaktur,
+        date: new Date().toISOString().slice(0, 10),
+        customerId: selectedCustomer,
+        salesRepId: selectedSales || null,
+        warehouseId: selectedGudang || null,
+        subtotal,
+        discount: diskonTotalNum,
+        tax: 0,
+        total: grandTotal,
+        paid: dpNum,
+        remaining: sisaPiutang,
+        status: 'completed',
+        notes: catatan,
+        items: cart.map(item => ({
+          productId: item.productId,
+          quantity: item.qty,
+          price: item.harga,
+          discount: item.diskon,
+        })),
+      };
+
+      await createMutation.mutateAsync(payload);
+      setLastInvoice(noFaktur);
+      setSaved(true);
+      toast({ title: 'Penjualan kredit berhasil disimpan', description: `No. Faktur: ${noFaktur}` });
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Gagal menyimpan transaksi';
+      toast({ title: 'Error', description: msg, variant: 'destructive' });
+    }
+  };
 
   if (saved) {
     return (
@@ -91,7 +141,7 @@ const PenjualanKredit = () => {
           </div>
           <div className="text-center">
             <h2 className="text-2xl font-bold">Penjualan Kredit Berhasil</h2>
-            <p className="text-muted-foreground mt-1">No. Faktur: <span className="font-mono font-semibold text-primary">{noFaktur}</span></p>
+            <p className="text-muted-foreground mt-1">No. Faktur: <span className="font-mono font-semibold text-primary">{lastInvoice}</span></p>
             <p className="text-3xl font-bold text-warning mt-3">{formatRupiah(sisaPiutang)}</p>
             <p className="text-sm text-muted-foreground">Total Piutang Ditambahkan</p>
           </div>
@@ -113,7 +163,7 @@ const PenjualanKredit = () => {
         <Alert className="mb-4 border-destructive/50 bg-destructive/10">
           <AlertCircle className="h-4 w-4 text-destructive" />
           <AlertDescription className="text-destructive text-sm">
-            Piutang customer akan melebihi limit kredit ({formatRupiah(customer!.limitKredit)}). Piutang saat ini: {formatRupiah(customer!.totalPiutang)} + {formatRupiah(sisaPiutang)} = {formatRupiah(newPiutang)}
+            Piutang customer akan melebihi limit kredit ({formatRupiah(customer!.creditLimit || 0)}). Piutang saat ini: {formatRupiah(customer!.balance || 0)} + {formatRupiah(sisaPiutang)} = {formatRupiah(newPiutang)}
           </AlertDescription>
         </Alert>
       )}
@@ -141,10 +191,10 @@ const PenjualanKredit = () => {
                   <Select value={selectedCustomer} onValueChange={setSelectedCustomer}>
                     <SelectTrigger className="text-xs"><SelectValue placeholder="Pilih customer" /></SelectTrigger>
                     <SelectContent>
-                      {CUSTOMERS.map(c => (
+                      {customers.map(c => (
                         <SelectItem key={c.id} value={c.id}>
-                          <span>{c.nama}</span>
-                          {c.totalPiutang > 0 && <Badge variant="outline" className="ml-2 text-[9px] h-3.5 px-1 text-warning border-warning">{formatRupiah(c.totalPiutang)}</Badge>}
+                          <span>{c.name}</span>
+                          {(c.balance || 0) > 0 && <Badge variant="outline" className="ml-2 text-[9px] h-3.5 px-1 text-warning border-warning">{formatRupiah(c.balance || 0)}</Badge>}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -158,9 +208,9 @@ const PenjualanKredit = () => {
 
               {customer && (
                 <div className="rounded-lg border bg-muted/30 p-3 text-xs grid grid-cols-3 gap-3">
-                  <div><p className="text-muted-foreground">Piutang Saat Ini</p><p className="font-semibold text-warning">{formatRupiah(customer.totalPiutang)}</p></div>
-                  <div><p className="text-muted-foreground">Limit Kredit</p><p className="font-semibold">{formatRupiah(customer.limitKredit)}</p></div>
-                  <div><p className="text-muted-foreground">Sisa Limit</p><p className={`font-semibold ${customer.limitKredit - customer.totalPiutang <= 0 ? 'text-destructive' : 'text-success'}`}>{formatRupiah(customer.limitKredit - customer.totalPiutang)}</p></div>
+                  <div><p className="text-muted-foreground">Piutang Saat Ini</p><p className="font-semibold text-warning">{formatRupiah(customer.balance || 0)}</p></div>
+                  <div><p className="text-muted-foreground">Limit Kredit</p><p className="font-semibold">{formatRupiah(customer.creditLimit || 0)}</p></div>
+                  <div><p className="text-muted-foreground">Sisa Limit</p><p className={`font-semibold ${((customer.creditLimit || 0) - (customer.balance || 0)) <= 0 ? 'text-destructive' : 'text-success'}`}>{formatRupiah((customer.creditLimit || 0) - (customer.balance || 0))}</p></div>
                 </div>
               )}
 
@@ -170,7 +220,7 @@ const PenjualanKredit = () => {
                   <Select value={selectedSales} onValueChange={setSelectedSales}>
                     <SelectTrigger className="text-xs"><SelectValue placeholder="Pilih sales" /></SelectTrigger>
                     <SelectContent>
-                      {SALES_REPS.filter(s => s.status === 'aktif').map(s => <SelectItem key={s.id} value={s.id}>{s.nama} - {s.area}</SelectItem>)}
+                      {sales.filter(s => s.status === 'active').map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -179,7 +229,7 @@ const PenjualanKredit = () => {
                   <Select value={selectedGudang} onValueChange={setSelectedGudang}>
                     <SelectTrigger className="text-xs"><SelectValue placeholder="Pilih gudang" /></SelectTrigger>
                     <SelectContent>
-                      {WAREHOUSES.filter(g => g.status === 'aktif').map(g => <SelectItem key={g.id} value={g.id}>{g.nama}</SelectItem>)}
+                      {warehouses.filter(w => w.status === 'active').map(w => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -198,8 +248,8 @@ const PenjualanKredit = () => {
                       <SelectContent>
                         {filteredProducts.map(p => (
                           <SelectItem key={p.id} value={p.id}>
-                            {p.nama} - {formatRupiah(p.hargaJual)}
-                            <Badge variant={p.stok <= p.stokMinimum ? 'destructive' : 'secondary'} className="ml-2 text-[9px] h-3.5 px-1">Stok: {p.stok}</Badge>
+                            {p.name} - {formatRupiah(p.sellPrice)}
+                            <Badge variant={p.stock <= p.minStock ? 'destructive' : 'secondary'} className="ml-2 text-[9px] h-3.5 px-1">Stok: {p.stock}</Badge>
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -220,40 +270,40 @@ const PenjualanKredit = () => {
               </div>
 
               <div className="rounded-md border overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/50">
-                      <TableHead className="text-xs w-8">No</TableHead>
-                      <TableHead className="text-xs">Produk</TableHead>
-                      <TableHead className="text-xs text-right">Qty</TableHead>
-                      <TableHead className="text-xs text-right">Harga</TableHead>
-                      <TableHead className="text-xs text-right">Disc%</TableHead>
-                      <TableHead className="text-xs text-right">Subtotal</TableHead>
-                      <TableHead className="w-8"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-muted/50 text-xs text-muted-foreground">
+                      <th className="px-3 py-2 text-left w-8">No</th>
+                      <th className="px-3 py-2 text-left">Produk</th>
+                      <th className="px-3 py-2 text-right">Qty</th>
+                      <th className="px-3 py-2 text-right">Harga</th>
+                      <th className="px-3 py-2 text-right">Disc%</th>
+                      <th className="px-3 py-2 text-right">Subtotal</th>
+                      <th className="w-8"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
                     {cart.length === 0 ? (
-                      <TableRow><TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-8">Keranjang kosong</TableCell></TableRow>
+                      <tr><td colSpan={7} className="text-center text-sm text-muted-foreground py-8">Keranjang kosong</td></tr>
                     ) : (
                       cart.map((item, idx) => (
-                        <TableRow key={item.productId} className="text-sm">
-                          <TableCell className="text-xs text-muted-foreground">{idx + 1}</TableCell>
-                          <TableCell><p className="font-medium text-sm">{item.nama}</p><p className="text-xs text-muted-foreground">{item.satuan}</p></TableCell>
-                          <TableCell className="text-right tabular-nums">{item.qty}</TableCell>
-                          <TableCell className="text-right tabular-nums text-xs">{formatRupiah(item.harga)}</TableCell>
-                          <TableCell className="text-right tabular-nums text-xs">{item.diskon > 0 ? `${item.diskon}%` : '-'}</TableCell>
-                          <TableCell className="text-right font-semibold tabular-nums">{formatRupiah(item.subtotal)}</TableCell>
-                          <TableCell>
+                        <tr key={item.productId} className="border-b text-sm">
+                          <td className="px-3 py-2 text-xs text-muted-foreground">{idx + 1}</td>
+                          <td className="px-3 py-2"><p className="font-medium text-sm">{item.nama}</p><p className="text-xs text-muted-foreground">{item.satuan}</p></td>
+                          <td className="px-3 py-2 text-right tabular-nums">{item.qty}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-xs">{formatRupiah(item.harga)}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-xs">{item.diskon > 0 ? `${item.diskon}%` : '-'}</td>
+                          <td className="px-3 py-2 text-right font-semibold tabular-nums">{formatRupiah(item.subtotal)}</td>
+                          <td className="px-3 py-2">
                             <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:bg-destructive/10" onClick={() => removeItem(idx)}>
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>
-                          </TableCell>
-                        </TableRow>
+                          </td>
+                        </tr>
                       ))
                     )}
-                  </TableBody>
-                </Table>
+                  </tbody>
+                </table>
               </div>
             </CardContent>
           </Card>
@@ -305,7 +355,7 @@ const PenjualanKredit = () => {
 
               <div className="flex gap-2 pt-1">
                 <Button variant="outline" className="flex-1 h-9 text-sm" onClick={() => { setCart([]); setDp('0'); setDiskonTotal('0'); setSelectedCustomer(''); }}>Reset</Button>
-                <Button className="flex-1 h-9 text-sm" onClick={handleSave} disabled={cart.length === 0}>Simpan</Button>
+                <Button className="flex-1 h-9 text-sm" onClick={handleSave} disabled={cart.length === 0 || createMutation.isPending}>Simpan</Button>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <Button variant="outline" className="h-8 text-xs" onClick={() => window.print()}><Printer className="mr-1.5 h-3.5 w-3.5" />Cetak</Button>

@@ -47,40 +47,46 @@ class InfoController extends Controller
 
     /**
      * GET /api/info/saldo-piutang
-     * Semua customer yang punya saldo piutang > 0.
+     * Semua customer beserta saldo piutangnya.
      */
     public function saldoPiutang(): JsonResponse
     {
-        $customers = Customer::where('balance', '>', 0)
+        $customers = Customer::withCount('transactions')
             ->orderByDesc('balance')
-            ->get(['id', 'name', 'phone', 'balance']);
+            ->get(['id', 'name', 'phone', 'email', 'address', 'balance']);
 
         return response()->json([
             'data' => $customers->map(fn($c) => [
-                'id'      => (string) $c->id,
-                'name'    => $c->name,
-                'phone'   => $c->phone,
-                'balance' => (float) $c->balance,
+                'id'                => (string) $c->id,
+                'name'              => $c->name,
+                'phone'             => $c->phone ?? '',
+                'email'             => $c->email ?? '',
+                'address'           => $c->address ?? '',
+                'balance'           => (float) $c->balance,
+                'totalTransactions' => $c->transactions_count,
             ]),
         ]);
     }
 
     /**
      * GET /api/info/saldo-utang
-     * Semua supplier yang punya saldo utang > 0.
+     * Semua supplier beserta saldo utangnya.
      */
     public function saldoUtang(): JsonResponse
     {
-        $suppliers = Supplier::where('balance', '>', 0)
+        $suppliers = Supplier::withCount('transactions')
             ->orderByDesc('balance')
-            ->get(['id', 'name', 'phone', 'balance']);
+            ->get(['id', 'name', 'phone', 'email', 'address', 'balance']);
 
         return response()->json([
             'data' => $suppliers->map(fn($s) => [
-                'id'      => (string) $s->id,
-                'name'    => $s->name,
-                'phone'   => $s->phone,
-                'balance' => (float) $s->balance,
+                'id'                => (string) $s->id,
+                'name'              => $s->name,
+                'phone'             => $s->phone ?? '',
+                'email'             => $s->email ?? '',
+                'address'           => $s->address ?? '',
+                'balance'           => (float) $s->balance,
+                'totalTransactions' => $s->transactions_count,
             ]),
         ]);
     }
