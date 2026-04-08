@@ -7,12 +7,13 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Plus, Trash2, Banknote, Calculator, Printer, FileDown, CheckCircle2, Search } from 'lucide-react';
+import { Plus, Trash2, Banknote, Calculator, Printer, FileDown, CheckCircle2, Search, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useValidateQty } from '@/hooks/useValidateQty';
 import { useProducts } from '@/hooks/api/useProducts';
 import { useCustomers } from '@/hooks/api/useCustomers';
 import { useSalesReps } from '@/hooks/api/useSalesReps';
-import { useCreateTransaction } from '@/hooks/api/useTransactions';
+import { useCreateTransaction, printInvoice, printReceipt } from '@/hooks/api/useTransactions';
 import type { Product, Customer, SalesRep } from '@/types';
 
 const formatRupiah = (value: number) =>
@@ -34,6 +35,7 @@ interface CartItem {
 
 const PenjualanTunai = () => {
   const { toast } = useToast();
+  const { validateAddToCart, validateTotalDiscount, validateCartNotEmpty, showValidationError } = useValidateQty();
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedProduct, setSelectedProduct] = useState('');
   const [qty, setQty] = useState('1');
@@ -55,7 +57,7 @@ const PenjualanTunai = () => {
   const customers = (customersData?.data?.data ?? []) as Customer[];
   const sales = (salesData?.data?.data ?? []) as SalesRep[];
 
-  const noFaktur = `PJ-${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}-${String(Math.floor(Math.random()*900)+100)}`;
+  const noFaktur = '';
 
   const filteredProducts = products.filter(p =>
     p.name.toLowerCase().includes(searchProduct.toLowerCase()) ||
@@ -65,11 +67,15 @@ const PenjualanTunai = () => {
   const addToCart = () => {
     const product = products.find(p => p.id === selectedProduct);
     if (!product) return toast({ title: 'Pilih produk terlebih dahulu', variant: 'destructive' });
-    const qtyNum = parseInt(qty) || 1;
-    if (qtyNum <= 0) return toast({ title: 'Qty harus lebih dari 0', variant: 'destructive' });
-    if (qtyNum > product.stock) return toast({ title: `Stok tidak cukup. Stok tersedia: ${product.stock} ${product.unit}`, variant: 'destructive' });
+    
+    // Validate inputs
+    const validation = validateAddToCart(qty, diskon, product);
+    if (!validation.isValid) {
+      return showValidationError(validation.error || 'Validasi gagal');
+    }
 
-    const diskonNum = parseFloat(diskon) || 0;
+    const qtyNum = parseInt(qty);
+    const diskonNum = parseFloat(diskon);
     const subtotal = product.sellPrice * qtyNum * (1 - diskonNum / 100);
 
     const existing = cart.findIndex(c => c.productId === selectedProduct);
@@ -96,12 +102,21 @@ const PenjualanTunai = () => {
   const kembalian = (parseFloat(bayar) || 0) - grandTotal;
 
   const handleSave = async () => {
-    if (cart.length === 0) return toast({ title: 'Keranjang masih kosong', variant: 'destructive' });
+    // Validate cart not empty
+    const cartValidation = validateCartNotEmpty(cart);
+    if (!cartValidation.isValid) {
+      return showValidationError(cartValidation.error || 'Validasi gagal');
+    }
+
+    // Validate total discount
+    const discValidation = validateTotalDiscount(diskonTotal, subtotal);
+    if (!discValidation.isValid) {
+      return showValidationError(discValidation.error || 'Validasi gagal');
+    }
 
     try {
       const payload = {
         type: 'penjualan_tunai',
-        invoiceNumber: noFaktur,
         date: new Date().toISOString().slice(0, 10),
         customerId: selectedCustomer || null,
         salesRepId: selectedSales || null,
@@ -120,17 +135,19 @@ const PenjualanTunai = () => {
         })),
       };
 
-      await createMutation.mutateAsync(payload);
-      setLastInvoice(noFaktur);
+      const response = await createMutation.mutateAsync(payload);
+      const invoiceNumber = response.data?.data?.invoiceNumber || response.data?.invoiceNumber || '生成中';
+      setLastInvoice(invoiceNumber);
       setSaved(true);
-      toast({ title: 'Transaksi berhasil disimpan', description: `No. Faktur: ${noFaktur}` });
+      toast({ title: 'Transaksi berhasil disimpan', description: `No. Faktur: ${invoiceNumber}` });
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Gagal menyimpan transaksi';
       toast({ title: 'Error', description: msg, variant: 'destructive' });
     }
   };
 
-  const handlePrint = () => window.print();
+  const handlePrintReceipt = () => printReceipt(lastInvoice);
+  const handlePrintInvoice = () => printInvoice(lastInvoice);
 
   if (saved) {
     return (
@@ -146,8 +163,8 @@ const PenjualanTunai = () => {
             {kembalian > 0 && <p className="text-muted-foreground mt-1">Kembalian: <span className="font-semibold text-success">{formatRupiah(kembalian)}</span></p>}
           </div>
           <div className="flex gap-3">
-            <Button variant="outline" onClick={handlePrint}><Printer className="mr-2 h-4 w-4" />Cetak Struk</Button>
-            <Button variant="outline" onClick={() => window.print()}><FileDown className="mr-2 h-4 w-4" />Export PDF</Button>
+            <Button variant="outline" onClick={handlePrintReceipt}><Printer className="mr-2 h-4 w-4" />Cetak Struk</Button>
+            <Button variant="outline" onClick={handlePrintInvoice}><FileDown className="mr-2 h-4 w-4" />Export PDF</Button>
             <Button onClick={() => { setCart([]); setSaved(false); setBayar(''); setDiskonTotal('0'); setSelectedCustomer(''); setSelectedSales(''); }}>
               Transaksi Baru
             </Button>
@@ -172,7 +189,7 @@ const PenjualanTunai = () => {
               <div className="grid gap-3 md:grid-cols-4">
                 <div className="space-y-1.5">
                   <Label className="text-xs">No. Faktur</Label>
-                  <Input value={noFaktur} disabled className="text-xs font-mono bg-muted" />
+                  <Input value="Akan dibuat setelah disimpan" disabled className="text-xs font-mono bg-muted" />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">Tanggal</Label>
@@ -326,10 +343,10 @@ const PenjualanTunai = () => {
               </div>
 
               <div className="grid grid-cols-2 gap-2">
-                <Button variant="outline" className="w-full h-8 text-xs" onClick={handlePrint}>
+                <Button variant="outline" className="w-full h-8 text-xs" onClick={() => window.print()} disabled={cart.length === 0}>
                   <Printer className="mr-1.5 h-3.5 w-3.5" />Cetak Struk
                 </Button>
-                <Button variant="outline" className="w-full h-8 text-xs" onClick={() => window.print()}>
+                <Button variant="outline" className="w-full h-8 text-xs" onClick={() => window.print()} disabled={cart.length === 0}>
                   <FileDown className="mr-1.5 h-3.5 w-3.5" />Export PDF
                 </Button>
               </div>
