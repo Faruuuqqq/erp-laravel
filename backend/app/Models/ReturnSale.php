@@ -17,6 +17,7 @@ class ReturnSale extends Model
         'transaction_id',
         'customer_id',
         'reason',
+        'refund_method',
         'notes',
         'status',
         'created_by',

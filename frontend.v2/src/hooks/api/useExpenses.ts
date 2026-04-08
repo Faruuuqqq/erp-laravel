@@ -35,6 +35,13 @@ export const useExpenses = (params?: ExpenseQueryParams) => {
   });
 };
 
+export const useExpenseCategories = () => {
+  return useQuery({
+    queryKey: ['expenses', 'categories'],
+    queryFn: () => api.get<{ data: string[] }>('/expenses/categories'),
+  });
+};
+
 export const useExpense = (id: string) => {
   return useQuery({
     queryKey: ['expenses', id],

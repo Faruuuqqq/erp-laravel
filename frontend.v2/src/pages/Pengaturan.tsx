@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/contexts/AuthContext';
-import { Settings, User, Store, Lock, Bell, Shield, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import { Settings, User, Store, Lock, Bell, Shield, CheckCircle2, XCircle, Loader2, ArrowRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useSettings } from '@/hooks/api/useSettings';
 import { useUpdateProfile } from '@/hooks/api/useSettings';
@@ -15,6 +15,7 @@ import { useUpdateStore } from '@/hooks/api/useSettings';
 import { useUpdatePassword } from '@/hooks/api/useSettings';
 import { useUpdateNotifications } from '@/hooks/api/useSettings';
 import { useToast } from '@/hooks/use-toast';
+import { useNavigate } from 'react-router-dom';
 
 interface ProfileForm {
   name: string;
@@ -62,7 +63,8 @@ interface SettingsData {
 }
 
 const Pengaturan = () => {
-  const { user, updateUser } = useAuth();
+  const { user, updateUser, isOwner } = useAuth();
+  const navigate = useNavigate();
   const { data: settingsData } = useSettings();
   const updateProfileMutation = useUpdateProfile();
   const updateStoreMutation = useUpdateStore();
@@ -610,6 +612,11 @@ const Pengaturan = () => {
                   Dapat mengelola transaksi harian dan data master
                 </p>
               </div>
+              {isOwner && (
+                <Button variant="outline" className="w-full mt-2" onClick={() => navigate('/pengaturan/admin')}>
+                  Kelola Admin <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              )}
             </CardContent>
           </Card>
           

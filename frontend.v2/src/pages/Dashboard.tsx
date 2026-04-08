@@ -1,4 +1,3 @@
-import { useEffect, useRef } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { StatCard } from '@/components/ui/StatCard';
 import { useAuth } from '@/contexts/AuthContext';
@@ -6,24 +5,50 @@ import {
   TrendingUp, TrendingDown, Package, Users, ShoppingCart,
   Wallet, AlertTriangle, BarChart3, ArrowRight, Clock,
 } from 'lucide-react';
-import {
-  getDashboardStats, TRANSACTIONS, PRODUCTS, CUSTOMERS, CASHFLOW_DATA,
-  formatRupiah, TIPE_TRANSAKSI_LABELS,
-} from '@/data/mockData';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { StatusBadge, CurrencyCell } from '@/components/ui/DataComponents';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { useNavigate } from 'react-router-dom';
+import {
+  useDashboardStats,
+  useRecentTransactions,
+  useLowStock,
+  useFinancialSummary,
+  useSalesTrend,
+} from '@/hooks/api/useDashboard';
+
+const formatRupiah = (value: number) =>
+  new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(value);
+
+const TIPE_LABEL: Record<string, string> = {
+  pembelian: 'Pembelian',
+  penjualan_tunai: 'Penjualan Tunai',
+  penjualan_kredit: 'Penjualan Kredit',
+};
 
 const Dashboard = () => {
   const { user, isOwner } = useAuth();
-  const stats = getDashboardStats();
   const navigate = useNavigate();
-  const recentTx = TRANSACTIONS.slice(0, 5);
-  const lowStock = PRODUCTS.filter(p => p.stok <= p.stokMinimum);
-  const overLimit = CUSTOMERS.filter(c => c.totalPiutang > c.limitKredit);
+
+  const { data: statsData, isLoading: statsLoading } = useDashboardStats();
+  const { data: recentData } = useRecentTransactions();
+  const { data: lowStockData } = useLowStock();
+  const { data: financialData } = useFinancialSummary();
+  const { data: trendData } = useSalesTrend();
+
+  const stats = statsData?.data?.data ?? {};
+  const recentTx = recentData?.data?.data ?? [];
+  const lowStock = lowStockData?.data?.data ?? [];
+  const financial = financialData?.data?.data ?? {};
+  const trendDataFormatted = trendData?.data?.data ?? [];
+
+  const chartData = trendDataFormatted.map((d: any) => ({
+    hari: d.name,
+    masuk: d.sales || 0,
+    keluar: d.purchases || 0,
+  }));
 
   return (
     <MainLayout
@@ -31,27 +56,27 @@ const Dashboard = () => {
       subtitle={`Selamat datang kembali, ${user?.name} · ${new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}`}
     >
       {/* Smart Alerts */}
-      {isOwner && (lowStock.length > 0 || overLimit.length > 0) && (
+      {isOwner && (lowStock.length > 0 || (financial.overdueReceivables ?? 0) > 0) && (
         <div className="mb-5 flex flex-col sm:flex-row gap-3">
           {lowStock.length > 0 && (
             <div className="flex items-center gap-3 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 flex-1">
               <AlertTriangle className="h-4 w-4 text-warning shrink-0" />
               <p className="text-sm text-warning">
                 <strong>{lowStock.length} produk</strong> stok di bawah minimum:{' '}
-                {lowStock.slice(0, 2).map(p => p.nama).join(', ')}{lowStock.length > 2 ? '...' : ''}
+                {lowStock.slice(0, 2).map((p: any) => p.name).join(', ')}{lowStock.length > 2 ? '...' : ''}
               </p>
               <Button size="sm" variant="outline" className="ml-auto shrink-0 h-7 border-warning text-warning hover:bg-warning/10" onClick={() => navigate('/produk')}>
                 Lihat
               </Button>
             </div>
           )}
-          {overLimit.length > 0 && (
+          {(financial.overdueReceivables ?? 0) > 0 && (
             <div className="flex items-center gap-3 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 flex-1">
               <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
               <p className="text-sm text-destructive">
-                <strong>{overLimit.length} customer</strong> melebihi limit kredit
+                <strong>{financial.overdueReceivables}</strong> piutang jatuh tempo
               </p>
-              <Button size="sm" variant="outline" className="ml-auto shrink-0 h-7 border-destructive text-destructive hover:bg-destructive/10" onClick={() => navigate('/customer')}>
+              <Button size="sm" variant="outline" className="ml-auto shrink-0 h-7 border-destructive text-destructive hover:bg-destructive/10" onClick={() => navigate('/laporan/saldo-piutang')}>
                 Lihat
               </Button>
             </div>
@@ -60,68 +85,76 @@ const Dashboard = () => {
       )}
 
       {/* Stat Cards */}
-      <div className="mb-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          title="Penjualan Hari Ini"
-          value={stats.penjualanHariIni}
-          subValue={`${stats.totalTransaksiHariIni} transaksi`}
-          icon={<TrendingUp className="h-5 w-5" />}
-          color="success"
-          trend="up"
-          trendValue="+12.5%"
-          onClick={() => navigate('/informasi/penjualan')}
-        />
-        <StatCard
-          title="Pembelian Hari Ini"
-          value={stats.pembelianHariIni}
-          icon={<ShoppingCart className="h-5 w-5" />}
-          color="primary"
-          trend="neutral"
-          trendValue="=0%"
-          onClick={() => navigate('/informasi/pembelian')}
-        />
-        <StatCard
-          title="Total Piutang"
-          value={stats.totalPiutang}
-          subValue="Dari customer aktif"
-          icon={<TrendingUp className="h-5 w-5" />}
-          color="warning"
-          onClick={() => navigate('/laporan/saldo-piutang')}
-        />
-        <StatCard
-          title="Total Utang"
-          value={stats.totalUtang}
-          subValue="Ke supplier"
-          icon={<TrendingDown className="h-5 w-5" />}
-          color="destructive"
-          onClick={() => navigate('/laporan/saldo-utang')}
-        />
-      </div>
+      {statsLoading ? (
+        <div className="mb-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {[1, 2, 3, 4].map(i => (
+            <Card key={i}><CardContent className="p-4"><div className="h-8 bg-muted rounded animate-pulse" /></CardContent></Card>
+          ))}
+        </div>
+      ) : (
+        <div className="mb-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard
+            title="Penjualan Hari Ini"
+            value={stats.totalSalesToday ?? 0}
+            subValue={`${stats.totalTransactionsToday ?? 0} transaksi`}
+            icon={<TrendingUp className="h-5 w-5" />}
+            color="success"
+            trend={stats.salesGrowth >= 0 ? 'up' : 'down'}
+            trendValue={`${stats.salesGrowth >= 0 ? '+' : ''}${stats.salesGrowth ?? 0}%`}
+            onClick={() => navigate('/informasi/penjualan')}
+          />
+          <StatCard
+            title="Pembelian Hari Ini"
+            value={stats.totalPurchasesToday ?? 0}
+            icon={<ShoppingCart className="h-5 w-5" />}
+            color="primary"
+            trend={stats.purchasesGrowth >= 0 ? 'up' : 'down'}
+            trendValue={`${stats.purchasesGrowth >= 0 ? '+' : ''}${stats.purchasesGrowth ?? 0}%`}
+            onClick={() => navigate('/informasi/pembelian')}
+          />
+          <StatCard
+            title="Total Piutang"
+            value={financial.totalReceivables ?? 0}
+            subValue="Dari customer aktif"
+            icon={<TrendingUp className="h-5 w-5" />}
+            color="warning"
+            onClick={() => navigate('/laporan/saldo-piutang')}
+          />
+          <StatCard
+            title="Total Utang"
+            value={financial.totalPayables ?? 0}
+            subValue="Ke supplier"
+            icon={<TrendingDown className="h-5 w-5" />}
+            color="destructive"
+            onClick={() => navigate('/laporan/saldo-utang')}
+          />
+        </div>
+      )}
 
       {/* Owner-only extra stats */}
-      {isOwner && (
+      {isOwner && !statsLoading && (
         <div className="mb-5 grid gap-4 sm:grid-cols-3">
           <StatCard
-            title="Kas Masuk Hari Ini"
-            value={stats.kasHariIni}
-            icon={<Wallet className="h-5 w-5" />}
-            color="info"
-            trend="up"
-            trendValue="+5.2%"
-          />
-          <StatCard
-            title="Stok Rendah"
-            value={`${stats.produkStokRendah} Produk`}
-            icon={<Package className="h-5 w-5" />}
-            color={stats.produkStokRendah > 0 ? 'warning' : 'success'}
-            onClick={() => navigate('/laporan/saldo-stok')}
-          />
-          <StatCard
-            title="Total Nilai Stok"
-            value={PRODUCTS.reduce((s, p) => s + p.hargaBeli * p.stok, 0)}
+            title="Nilai Stok"
+            value={stats.stockValue ?? 0}
             icon={<BarChart3 className="h-5 w-5" />}
             color="primary"
             onClick={() => navigate('/laporan/saldo-stok')}
+          />
+          <StatCard
+            title="Stok Rendah"
+            value={`${lowStock.length} Produk`}
+            icon={<Package className="h-5 w-5" />}
+            color={lowStock.length > 0 ? 'warning' : 'success'}
+            onClick={() => navigate('/laporan/saldo-stok')}
+          />
+          <StatCard
+            title="Customer Aktif"
+            value={`${stats.activeCustomers ?? 0}`}
+            subValue={`${stats.customersGrowth >= 0 ? '+' : ''}${stats.customersGrowth ?? 0}% dari periode lalu`}
+            icon={<Users className="h-5 w-5" />}
+            color="info"
+            onClick={() => navigate('/customer')}
           />
         </div>
       )}
@@ -137,23 +170,29 @@ const Dashboard = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={CASHFLOW_DATA} barGap={4}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                  <XAxis dataKey="hari" tick={{ fontSize: 12 }} className="text-muted-foreground" />
-                  <YAxis tickFormatter={v => `${(v / 1_000_000).toFixed(1)}M`} tick={{ fontSize: 11 }} />
-                  <Tooltip
-                    formatter={(v: number) => [formatRupiah(v), '']}
-                    contentStyle={{ fontSize: 12, borderRadius: 8 }}
-                  />
-                  <Bar dataKey="masuk" name="Masuk" fill="hsl(142,71%,38%)" radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="keluar" name="Keluar" fill="hsl(0,84%,55%)" radius={[3, 3, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-              <div className="mt-2 flex gap-4 text-xs text-muted-foreground">
-                <div className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-success inline-block" />Kas Masuk</div>
-                <div className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-destructive inline-block" />Kas Keluar</div>
-              </div>
+              {chartData.length === 0 ? (
+                <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm">Belum ada data</div>
+              ) : (
+                <>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <BarChart data={chartData} barGap={4}>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                      <XAxis dataKey="hari" tick={{ fontSize: 12 }} className="text-muted-foreground" />
+                      <YAxis tickFormatter={v => `${(v / 1_000_000).toFixed(1)}M`} tick={{ fontSize: 11 }} />
+                      <Tooltip
+                        formatter={(v: number) => [formatRupiah(v), '']}
+                        contentStyle={{ fontSize: 12, borderRadius: 8 }}
+                      />
+                      <Bar dataKey="masuk" name="Masuk" fill="hsl(142,71%,38%)" radius={[3, 3, 0, 0]} />
+                      <Bar dataKey="keluar" name="Keluar" fill="hsl(0,84%,55%)" radius={[3, 3, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                  <div className="mt-2 flex gap-4 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-success inline-block" />Kas Masuk</div>
+                    <div className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-destructive inline-block" />Kas Keluar</div>
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
         )}
@@ -170,13 +209,13 @@ const Dashboard = () => {
             {lowStock.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-4">Semua stok aman ✓</p>
             ) : (
-              lowStock.map(p => (
+              lowStock.slice(0, 5).map((p: any) => (
                 <div key={p.id} className="flex items-center justify-between py-1.5 border-b border-border last:border-0">
                   <div>
-                    <p className="text-sm font-medium truncate max-w-[140px]">{p.nama}</p>
-                    <p className="text-xs text-muted-foreground">Min: {p.stokMinimum} {p.satuan}</p>
+                    <p className="text-sm font-medium truncate max-w-[140px]">{p.name}</p>
+                    <p className="text-xs text-muted-foreground">Min: {p.minStock} {p.unit}</p>
                   </div>
-                  <Badge variant="destructive" className="tabular">{p.stok} {p.satuan}</Badge>
+                  <Badge variant="destructive" className="tabular-nums">{p.stock} {p.unit}</Badge>
                 </div>
               ))
             )}
@@ -207,24 +246,28 @@ const Dashboard = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {recentTx.map(tx => (
-                    <tr key={tx.id} className="border-b last:border-0 hover:bg-muted/30">
-                      <td className="py-2.5 font-mono text-xs text-primary">{tx.noFaktur}</td>
-                      <td className="py-2.5 truncate max-w-[150px]">{tx.customerNama || tx.supplierNama || '-'}</td>
-                      <td className="py-2.5">
-                        <span className="text-xs text-muted-foreground">{TIPE_TRANSAKSI_LABELS[tx.tipe]}</span>
-                      </td>
-                      <td className="py-2.5 text-right">
-                        <CurrencyCell value={tx.total} />
-                      </td>
-                      <td className="py-2.5">
-                        <StatusBadge
-                          status={tx.status === 'lunas' ? 'Lunas' : tx.status === 'kredit' ? 'Kredit' : 'Sebagian'}
-                          variant={tx.status}
-                        />
-                      </td>
-                    </tr>
-                  ))}
+                  {recentTx.length === 0 ? (
+                    <tr><td colSpan={5} className="py-8 text-center text-muted-foreground">Belum ada transaksi</td></tr>
+                  ) : (
+                    recentTx.slice(0, 5).map((tx: any) => (
+                      <tr key={tx.id} className="border-b last:border-0 hover:bg-muted/30">
+                        <td className="py-2.5 font-mono text-xs text-primary">{tx.invoice_number}</td>
+                        <td className="py-2.5 truncate max-w-[150px]">{tx.customer?.name || tx.supplier?.name || '-'}</td>
+                        <td className="py-2.5">
+                          <span className="text-xs text-muted-foreground">{TIPE_LABEL[tx.type] || tx.type}</span>
+                        </td>
+                        <td className="py-2.5 text-right">
+                          <CurrencyCell value={tx.total} />
+                        </td>
+                        <td className="py-2.5">
+                          <StatusBadge
+                            status={tx.status === 'lunas' ? 'Lunas' : tx.status === 'kredit' ? 'Kredit' : 'Sebagian'}
+                            variant={tx.status}
+                          />
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>

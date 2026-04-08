@@ -1,4 +1,4 @@
-import { FixedSizeList as List, ListChildComponentProps } from 'react-windowed';
+import { List, ListChildComponentProps } from 'react-window';
 import { cn } from '@/lib/utils';
 import {
   Table,

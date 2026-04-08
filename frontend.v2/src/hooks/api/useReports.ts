@@ -9,6 +9,8 @@ export const useDailyReport = (date?: string) => {
   });
 };
 
+export const useLaporanHarian = useDailyReport;
+
 export const useStockReport = () => {
   return useQuery({
     queryKey: ['reports', 'stock'],

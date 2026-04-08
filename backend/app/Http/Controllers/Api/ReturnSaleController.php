@@ -43,13 +43,20 @@ class ReturnSaleController extends Controller
             // Generate return number
             $returnNumber = $this->stockService->generateInvoiceNumber('retur_penjualan');
 
+            // Determine customer_id
+            $customerId = $request->customer_id;
+            if (!$customerId && $request->transaction_id) {
+                $customerId = Transaction::find($request->transaction_id)?->customer_id;
+            }
+
             // Create return sale
             $returnSale = ReturnSale::create([
                 'return_number' => $returnNumber,
                 'date' => $request->date,
                 'transaction_id' => $request->transaction_id,
-                'customer_id' => $request->transaction_id ? Transaction::find($request->transaction_id)?->customer_id : null,
+                'customer_id' => $customerId,
                 'reason' => $request->reason,
+                'refund_method' => $request->refund_method,
                 'notes' => $request->notes,
                 'status' => 'processed',
                 'created_by' => auth()->id(),
@@ -86,10 +93,10 @@ class ReturnSaleController extends Controller
             }
 
             // Adjust customer balance (reduce piutang)
-            if ($request->transaction_id && $subtotal > 0) {
-                $transaction = Transaction::find($request->transaction_id);
-                if ($transaction && $transaction->customer) {
-                    $this->financialService->reducePiutang($transaction->customer, $subtotal, $returnSale->id);
+            if ($customerId && $subtotal > 0) {
+                $customer = \App\Models\Customer::find($customerId);
+                if ($customer) {
+                    $this->financialService->reducePiutang($customer, $subtotal, $returnSale->id);
                 }
             }
 

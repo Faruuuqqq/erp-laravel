@@ -12,6 +12,16 @@ use Illuminate\Http\Resources\Json\ResourceCollection;
 
 class ExpenseController extends Controller
 {
+    public function categories(): JsonResponse
+    {
+        $categories = Expense::distinct()
+            ->pluck('category')
+            ->filter()
+            ->values();
+
+        return response()->json(['data' => $categories]);
+    }
+
     public function index(Request $request): ResourceCollection
     {
         $query = Expense::with('creator')

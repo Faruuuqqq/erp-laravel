@@ -43,12 +43,18 @@ class ReturnPurchaseController extends Controller
             // Generate return number
             $returnNumber = $this->stockService->generateInvoiceNumber('retur_pembelian');
 
+            // Determine supplier_id
+            $supplierId = $request->supplier_id;
+            if (!$supplierId && $request->transaction_id) {
+                $supplierId = Transaction::find($request->transaction_id)?->supplier_id;
+            }
+
             // Create return purchase
             $returnPurchase = ReturnPurchase::create([
                 'return_number' => $returnNumber,
                 'date' => $request->date,
                 'transaction_id' => $request->transaction_id,
-                'supplier_id' => $request->transaction_id ? Transaction::find($request->transaction_id)?->supplier_id : null,
+                'supplier_id' => $supplierId,
                 'reason' => $request->reason,
                 'notes' => $request->notes,
                 'status' => 'processed',
@@ -85,11 +91,11 @@ class ReturnPurchaseController extends Controller
                 $subtotal += $itemSubtotal;
             }
 
-            // Adjust supplier balance (INCREASE utang - we still owe money because items are returned)
-            if ($request->transaction_id && $subtotal > 0) {
-                $transaction = Transaction::find($request->transaction_id);
-                if ($transaction && $transaction->supplier) {
-                    $this->financialService->increaseUtang($transaction->supplier, $subtotal, $returnPurchase->id);
+            // Adjust supplier balance (reduce utang since we're returning goods)
+            if ($supplierId && $subtotal > 0) {
+                $supplier = \App\Models\Supplier::find($supplierId);
+                if ($supplier) {
+                    $this->financialService->reduceUtang($supplier, $subtotal, $returnPurchase->id);
                 }
             }
 
