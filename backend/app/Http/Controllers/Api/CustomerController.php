@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\StoreCustomerRequest;
+use App\Http\Requests\Api\UpdateCustomerRequest;
 use App\Http\Resources\CustomerResource;
 use App\Models\Customer;
 use Illuminate\Http\JsonResponse;
@@ -16,19 +18,9 @@ class CustomerController extends Controller
         return CustomerResource::collection($customers);
     }
 
-    public function store(Request $request): JsonResponse
+    public function store(StoreCustomerRequest $request): JsonResponse
     {
-        $data = $request->validate([
-            'name'    => ['required', 'string', 'min:2', 'max:100'],
-            'phone'   => ['nullable', 'string', 'max:20'],
-            'email'   => ['nullable', 'email'],
-            'address' => ['nullable', 'string'],
-            'credit_limit' => ['nullable', 'numeric', 'min:0'],
-        ], [
-            'name.required' => 'Nama customer wajib diisi.',
-        ]);
-
-        $customer = Customer::create($data);
+        $customer = Customer::create($request->validated());
 
         return response()->json(['data' => new CustomerResource($customer), 'message' => 'Customer berhasil ditambahkan.'], 201);
     }
@@ -38,16 +30,9 @@ class CustomerController extends Controller
         return response()->json(['data' => new CustomerResource($customer)]);
     }
 
-    public function update(Request $request, Customer $customer): JsonResponse
+    public function update(UpdateCustomerRequest $request, Customer $customer): JsonResponse
     {
-        $data = $request->validate([
-            'name'    => ['sometimes', 'required', 'string', 'min:2', 'max:100'],
-            'phone'   => ['nullable', 'string', 'max:20'],
-            'email'   => ['nullable', 'email'],
-            'address' => ['nullable', 'string'],
-            'credit_limit' => ['nullable', 'numeric', 'min:0'],
-        ]);
-        $customer->update($data);
+        $customer->update($request->validated());
         return response()->json(['data' => new CustomerResource($customer->fresh()), 'message' => 'Customer berhasil diperbarui.']);
     }
 

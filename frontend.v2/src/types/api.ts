@@ -56,12 +56,31 @@ export interface Product {
 
 export interface Customer {
   id: string;
+  customerId?: string;
   name: string;
-  phone: string;
+  phone?: string;
+  phone2?: string;
   email?: string;
   address?: string;
+  city?: string;
+  npwp?: string;
+  contactPerson?: string;
+  bankName?: string;
+  bankAccount?: string;
+  accountHolder?: string;
+  warehouseId?: string;
+  warehouse?: {
+    id: string;
+    name: string;
+  };
   balance: number;
   creditLimit: number;
+  discountPercentage?: number;
+  discountAmount?: number;
+  operationalHours?: string;
+  notes?: string;
+  isVerified?: boolean;
+  isActive?: boolean;
   totalTransactions?: number;
   createdAt?: string;
   updatedAt?: string;
