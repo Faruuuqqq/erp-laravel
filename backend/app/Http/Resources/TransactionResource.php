@@ -12,6 +12,7 @@ class TransactionResource extends JsonResource
             'id'            => (string) $this->id,
             'invoiceNumber' => $this->invoice_number,
             'date'          => $this->date?->format('Y-m-d'),
+            'dueDate'       => $this->due_date?->format('Y-m-d'),
             'type'          => $this->type,
             'supplierId'    => $this->supplier_id ? (string) $this->supplier_id : null,
             'supplier'      => $this->whenLoaded('supplier', fn() => $this->supplier?->name),

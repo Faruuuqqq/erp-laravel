@@ -6,12 +6,15 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Package, ArrowUp, ArrowDown, Download, Printer } from 'lucide-react';
 import { StatCard } from '@/components/ui/StatCard';
-import { useKartuStok } from '@/hooks/api/useInfo';
+import { useKartuStok, printKartuStok } from '@/hooks/api/useInfo';
 import { useProducts } from '@/hooks/api/useProducts';
+import { useToast } from '@/hooks/use-toast';
+import { Skeleton } from '@/components/ui/SkeletonLoader';
 import type { Product } from '@/types';
 
 const KartuStok = () => {
   const [selectedProduct, setSelectedProduct] = useState('');
+  const { toast } = useToast();
 
   const { data: productsData } = useProducts({ per_page: 200 });
   const products = (productsData?.data?.data ?? []) as Product[];
@@ -23,7 +26,15 @@ const KartuStok = () => {
   const totalMasuk = mutations.filter((m: any) => m.type === 'masuk').reduce((s: number, m: any) => s + (m.quantity || 0), 0);
   const totalKeluar = mutations.filter((m: any) => m.type === 'keluar').reduce((s: number, m: any) => s + (m.quantity || 0), 0);
 
-  const handlePrint = () => window.print();
+  const handlePrint = async () => {
+    if (!selectedProduct) return;
+    try {
+      await printKartuStok(selectedProduct);
+      toast({ title: 'PDF berhasil dibuka', description: 'Dokumen dibuka di tab baru' });
+    } catch (error) {
+      toast({ title: 'Gagal mencetak', description: 'Terjadi kesalahan saat mencetak dokumen', variant: 'destructive' });
+    }
+  };
 
   const handleExport = () => {
     if (!productData) return;
@@ -88,8 +99,47 @@ const KartuStok = () => {
         </div>
       )}
 
+      {selectedProduct && isLoading && (
+        <div className="mb-5 grid gap-4 sm:grid-cols-3">
+          <div className="rounded-lg border bg-card p-4">
+            <div className="flex items-center justify-between mb-2">
+              <Skeleton className="h-4 w-20" />
+              <Skeleton className="h-5 w-5 rounded" />
+            </div>
+            <Skeleton className="h-7 w-24" />
+          </div>
+          <div className="rounded-lg border bg-card p-4">
+            <div className="flex items-center justify-between mb-2">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-5 w-5 rounded" />
+            </div>
+            <Skeleton className="h-7 w-24" />
+          </div>
+          <div className="rounded-lg border bg-card p-4">
+            <div className="flex items-center justify-between mb-2">
+              <Skeleton className="h-4 w-20" />
+              <Skeleton className="h-5 w-5 rounded" />
+            </div>
+            <Skeleton className="h-7 w-24" />
+          </div>
+        </div>
+      )}
+
       {isLoading ? (
-        <div className="py-12 text-center text-muted-foreground">Loading...</div>
+        <div className="rounded-xl border bg-card p-4">
+          <div className="space-y-3">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="flex gap-4 px-4 py-3 border-b">
+                <Skeleton className="h-8 w-8" />
+                <Skeleton className="h-8 w-28" />
+                <Skeleton className="h-8 w-24" />
+                <Skeleton className="h-8 w-40" />
+                <Skeleton className="h-8 w-20" />
+                <Skeleton className="h-8 w-16" />
+              </div>
+            ))}
+          </div>
+        </div>
       ) : mutations.length === 0 ? (
         <div className="p-12 text-center rounded-xl border">
           <Package className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-50" />

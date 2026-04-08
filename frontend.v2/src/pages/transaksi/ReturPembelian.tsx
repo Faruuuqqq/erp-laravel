@@ -12,11 +12,14 @@ import {
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Plus, Trash2, RotateCcw, FileDown, CheckCircle2, AlertTriangle, Loader2 } from 'lucide-react';
+import { Plus, Trash2, RotateCcw, FileDown, CheckCircle2, AlertTriangle, Loader2, Printer } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useSuppliers } from '@/hooks/api/useSuppliers';
 import { useProducts } from '@/hooks/api/useProducts';
 import { useCreateReturnPurchase } from '@/hooks/api/useReturns';
+import { printReturnPurchase } from '@/hooks/api/useReturns';
+import { useValidateQty } from '@/hooks/useValidateQty';
+import { Skeleton } from '@/components/ui/SkeletonLoader';
 import type { Supplier, Product } from '@/types';
 
 const formatRupiah = (value: number) =>
@@ -129,6 +132,17 @@ const ReturPembelian = () => {
   };
 
   if (saved) {
+    const handlePrint = async () => {
+      try {
+        if (lastRetur) {
+          await printReturnPurchase(lastRetur);
+          toast({ title: 'PDF berhasil dibuka', description: 'Dokumen dibuka di tab baru' });
+        }
+      } catch (error) {
+        toast({ title: 'Gagal mencetak', description: 'Terjadi kesalahan saat mencetak dokumen', variant: 'destructive' });
+      }
+    };
+
     return (
       <MainLayout title="Retur Pembelian" subtitle="Retur berhasil diproses">
         <div className="flex flex-col items-center justify-center py-16 gap-6">
@@ -144,10 +158,10 @@ const ReturPembelian = () => {
             <p className="text-sm text-muted-foreground">Nilai retur dikurangi dari utang</p>
           </div>
           <div className="flex gap-3">
-            <Button variant="outline" onClick={() => window.print()}>
-              <FileDown className="mr-2 h-4 w-4" />Export PDF
-            </Button>
             <Button onClick={resetForm}>Retur Baru</Button>
+            <Button onClick={handlePrint} variant="outline">
+              <Printer className="h-4 w-4 mr-1.5" />Cetak PDF
+            </Button>
           </div>
         </div>
       </MainLayout>

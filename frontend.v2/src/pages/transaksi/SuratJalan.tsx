@@ -14,6 +14,7 @@ import { useCustomers } from '@/hooks/api/useCustomers';
 import { useSalesReps } from '@/hooks/api/useSalesReps';
 import { useWarehouses } from '@/hooks/api/useWarehouses';
 import { useCreateDeliveryNote, printDeliveryNote } from '@/hooks/api/useDeliveryNotes';
+import { Skeleton } from '@/components/ui/SkeletonLoader';
 import type { Product, Customer, SalesRep, Warehouse } from '@/types';
 
 interface SJItem {
@@ -41,18 +42,19 @@ const SuratJalan = () => {
   const [lastSJ, setLastSJ] = useState('');
   const [isPrinting, setIsPrinting] = useState(false);
 
-  const { data: productsData } = useProducts({ per_page: 200 });
-  const { data: customersData } = useCustomers({ per_page: 100 });
-  const { data: salesData } = useSalesReps({ per_page: 100 });
-  const { data: warehousesData } = useWarehouses({ per_page: 100 });
+  const { data: productsData, isLoading: productsLoading } = useProducts({ per_page: 200 });
+  const { data: customersData, isLoading: customersLoading } = useCustomers({ per_page: 100 });
+  const { data: salesData, isLoading: salesLoading } = useSalesReps({ per_page: 100 });
+  const { data: warehousesData, isLoading: warehousesLoading } = useWarehouses({ per_page: 100 });
   const createMutation = useCreateDeliveryNote();
 
   const products = (productsData?.data?.data ?? []) as Product[];
   const customers = (customersData?.data?.data ?? []) as Customer[];
   const sales = (salesData?.data?.data ?? []) as SalesRep[];
   const warehouses = (warehousesData?.data?.data ?? []) as Warehouse[];
+  const isDataLoading = productsLoading || customersLoading || salesLoading || warehousesLoading;
 
-  const noSJ = `SJ-${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}-${String(Math.floor(Math.random()*900)+100)}`;
+  const noSJ = '';
   const customer = customers.find(c => c.id === selectedCustomer);
   const gudang = warehouses.find(w => w.id === selectedGudang);
   const salesRep = sales.find(s => s.id === selectedSales);
@@ -76,8 +78,7 @@ const SuratJalan = () => {
     if (!selectedCustomer) return toast({ title: 'Pilih customer', variant: 'destructive' });
 
     try {
-      await createMutation.mutateAsync({
-        delivery_number: noSJ,
+      const response = await createMutation.mutateAsync({
         date: new Date().toISOString().slice(0, 10),
         customer_id: selectedCustomer,
         driver: pengirim,
@@ -90,9 +91,10 @@ const SuratJalan = () => {
           notes: item.keterangan,
         })),
       });
-      setLastSJ(noSJ);
+      const deliveryNumber = response.data?.data?.delivery_number || response.data?.delivery_number || '生成中';
+      setLastSJ(deliveryNumber);
       setSaved(true);
-      toast({ title: 'Surat Jalan disimpan', description: noSJ });
+      toast({ title: 'Surat Jalan disimpan', description: deliveryNumber });
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Gagal menyimpan surat jalan';
       toast({ title: 'Error', description: msg, variant: 'destructive' });
@@ -100,13 +102,15 @@ const SuratJalan = () => {
   };
 
   const handlePrint = async () => {
-    try {
-      setIsPrinting(true);
-      setPreviewOpen(false);
-      toast({ title: 'Mencetak Surat Jalan...' });
+    if (lastSJ) {
+      try {
+        const url = await printDeliveryNote(lastSJ);
+        window.open(url, '_blank');
+      } catch (err) {
+        setTimeout(() => window.print(), 200);
+      }
+    } else {
       setTimeout(() => window.print(), 200);
-    } finally {
-      setIsPrinting(false);
     }
   };
 
@@ -214,6 +218,92 @@ const SuratJalan = () => {
             </div>
           </DialogContent>
         </Dialog>
+      </MainLayout>
+    );
+  }
+
+  // Show skeleton loaders while data is loading
+  if (isDataLoading) {
+    return (
+      <MainLayout title="Surat Jalan" subtitle="Buat surat jalan untuk pengiriman barang">
+        <Alert className="mb-4 border-primary/30 bg-primary/5">
+          <FileText className="h-4 w-4 text-primary" />
+          <AlertDescription className="text-sm text-primary">
+            Surat jalan tidak mencantumkan harga. Hanya digunakan sebagai bukti serah terima barang kepada penerima.
+          </AlertDescription>
+        </Alert>
+
+        <div className="grid gap-5 lg:grid-cols-3">
+          <div className="lg:col-span-2 space-y-4">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Truck className="h-4 w-4" />
+                  Form Surat Jalan
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-3 md:grid-cols-3">
+                  <Skeleton className="h-9" />
+                  <Skeleton className="h-9" />
+                  <Skeleton className="h-9" />
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <Skeleton className="h-9" />
+                  <Skeleton className="h-9" />
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <Skeleton className="h-9" />
+                  <Skeleton className="h-9" />
+                </div>
+                <div className="rounded-lg border bg-muted/30 p-3.5">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Tambah Barang</p>
+                  <div className="grid gap-2 md:grid-cols-5">
+                    <Skeleton className="h-8 md:col-span-2" />
+                    <Skeleton className="h-8" />
+                    <Skeleton className="h-8" />
+                    <Skeleton className="h-8" />
+                  </div>
+                </div>
+                <div className="rounded-md border overflow-hidden">
+                  <div className="space-y-2 p-4">
+                    {[...Array(5)].map((_, i) => (
+                      <div key={i} className="flex gap-4 py-2 border-b">
+                        <Skeleton className="h-6 w-6" />
+                        <Skeleton className="h-6 w-32" />
+                        <Skeleton className="h-6 w-12" />
+                        <Skeleton className="h-6 w-20" />
+                        <Skeleton className="h-6 w-28" />
+                        <Skeleton className="h-6 w-8" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div>
+            <Card className="sticky top-20">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Ringkasan</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-8 w-full" />
+                <div className="flex gap-2 pt-2">
+                  <Skeleton className="h-9 flex-1" />
+                  <Skeleton className="h-9 flex-1" />
+                </div>
+                <Skeleton className="h-9 w-full" />
+                <Skeleton className="h-8 w-full" />
+              </CardContent>
+            </Card>
+          </div>
+        </div>
       </MainLayout>
     );
   }

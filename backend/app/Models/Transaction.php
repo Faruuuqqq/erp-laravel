@@ -10,7 +10,7 @@ class Transaction extends Model
     use SoftDeletes;
 
     protected $fillable = [
-        'invoice_number', 'date', 'type',
+        'invoice_number', 'date', 'due_date', 'type',
         'supplier_id', 'customer_id', 'sales_rep_id',
         'subtotal', 'discount', 'tax', 'total', 'paid', 'remaining',
         'status', 'notes', 'created_by',
@@ -18,6 +18,7 @@ class Transaction extends Model
 
     protected $casts = [
         'date'      => 'date:Y-m-d',
+        'due_date'  => 'date:Y-m-d',
         'subtotal'  => 'decimal:2',
         'discount'  => 'decimal:2',
         'tax'       => 'decimal:2',

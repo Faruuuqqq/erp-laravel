@@ -11,11 +11,12 @@ import {
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Plus, Trash2, RotateCcw, FileDown, CheckCircle2, AlertTriangle, Loader2 } from 'lucide-react';
+import { Plus, Trash2, RotateCcw, FileDown, CheckCircle2, AlertTriangle, Loader2, Printer } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useCustomers } from '@/hooks/api/useCustomers';
 import { useProducts } from '@/hooks/api/useProducts';
-import { useCreateReturnSale } from '@/hooks/api/useReturns';
+import { useCreateReturnSale, printReturnSale } from '@/hooks/api/useReturns';
+import { Skeleton } from '@/components/ui/SkeletonLoader';
 import type { Customer, Product } from '@/types';
 
 const formatRupiah = (value: number) =>
@@ -51,12 +52,13 @@ const ReturPenjualan = () => {
   const [lastRetur, setLastRetur] = useState('');
   const [returDate, setReturDate] = useState(new Date().toISOString().split('T')[0]);
 
-  const { data: customersData } = useCustomers({ per_page: 100 });
-  const { data: productsData } = useProducts({ per_page: 200 });
+  const { data: customersData, isLoading: customersLoading } = useCustomers({ per_page: 100 });
+  const { data: productsData, isLoading: productsLoading } = useProducts({ per_page: 200 });
   const createMutation = useCreateReturnSale();
 
   const customers = (customersData?.data?.data ?? []) as Customer[];
   const products = (productsData?.data?.data ?? []) as Product[];
+  const isDataLoading = customersLoading || productsLoading;
 
   const addItem = () => {
     const product = products.find(p => p.id === selectedProduct);
@@ -139,6 +141,17 @@ const ReturPenjualan = () => {
   };
 
   if (saved) {
+    const handlePrint = async () => {
+      try {
+        if (lastRetur) {
+          await printReturnSale(lastRetur);
+          toast({ title: 'PDF berhasil dibuka', description: 'Dokumen dibuka di tab baru' });
+        }
+      } catch (error) {
+        toast({ title: 'Gagal mencetak', description: 'Terjadi kesalahan saat mencetak dokumen', variant: 'destructive' });
+      }
+    };
+
     return (
       <MainLayout title="Retur Penjualan" subtitle="Retur berhasil diproses">
         <div className="flex flex-col items-center justify-center py-16 gap-6">
@@ -156,10 +169,89 @@ const ReturPenjualan = () => {
             </p>
           </div>
           <div className="flex gap-3">
-            <Button variant="outline" onClick={() => window.print()}>
-              <FileDown className="mr-2 h-4 w-4" />Export PDF
-            </Button>
             <Button onClick={resetForm}>Retur Baru</Button>
+            <Button onClick={handlePrint} variant="outline">
+              <Printer className="h-4 w-4 mr-1.5" />Cetak PDF
+            </Button>
+          </div>
+        </div>
+      </MainLayout>
+    );
+  }
+
+  // Show skeleton loaders while data is loading
+  if (isDataLoading) {
+    return (
+      <MainLayout title="Retur Penjualan" subtitle="Terima retur barang dari customer">
+        <Alert className="mb-4 border-warning/30 bg-warning/5">
+          <AlertTriangle className="h-4 w-4 text-warning" />
+          <AlertDescription className="text-sm text-warning">
+            Retur penjualan akan menambah kembali stok barang dan menyesuaikan nilai piutang/kas customer.
+          </AlertDescription>
+        </Alert>
+
+        <div className="grid gap-5 lg:grid-cols-3">
+          <div className="lg:col-span-2 space-y-4">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <RotateCcw className="h-4 w-4" />
+                  Form Retur Penjualan
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-3 md:grid-cols-3">
+                  <Skeleton className="h-9" />
+                  <Skeleton className="h-9 md:col-span-2" />
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <Skeleton className="h-9" />
+                </div>
+                <div className="rounded-lg border bg-muted/30 p-3.5">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                    Pilih Barang Retur
+                  </p>
+                  <div className="grid gap-2 md:grid-cols-4">
+                    <Skeleton className="h-8 md:col-span-2" />
+                    <Skeleton className="h-8" />
+                    <Skeleton className="h-8" />
+                  </div>
+                </div>
+                <div className="rounded-md border overflow-hidden">
+                  <div className="space-y-2 p-4">
+                    {[...Array(5)].map((_, i) => (
+                      <div key={i} className="flex gap-4 py-2 border-b">
+                        <Skeleton className="h-6 w-6" />
+                        <Skeleton className="h-6 w-32" />
+                        <Skeleton className="h-6 w-20" />
+                        <Skeleton className="h-6 w-24" />
+                        <Skeleton className="h-6 w-24" />
+                        <Skeleton className="h-6 w-8" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div>
+            <Card className="sticky top-20">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Ringkasan Retur</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-16 w-full" />
+                <Skeleton className="h-9 w-full" />
+                <Skeleton className="h-8 w-full" />
+                <div className="flex gap-2 pt-1">
+                  <Skeleton className="h-9 flex-1" />
+                  <Skeleton className="h-9 flex-1" />
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </MainLayout>

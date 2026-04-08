@@ -13,9 +13,10 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Skeleton } from '@/components/ui/SkeletonLoader';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
-import { Plus, Search, Trash2, Shield, Power, PowerOff, Eye, PlusCircle, Edit, Trash, Printer } from 'lucide-react';
+import { Plus, Search, Trash2, Shield, Power, PowerOff, Eye, PlusCircle, Edit, Trash, Printer, Key } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 
 const MODULES = [
@@ -126,6 +127,20 @@ const AdminManagement = () => {
     }
   };
 
+  const handleResetPassword = async (admin: Admin) => {
+    try {
+      const response = await apiClient.post(`/admins/${admin.id}/reset-password`);
+      const tempPassword = response.data?.data?.tempPassword;
+      toast({
+        title: 'Password Reset Berhasil',
+        description: `Password sementara: ${tempPassword} (berlaku 24 jam)`,
+        variant: 'default',
+      });
+    } catch {
+      toast({ title: 'Error', description: 'Gagal mereset password admin', variant: 'destructive' });
+    }
+  };
+
   const handleDelete = async (admin: Admin) => {
     try {
       await apiClient.delete(`/admins/${admin.id}`);
@@ -229,7 +244,52 @@ const AdminManagement = () => {
       </div>
 
       {isLoading ? (
-        <div className="py-12 text-center text-muted-foreground">Loading...</div>
+        <>
+          <div className="mb-5 grid gap-4 sm:grid-cols-3">
+            {[1, 2, 3].map(i => (
+              <Card key={i}>
+                <CardHeader className="pb-2">
+                  <Skeleton className="h-4 w-24" />
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-8 w-16" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <Skeleton className="h-9 w-64" />
+            <Skeleton className="h-9 w-32" />
+          </div>
+          <Card>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/40">
+                      <th className="px-4 py-3 text-left"><Skeleton className="h-4 w-16" /></th>
+                      <th className="px-4 py-3 text-left"><Skeleton className="h-4 w-20" /></th>
+                      <th className="px-4 py-3 text-center"><Skeleton className="h-4 w-12" /></th>
+                      <th className="px-4 py-3 text-center"><Skeleton className="h-4 w-16" /></th>
+                      <th className="px-4 py-3 text-center"><Skeleton className="h-4 w-12" /></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[1, 2, 3, 4, 5].map(i => (
+                      <tr key={i} className="border-b">
+                        <td className="px-4 py-3"><Skeleton className="h-4 w-32" /></td>
+                        <td className="px-4 py-3"><Skeleton className="h-4 w-40" /></td>
+                        <td className="px-4 py-3"><Skeleton className="h-6 w-16 mx-auto" /></td>
+                        <td className="px-4 py-3"><Skeleton className="h-6 w-20 mx-auto" /></td>
+                        <td className="px-4 py-3"><Skeleton className="h-8 w-24 mx-auto" /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        </>
       ) : (
         <Card>
           <CardContent className="p-0">
@@ -260,14 +320,17 @@ const AdminManagement = () => {
                         <td className="px-4 py-3 text-center">
                           <PermissionSummary permissions={admin.permissions} />
                         </td>
-                        <td className="px-4 py-3">
-                          <div className="flex justify-center gap-1">
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditAdmin(admin)} title="Edit Permission">
-                              <Shield className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleToggleActive(admin)} title={admin.isActive ? 'Nonaktifkan' : 'Aktifkan'}>
-                              {admin.isActive ? <PowerOff className="h-3.5 w-3.5 text-warning" /> : <Power className="h-3.5 w-3.5 text-success" />}
-                            </Button>
+                         <td className="px-4 py-3">
+                           <div className="flex justify-center gap-1">
+                             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditAdmin(admin)} title="Edit Permission">
+                               <Shield className="h-3.5 w-3.5" />
+                             </Button>
+                             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleResetPassword(admin)} title="Reset Password">
+                               <Key className="h-3.5 w-3.5" />
+                             </Button>
+                             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleToggleActive(admin)} title={admin.isActive ? 'Nonaktifkan' : 'Aktifkan'}>
+                               {admin.isActive ? <PowerOff className="h-3.5 w-3.5 text-warning" /> : <Power className="h-3.5 w-3.5 text-success" />}
+                             </Button>
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" title="Hapus">

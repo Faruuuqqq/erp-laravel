@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Search, Download, Pencil, Trash2 } from 'lucide-react';
+import { Skeleton } from '@/components/ui/SkeletonLoader';
 import { useToast } from '@/hooks/use-toast';
 import { useExpenses, useCreateExpense, useUpdateExpense, useDeleteExpense, useExpenseCategories } from '@/hooks/api/useExpenses';
 
@@ -137,7 +138,21 @@ const BiayaJasa = () => {
         <div className="relative w-72"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input className="pl-9" placeholder="Cari biaya..." value={search} onChange={e => setSearch(e.target.value)} /></div>
       </div>
       {isLoading ? (
-        <div className="py-12 text-center text-muted-foreground">Loading...</div>
+        <DataTableContainer>
+          <div className="space-y-2 p-4">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="flex gap-4">
+                <Skeleton className="h-10 w-24" />
+                <Skeleton className="h-10 w-24" />
+                <Skeleton className="h-10 w-28" />
+                <Skeleton className="h-10 flex-1" />
+                <Skeleton className="h-10 w-24" />
+                <Skeleton className="h-10 w-24" />
+                <Skeleton className="h-10 w-16" />
+              </div>
+            ))}
+          </div>
+        </DataTableContainer>
       ) : (
         <DataTableContainer>
           <div className="p-4 border-b flex justify-between text-sm"><span className="text-muted-foreground">{expenses.length} data</span><span className="font-semibold">Total: <CurrencyCell value={total} color="red" /></span></div>

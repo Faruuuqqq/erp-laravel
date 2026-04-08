@@ -12,6 +12,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { useCustomers } from '@/hooks/api/useCustomers';
 import { useCreateTransaction } from '@/hooks/api/useTransactions';
+import { Skeleton } from '@/components/ui/SkeletonLoader';
 import type { Customer } from '@/types';
 
 const formatRupiah = (value: number) =>
@@ -123,7 +124,6 @@ const PembayaranPiutang = () => {
             <p className="text-sm text-muted-foreground mt-1">{lastCount} faktur diselesaikan</p>
           </div>
           <div className="flex gap-3">
-            <Button variant="outline" onClick={() => window.print()}><FileDown className="mr-2 h-4 w-4" />Export PDF</Button>
             <Button onClick={() => { setSelectedItems([]); setSaved(false); setJumlahDiterima(''); setMetodePembayaran(''); setCatatan(''); }}>Input Baru</Button>
           </div>
         </div>
@@ -240,9 +240,6 @@ const PembayaranPiutang = () => {
                   <Check className="mr-1.5 h-4 w-4" />Terima
                 </Button>
               </div>
-              <Button variant="outline" className="w-full h-8 text-xs" onClick={() => window.print()}>
-                <FileDown className="mr-1.5 h-3.5 w-3.5" />Export PDF
-              </Button>
             </CardContent>
           </Card>
         </div>

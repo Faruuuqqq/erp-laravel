@@ -1,12 +1,13 @@
 import { ReactNode, useState } from 'react';
 import { AppSidebar } from './AppSidebar';
-import { Bell, Search, Sun, Moon, ChevronRight } from 'lucide-react';
+import { Bell, Search, ChevronRight } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { Badge } from '@/components/ui/badge';
 import { useLocation } from 'react-router-dom';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -40,17 +41,11 @@ const ROUTE_LABELS: Record<string, string> = {
 
 export const MainLayout = ({ children, title, subtitle, actions }: MainLayoutProps) => {
   const [collapsed, setCollapsed] = useState(false);
-  const [dark, setDark] = useState(false);
   const { user, isOwner } = useAuth();
   const location = useLocation();
 
-  const toggleDark = () => {
-    setDark(!dark);
-    document.documentElement.classList.toggle('dark');
-  };
-
   return (
-    <div className={cn('min-h-screen bg-background', dark && 'dark')}>
+    <div className="min-h-screen bg-background">
       <AppSidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} />
       <div className={cn(
         'flex min-h-screen flex-col transition-all duration-300',
@@ -71,8 +66,8 @@ export const MainLayout = ({ children, title, subtitle, actions }: MainLayoutPro
               <Input placeholder="Cari..." className="h-8 w-48 pl-8 text-sm" />
             </div>
 
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={toggleDark}>
-              {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            <Button variant="ghost" size="icon" className="h-8 w-8">
+              <ThemeToggle />
             </Button>
 
             <Button variant="ghost" size="icon" className="h-8 w-8 relative">

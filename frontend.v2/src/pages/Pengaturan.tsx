@@ -9,6 +9,7 @@ import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/contexts/AuthContext';
 import { Settings, User, Store, Lock, Bell, Shield, CheckCircle2, XCircle, Loader2, ArrowRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/SkeletonLoader';
 import { useSettings } from '@/hooks/api/useSettings';
 import { useUpdateProfile } from '@/hooks/api/useSettings';
 import { useUpdateStore } from '@/hooks/api/useSettings';
@@ -65,7 +66,7 @@ interface SettingsData {
 const Pengaturan = () => {
   const { user, updateUser, isOwner } = useAuth();
   const navigate = useNavigate();
-  const { data: settingsData } = useSettings();
+  const { data: settingsData, isLoading: settingsLoading } = useSettings();
   const updateProfileMutation = useUpdateProfile();
   const updateStoreMutation = useUpdateStore();
   const updatePasswordMutation = useUpdatePassword();
@@ -612,11 +613,14 @@ const Pengaturan = () => {
                   Dapat mengelola transaksi harian dan data master
                 </p>
               </div>
-              {isOwner && (
-                <Button variant="outline" className="w-full mt-2" onClick={() => navigate('/pengaturan/admin')}>
-                  Kelola Admin <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-              )}
+               {isOwner && (
+                 <Button variant="outline" className="w-full mt-2" onClick={() => navigate('/pengaturan/admin')}>
+                   Kelola Admin <ArrowRight className="ml-2 h-4 w-4" />
+                 </Button>
+               )}
+               <Button variant="outline" className="w-full mt-2" onClick={() => navigate('/pengaturan/profil')}>
+                 Profil Pemilik <ArrowRight className="ml-2 h-4 w-4" />
+               </Button>
             </CardContent>
           </Card>
           

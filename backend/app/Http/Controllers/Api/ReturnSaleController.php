@@ -7,11 +7,14 @@ use App\Http\Requests\StoreReturnSaleRequest;
 use App\Models\ReturnSale;
 use App\Models\Transaction;
 use App\Models\Product;
+use App\Models\Setting;
 use App\Services\StockService;
 use App\Services\FinancialService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Barryvdh\DomPDF\Facade\Pdf as PDF;
 
 class ReturnSaleController extends Controller
 {
@@ -134,5 +137,33 @@ class ReturnSaleController extends Controller
         $returnSale->delete();
 
         return response()->json(['message' => 'Retur penjualan berhasil dihapus.']);
+    }
+
+    // ─── Print Return Sale PDF (GET /return-sales/{id}/print) ────────────
+    public function print(ReturnSale $returnSale): JsonResponse
+    {
+        $returnSale->load(['items.product', 'customer', 'transaction']);
+        
+        // Get store settings
+        $storeSettings = [
+            'name' => Setting::get('store_name') ?? 'Toko Sejahtera',
+            'phone' => Setting::get('phone') ?? '',
+            'address' => Setting::get('address') ?? '',
+            'npwp' => Setting::get('npwp') ?? '',
+            'siup' => Setting::get('siup') ?? '',
+        ];
+
+        $pdf = PDF::loadView('pdf.return-sale', compact([
+            'returnSale',
+            'storeSettings',
+        ]))->setPaper('a4')->setOption('isHtml5ParserEnabled', true);
+
+        $filename = "return-sale-{$returnSale->return_number}.pdf";
+        Storage::disk('public')->put("returns/{$filename}", $pdf->output());
+
+        return response()->json([
+            'url' => asset("storage/returns/{$filename}"),
+            'filename' => $filename,
+        ]);
     }
 }

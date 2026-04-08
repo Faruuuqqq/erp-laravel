@@ -69,11 +69,20 @@ export interface Customer {
 
 export interface Supplier {
   id: string;
+  supplierId?: string;
   name: string;
-  phone: string;
+  phone?: string;
+  phone1?: string;
+  phone2?: string;
   email?: string;
   address?: string;
+  city?: string;
+  contactPerson?: string;
+  bankAccount?: string;
   balance: number;
+  totalTransactions?: number;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Warehouse {

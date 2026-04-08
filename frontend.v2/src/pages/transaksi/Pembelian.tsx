@@ -9,10 +9,11 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Plus, Trash2, ShoppingCart, Calculator, FileDown, CheckCircle2, Search } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useValidateQty } from '@/hooks/useValidateQty';
 import { useProducts } from '@/hooks/api/useProducts';
 import { useSuppliers } from '@/hooks/api/useSuppliers';
 import { useWarehouses } from '@/hooks/api/useWarehouses';
-import { useCreateTransaction } from '@/hooks/api/useTransactions';
+import { useCreateTransaction, printInvoice } from '@/hooks/api/useTransactions';
 import type { Product, Supplier, Warehouse } from '@/types';
 
 const formatRupiah = (value: number) =>
@@ -29,6 +30,7 @@ interface CartItem {
 
 const Pembelian = () => {
   const { toast } = useToast();
+  const { validateQtyInput, validateTotalDiscount, validateCartNotEmpty, showValidationError } = useValidateQty();
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedProduct, setSelectedProduct] = useState('');
   const [qty, setQty] = useState('1');
@@ -50,7 +52,7 @@ const Pembelian = () => {
   const suppliers = (suppliersData?.data?.data ?? []) as Supplier[];
   const warehouses = (warehousesData?.data?.data ?? []) as Warehouse[];
 
-  const noFaktur = `PB-${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}-${String(Math.floor(Math.random()*900)+100)}`;
+  const noFaktur = '';
   const supplier = suppliers.find(s => s.id === selectedSupplier);
 
   const filteredProducts = products.filter(p =>
@@ -60,9 +62,16 @@ const Pembelian = () => {
   const addToCart = () => {
     const product = products.find(p => p.id === selectedProduct);
     if (!product) return toast({ title: 'Pilih produk terlebih dahulu', variant: 'destructive' });
-    const qtyNum = parseInt(qty) || 1;
+    
+    // Validate quantity input
+    const qtyValidation = validateQtyInput(qty);
+    if (!qtyValidation.isValid) {
+      return showValidationError(qtyValidation.error || 'Validasi qty gagal');
+    }
+
+    const qtyNum = parseInt(qty);
     const hargaNum = parseFloat(harga) || product.buyPrice;
-    if (qtyNum <= 0) return toast({ title: 'Qty harus lebih dari 0', variant: 'destructive' });
+    if (hargaNum <= 0) return toast({ title: 'Harga harus lebih dari 0', variant: 'destructive' });
     const subtotal = hargaNum * qtyNum;
     const existing = cart.findIndex(c => c.productId === selectedProduct);
     if (existing >= 0) {
@@ -83,13 +92,23 @@ const Pembelian = () => {
   const grandTotal = subtotal - diskonNum;
 
   const handleSave = async () => {
-    if (cart.length === 0) return toast({ title: 'Keranjang masih kosong', variant: 'destructive' });
+    // Validate cart not empty
+    const cartValidation = validateCartNotEmpty(cart);
+    if (!cartValidation.isValid) {
+      return showValidationError(cartValidation.error || 'Validasi gagal');
+    }
+    
     if (!selectedSupplier) return toast({ title: 'Pilih supplier terlebih dahulu', variant: 'destructive' });
+
+    // Validate total discount
+    const discValidation = validateTotalDiscount(diskon, subtotal);
+    if (!discValidation.isValid) {
+      return showValidationError(discValidation.error || 'Validasi gagal');
+    }
 
     try {
       const payload = {
         type: 'pembelian',
-        invoiceNumber: noFaktur,
         date: new Date().toISOString().slice(0, 10),
         supplierId: selectedSupplier,
         warehouseId: selectedGudang || null,
@@ -109,15 +128,18 @@ const Pembelian = () => {
         })),
       };
 
-      await createMutation.mutateAsync(payload);
-      setLastInvoice(noFaktur);
+      const response = await createMutation.mutateAsync(payload);
+      const invoiceNumber = response.data?.data?.invoiceNumber || response.data?.invoiceNumber || '生成中';
+      setLastInvoice(invoiceNumber);
       setSaved(true);
-      toast({ title: 'Pembelian berhasil disimpan', description: `No. Faktur: ${noFaktur}` });
+      toast({ title: 'Pembelian berhasil disimpan', description: `No. Faktur: ${invoiceNumber}` });
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Gagal menyimpan pembelian';
       toast({ title: 'Error', description: msg, variant: 'destructive' });
     }
   };
+
+  const handlePrintInvoice = () => printInvoice(lastInvoice);
 
   if (saved) {
     const isKredit = metodePembayaran === 'kredit';
@@ -134,7 +156,7 @@ const Pembelian = () => {
             {isKredit && <Badge variant="outline" className="mt-2 text-warning border-warning">Dicatat sebagai Utang</Badge>}
           </div>
           <div className="flex gap-3">
-            <Button variant="outline" onClick={() => window.print()}><FileDown className="mr-2 h-4 w-4" />Export PDF</Button>
+            <Button variant="outline" onClick={handlePrintInvoice}><FileDown className="mr-2 h-4 w-4" />Export PDF</Button>
             <Button onClick={() => { setCart([]); setSaved(false); setDiskon('0'); setSelectedSupplier(''); setSelectedGudang(''); setMetodePembayaran(''); }}>Pembelian Baru</Button>
           </div>
         </div>
@@ -157,7 +179,7 @@ const Pembelian = () => {
               <div className="grid gap-3 md:grid-cols-3">
                 <div className="space-y-1.5">
                   <Label className="text-xs">No. Faktur</Label>
-                  <Input value={noFaktur} disabled className="text-xs font-mono bg-muted" />
+                  <Input value="Akan dibuat setelah disimpan" disabled className="text-xs font-mono bg-muted" />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">Tanggal</Label>

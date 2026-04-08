@@ -7,7 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useSaldoPiutang } from '@/hooks/api/useInfo';
+import { Skeleton } from '@/components/ui/SkeletonLoader';
+import { useSaldoPiutang, printSaldoPiutang } from '@/hooks/api/useInfo';
 import { useToast } from '@/hooks/use-toast';
 
 interface PiutangItem {
@@ -38,8 +39,6 @@ const SaldoPiutang = () => {
     return matchSearch;
   });
 
-  const handlePrint = () => window.print();
-
   const handleExport = () => {
     const rows = [['Kode', 'Nama Customer', 'Telepon', 'Email', 'Total Piutang', 'Status'],
     ...filtered.map(c => [`CUS-${c.id}`, c.name, c.phone, c.email, c.balance, c.balance > 0 ? 'Piutang' : 'Lunas'])];
@@ -48,6 +47,15 @@ const SaldoPiutang = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = 'saldo-piutang.csv'; a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const handlePrint = async () => {
+    try {
+      await printSaldoPiutang();
+      toast({ title: 'PDF berhasil dibuka', description: 'Dokumen dibuka di tab baru' });
+    } catch (error) {
+      toast({ title: 'Gagal mencetak', description: 'Terjadi kesalahan saat mencetak dokumen', variant: 'destructive' });
+    }
   };
 
   return (
@@ -92,7 +100,20 @@ const SaldoPiutang = () => {
       </div>
 
       {isLoading ? (
-        <div className="py-12 text-center text-muted-foreground">Loading...</div>
+        <DataTableContainer>
+          <div className="space-y-2 p-4">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="flex gap-4">
+                <Skeleton className="h-10 w-20" />
+                <Skeleton className="h-10 w-32" />
+                <Skeleton className="h-10 w-28" />
+                <Skeleton className="h-10 w-40" />
+                <Skeleton className="h-10 w-32" />
+                <Skeleton className="h-10 w-20" />
+              </div>
+            ))}
+          </div>
+        </DataTableContainer>
       ) : (
         <DataTableContainer>
           <div className="overflow-x-auto">

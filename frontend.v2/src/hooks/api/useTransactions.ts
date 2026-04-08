@@ -1,5 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import apiClient from '@/lib/api-client';
 import type { Transaction, PaginatedResponse } from '@/types';
 
 export const useTransactions = (params?: any) => {
@@ -45,12 +46,32 @@ export const useUpdatePayment = () => {
 
 export const usePrintInvoice = () => {
   return useMutation({
-    mutationFn: (id: string) => api.get(`/transactions/${id}/print/invoice`),
+    mutationFn: async (id: string) => {
+      const response = await apiClient.get<{ url: string }>(`/transactions/${id}/print/invoice`);
+      return response.data;
+    },
   });
 };
 
 export const usePrintReceipt = () => {
   return useMutation({
-    mutationFn: (id: string) => api.get(`/transactions/${id}/print/receipt`),
+    mutationFn: async (id: string) => {
+      const response = await apiClient.get<{ url: string }>(`/transactions/${id}/print/receipt`);
+      return response.data;
+    },
   });
+};
+
+export const printInvoice = async (id: string) => {
+  const response = await apiClient.get<{ url: string }>(`/transactions/${id}/print/invoice`);
+  if (response.data.url) {
+    window.open(response.data.url, '_blank');
+  }
+};
+
+export const printReceipt = async (id: string) => {
+  const response = await apiClient.get<{ url: string }>(`/transactions/${id}/print/receipt`);
+  if (response.data.url) {
+    window.open(response.data.url, '_blank');
+  }
 };

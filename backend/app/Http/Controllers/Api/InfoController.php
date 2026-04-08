@@ -7,11 +7,14 @@ use App\Http\Resources\StockMutationResource;
 use App\Models\Customer;
 use App\Models\FinancialLedger;
 use App\Models\Product;
+use App\Models\Setting;
 use App\Models\StockMutation;
 use App\Models\Supplier;
 use App\Models\Transaction;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
+use Barryvdh\DomPDF\Facade\Pdf as PDF;
 
 class InfoController extends Controller
 {
@@ -131,6 +134,98 @@ class InfoController extends Controller
                 'transactionCount' => $transactions->count(),
                 'byType'       => $byType,
             ],
+        ]);
+    }
+
+    // ─── Print Saldo Piutang PDF (GET /info/saldo-piutang/print) ────────────
+    public function printSaldoPiutang(): JsonResponse
+    {
+        $customers = Customer::withCount('transactions')
+            ->orderByDesc('balance')
+            ->get(['id', 'name', 'phone', 'email', 'address', 'balance']);
+
+        // Get store settings
+        $storeSettings = [
+            'name' => Setting::get('store_name') ?? 'Toko Sejahtera',
+            'phone' => Setting::get('phone') ?? '',
+            'address' => Setting::get('address') ?? '',
+        ];
+
+        $pdf = PDF::loadView('pdf.saldo-piutang', compact([
+            'customers',
+            'storeSettings',
+        ]))->setPaper('a4')->setOption('isHtml5ParserEnabled', true);
+
+        $filename = "saldo-piutang-" . now()->format('Y-m-d') . ".pdf";
+        Storage::disk('public')->put("reports/{$filename}", $pdf->output());
+
+        return response()->json([
+            'url' => asset("storage/reports/{$filename}"),
+            'filename' => $filename,
+        ]);
+    }
+
+    // ─── Print Saldo Utang PDF (GET /info/saldo-utang/print) ────────────
+    public function printSaldoUtang(): JsonResponse
+    {
+        $suppliers = Supplier::withCount('transactions')
+            ->orderByDesc('balance')
+            ->get(['id', 'name', 'phone', 'email', 'address', 'balance']);
+
+        // Get store settings
+        $storeSettings = [
+            'name' => Setting::get('store_name') ?? 'Toko Sejahtera',
+            'phone' => Setting::get('phone') ?? '',
+            'address' => Setting::get('address') ?? '',
+        ];
+
+        $pdf = PDF::loadView('pdf.saldo-utang', compact([
+            'suppliers',
+            'storeSettings',
+        ]))->setPaper('a4')->setOption('isHtml5ParserEnabled', true);
+
+        $filename = "saldo-utang-" . now()->format('Y-m-d') . ".pdf";
+        Storage::disk('public')->put("reports/{$filename}", $pdf->output());
+
+        return response()->json([
+            'url' => asset("storage/reports/{$filename}"),
+            'filename' => $filename,
+        ]);
+    }
+
+    // ─── Print Kartu Stok PDF (GET /info/kartu-stok/print) ────────────
+    public function printKartuStok(Request $request): JsonResponse
+    {
+        $request->validate([
+            'product_id' => ['required', 'exists:products,id'],
+        ]);
+
+        $product   = Product::findOrFail($request->product_id);
+        $mutations = StockMutation::where('product_id', $request->product_id)
+            ->when($request->from, fn($q) => $q->whereDate('created_at', '>=', $request->from))
+            ->when($request->to, fn($q) => $q->whereDate('created_at', '<=', $request->to))
+            ->orderBy('created_at')
+            ->get();
+
+        // Get store settings
+        $storeSettings = [
+            'name' => Setting::get('store_name') ?? 'Toko Sejahtera',
+            'phone' => Setting::get('phone') ?? '',
+            'address' => Setting::get('address') ?? '',
+        ];
+
+        $pdf = PDF::loadView('pdf.kartu-stok', compact([
+            'product',
+            'mutations',
+            'storeSettings',
+        ]))->setPaper('a4')->setOption('isHtml5ParserEnabled', true);
+
+        $filename = "kartu-stok-{$product->code}-" . now()->format('Y-m-d') . ".pdf";
+        Storage::disk('public')->put("reports/{$filename}", $pdf->output());
+
+        return response()->json([
+            'url' => asset("storage/reports/{$filename}"),
+            'filename' => $filename,
         ]);
     }
 }

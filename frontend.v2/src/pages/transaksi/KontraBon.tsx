@@ -9,6 +9,7 @@ import { Search, ClipboardList, FileDown, Printer } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useCustomers } from '@/hooks/api/useCustomers';
 import { useKontraBon, printKontraBon } from '@/hooks/api/useKontraBon';
+import { Skeleton } from '@/components/ui/SkeletonLoader';
 import type { Customer } from '@/types';
 
 const formatRupiah = (value: number) =>
@@ -97,9 +98,19 @@ const KontraBon = () => {
   return (
     <MainLayout title="Kontra Bon" subtitle="Bon yang belum dilunasi per customer">
       <div className="mb-4 grid gap-3 md:grid-cols-3">
-        <Card><CardContent className="p-3"><p className="text-xs text-muted-foreground">Customer Dengan Bon</p><p className="text-2xl font-bold">{uniqueCustomers}</p></CardContent></Card>
-        <Card><CardContent className="p-3"><p className="text-xs text-muted-foreground">Total Bon Aktif</p><p className="text-2xl font-bold">{invoices.length}</p></CardContent></Card>
-        <Card><CardContent className="p-3"><p className="text-xs text-muted-foreground">Total Nilai</p><p className="text-2xl font-bold text-warning tabular-nums">{formatRupiah(totalNilai)}</p></CardContent></Card>
+        {isLoading ? (
+          <>
+            <Card><CardContent className="p-3"><Skeleton className="h-4 w-24 mb-2" /><Skeleton className="h-7 w-16" /></CardContent></Card>
+            <Card><CardContent className="p-3"><Skeleton className="h-4 w-20 mb-2" /><Skeleton className="h-7 w-16" /></CardContent></Card>
+            <Card><CardContent className="p-3"><Skeleton className="h-4 w-16 mb-2" /><Skeleton className="h-7 w-40" /></CardContent></Card>
+          </>
+        ) : (
+          <>
+            <Card><CardContent className="p-3"><p className="text-xs text-muted-foreground">Customer Dengan Bon</p><p className="text-2xl font-bold">{uniqueCustomers}</p></CardContent></Card>
+            <Card><CardContent className="p-3"><p className="text-xs text-muted-foreground">Total Bon Aktif</p><p className="text-2xl font-bold">{invoices.length}</p></CardContent></Card>
+            <Card><CardContent className="p-3"><p className="text-xs text-muted-foreground">Total Nilai</p><p className="text-2xl font-bold text-warning tabular-nums">{formatRupiah(totalNilai)}</p></CardContent></Card>
+          </>
+        )}
       </div>
 
       <div className="mb-4 flex flex-col sm:flex-row gap-2 items-start sm:items-center justify-between">
@@ -122,9 +133,6 @@ const KontraBon = () => {
           <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={handleExportAll} disabled={isPrinting || invoices.length === 0}>
             <FileDown className="h-3.5 w-3.5" />Export PDF
           </Button>
-          <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={() => window.print()}>
-            <Printer className="h-3.5 w-3.5" />Cetak
-          </Button>
         </div>
       </div>
 
@@ -137,7 +145,17 @@ const KontraBon = () => {
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <div className="text-center py-12 text-muted-foreground">Loading...</div>
+            <div className="space-y-3">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="border rounded-lg p-3">
+                  <div className="flex justify-between items-start mb-2">
+                    <Skeleton className="h-5 w-40" />
+                    <Skeleton className="h-7 w-24" />
+                  </div>
+                  <Skeleton className="h-4 w-32" />
+                </div>
+              ))}
+            </div>
           ) : filteredGrouped.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <ClipboardList className="h-12 w-12 mx-auto mb-3 opacity-20" />

@@ -135,3 +135,39 @@ export const useDeleteReturnSale = () => {
     },
   });
 };
+
+// ========== Print Functions ==========
+
+/**
+ * Print Return Purchase PDF
+ * @param id - Return Purchase ID
+ * @returns Promise<void> - Opens PDF in new tab
+ */
+export const printReturnPurchase = async (id: string): Promise<void> => {
+  try {
+    const response = await api.get(`/return-purchases/${id}/print`);
+    if (response.data?.url) {
+      window.open(response.data.url, '_blank');
+    }
+  } catch (error) {
+    console.error('Failed to print return purchase:', error);
+    throw error;
+  }
+};
+
+/**
+ * Print Return Sale PDF
+ * @param id - Return Sale ID
+ * @returns Promise<void> - Opens PDF in new tab
+ */
+export const printReturnSale = async (id: string): Promise<void> => {
+  try {
+    const response = await api.get(`/return-sales/${id}/print`);
+    if (response.data?.url) {
+      window.open(response.data.url, '_blank');
+    }
+  } catch (error) {
+    console.error('Failed to print return sale:', error);
+    throw error;
+  }
+};

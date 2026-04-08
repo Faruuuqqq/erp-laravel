@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useLaporanHarian, printDailyReport } from '@/hooks/api/useReports';
 import { useToast } from '@/hooks/use-toast';
+import { Skeleton } from '@/components/ui/SkeletonLoader';
 
 const TIPE_LABEL: Record<string, string> = {
   pembelian: 'Pembelian',
@@ -81,14 +82,35 @@ const LaporanHarian = () => {
       />
 
       <div className="mb-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard title="Total Penjualan" value={totalPenjualan} icon={<TrendingUp className="h-5 w-5" />} color="success" />
-        <StatCard title="Total Pembelian" value={totalPembelian} icon={<ShoppingCart className="h-5 w-5" />} color="primary" />
-        <StatCard title="Total Transaksi" value={`${transactionCount}`} icon={<FileText className="h-5 w-5" />} color="info" />
-        <StatCard title="Kas Bersih" value={kasBersih} icon={<Banknote className="h-5 w-5" />} color={kasBersih >= 0 ? 'success' : 'destructive'} />
+        {isLoading ? (
+          <>
+            <div className="rounded-lg border bg-card p-4"><div className="flex items-center justify-between mb-2"><Skeleton className="h-4 w-20" /><Skeleton className="h-5 w-5 rounded" /></div><Skeleton className="h-7 w-32" /></div>
+            <div className="rounded-lg border bg-card p-4"><div className="flex items-center justify-between mb-2"><Skeleton className="h-4 w-20" /><Skeleton className="h-5 w-5 rounded" /></div><Skeleton className="h-7 w-32" /></div>
+            <div className="rounded-lg border bg-card p-4"><div className="flex items-center justify-between mb-2"><Skeleton className="h-4 w-24" /><Skeleton className="h-5 w-5 rounded" /></div><Skeleton className="h-7 w-16" /></div>
+            <div className="rounded-lg border bg-card p-4"><div className="flex items-center justify-between mb-2"><Skeleton className="h-4 w-16" /><Skeleton className="h-5 w-5 rounded" /></div><Skeleton className="h-7 w-32" /></div>
+          </>
+        ) : (
+          <>
+            <StatCard title="Total Penjualan" value={totalPenjualan} icon={<TrendingUp className="h-5 w-5" />} color="success" />
+            <StatCard title="Total Pembelian" value={totalPembelian} icon={<ShoppingCart className="h-5 w-5" />} color="primary" />
+            <StatCard title="Total Transaksi" value={`${transactionCount}`} icon={<FileText className="h-5 w-5" />} color="info" />
+            <StatCard title="Kas Bersih" value={kasBersih} icon={<Banknote className="h-5 w-5" />} color={kasBersih >= 0 ? 'success' : 'destructive'} />
+          </>
+        )}
       </div>
 
       {isLoading ? (
-        <div className="py-12 text-center text-muted-foreground">Loading...</div>
+        <DataTableContainer>
+          <div className="space-y-2 p-4">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="flex gap-4 px-4 py-3 border-b">
+                <Skeleton className="h-8 w-40" />
+                <Skeleton className="h-8 w-16" />
+                <Skeleton className="h-8 w-32" />
+              </div>
+            ))}
+          </div>
+        </DataTableContainer>
       ) : (
         <DataTableContainer>
           <div className="p-4 border-b flex items-center justify-between">

@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { StatusBadge, CurrencyCell } from '@/components/ui/DataComponents';
+import { Skeleton } from '@/components/ui/SkeletonLoader';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -33,10 +34,10 @@ const Dashboard = () => {
   const navigate = useNavigate();
 
   const { data: statsData, isLoading: statsLoading } = useDashboardStats();
-  const { data: recentData } = useRecentTransactions();
-  const { data: lowStockData } = useLowStock();
-  const { data: financialData } = useFinancialSummary();
-  const { data: trendData } = useSalesTrend();
+  const { data: recentData, isLoading: recentLoading } = useRecentTransactions();
+  const { data: lowStockData, isLoading: lowStockLoading } = useLowStock();
+  const { data: financialData, isLoading: financialLoading } = useFinancialSummary();
+  const { data: trendData, isLoading: trendLoading } = useSalesTrend();
 
   const stats = statsData?.data?.data ?? {};
   const recentTx = recentData?.data?.data ?? [];
@@ -85,10 +86,18 @@ const Dashboard = () => {
       )}
 
       {/* Stat Cards */}
-      {statsLoading ? (
+      {statsLoading || financialLoading ? (
         <div className="mb-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {[1, 2, 3, 4].map(i => (
-            <Card key={i}><CardContent className="p-4"><div className="h-8 bg-muted rounded animate-pulse" /></CardContent></Card>
+            <Card key={i}>
+              <CardContent className="p-4">
+                <div className="space-y-2">
+                  <Skeleton className="h-4 w-28" />
+                  <Skeleton className="h-7 w-32" />
+                  <Skeleton className="h-3 w-24" />
+                </div>
+              </CardContent>
+            </Card>
           ))}
         </div>
       ) : (
@@ -132,7 +141,21 @@ const Dashboard = () => {
       )}
 
       {/* Owner-only extra stats */}
-      {isOwner && !statsLoading && (
+      {isOwner && (statsLoading || lowStockLoading ? (
+        <div className="mb-5 grid gap-4 sm:grid-cols-3">
+          {[1, 2, 3].map(i => (
+            <Card key={i}>
+              <CardContent className="p-4">
+                <div className="space-y-2">
+                  <Skeleton className="h-4 w-28" />
+                  <Skeleton className="h-7 w-32" />
+                  <Skeleton className="h-3 w-24" />
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : (
         <div className="mb-5 grid gap-4 sm:grid-cols-3">
           <StatCard
             title="Nilai Stok"
@@ -157,7 +180,7 @@ const Dashboard = () => {
             onClick={() => navigate('/customer')}
           />
         </div>
-      )}
+      ))}
 
       <div className="grid gap-5 lg:grid-cols-3">
         {/* Cashflow Chart */}
@@ -170,7 +193,14 @@ const Dashboard = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {chartData.length === 0 ? (
+              {trendLoading ? (
+                <div className="h-[200px] space-y-2">
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-3/4" />
+                  <div className="h-[140px] bg-muted rounded mt-4" />
+                </div>
+              ) : chartData.length === 0 ? (
                 <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm">Belum ada data</div>
               ) : (
                 <>
@@ -206,7 +236,13 @@ const Dashboard = () => {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            {lowStock.length === 0 ? (
+            {lowStockLoading ? (
+              <div className="space-y-2">
+                {[1, 2, 3, 4, 5].map(i => (
+                  <Skeleton key={i} className="h-12 w-full" />
+                ))}
+              </div>
+            ) : lowStock.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-4">Semua stok aman ✓</p>
             ) : (
               lowStock.slice(0, 5).map((p: any) => (
@@ -235,41 +271,55 @@ const Dashboard = () => {
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left text-xs text-muted-foreground">
-                    <th className="pb-2 font-medium">No. Faktur</th>
-                    <th className="pb-2 font-medium">Nama</th>
-                    <th className="pb-2 font-medium">Tipe</th>
-                    <th className="pb-2 font-medium text-right">Total</th>
-                    <th className="pb-2 font-medium">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentTx.length === 0 ? (
-                    <tr><td colSpan={5} className="py-8 text-center text-muted-foreground">Belum ada transaksi</td></tr>
-                  ) : (
-                    recentTx.slice(0, 5).map((tx: any) => (
-                      <tr key={tx.id} className="border-b last:border-0 hover:bg-muted/30">
-                        <td className="py-2.5 font-mono text-xs text-primary">{tx.invoice_number}</td>
-                        <td className="py-2.5 truncate max-w-[150px]">{tx.customer?.name || tx.supplier?.name || '-'}</td>
-                        <td className="py-2.5">
-                          <span className="text-xs text-muted-foreground">{TIPE_LABEL[tx.type] || tx.type}</span>
-                        </td>
-                        <td className="py-2.5 text-right">
-                          <CurrencyCell value={tx.total} />
-                        </td>
-                        <td className="py-2.5">
-                          <StatusBadge
-                            status={tx.status === 'lunas' ? 'Lunas' : tx.status === 'kredit' ? 'Kredit' : 'Sebagian'}
-                            variant={tx.status}
-                          />
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+              {recentLoading ? (
+                <div className="space-y-2">
+                  {[1, 2, 3, 4, 5].map(i => (
+                    <div key={i} className="flex gap-4 py-2 border-b">
+                      <Skeleton className="h-6 w-20" />
+                      <Skeleton className="h-6 w-32" />
+                      <Skeleton className="h-6 w-24" />
+                      <Skeleton className="h-6 w-20" />
+                      <Skeleton className="h-6 w-16" />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-left text-xs text-muted-foreground">
+                      <th className="pb-2 font-medium">No. Faktur</th>
+                      <th className="pb-2 font-medium">Nama</th>
+                      <th className="pb-2 font-medium">Tipe</th>
+                      <th className="pb-2 font-medium text-right">Total</th>
+                      <th className="pb-2 font-medium">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentTx.length === 0 ? (
+                      <tr><td colSpan={5} className="py-8 text-center text-muted-foreground">Belum ada transaksi</td></tr>
+                    ) : (
+                      recentTx.slice(0, 5).map((tx: any) => (
+                        <tr key={tx.id} className="border-b last:border-0 hover:bg-muted/30">
+                          <td className="py-2.5 font-mono text-xs text-primary">{tx.invoice_number}</td>
+                          <td className="py-2.5 truncate max-w-[150px]">{tx.customer?.name || tx.supplier?.name || '-'}</td>
+                          <td className="py-2.5">
+                            <span className="text-xs text-muted-foreground">{TIPE_LABEL[tx.type] || tx.type}</span>
+                          </td>
+                          <td className="py-2.5 text-right">
+                            <CurrencyCell value={tx.total} />
+                          </td>
+                          <td className="py-2.5">
+                            <StatusBadge
+                              status={tx.status === 'lunas' ? 'Lunas' : tx.status === 'kredit' ? 'Kredit' : 'Sebagian'}
+                              variant={tx.status}
+                            />
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              )}
             </div>
           </CardContent>
         </Card>

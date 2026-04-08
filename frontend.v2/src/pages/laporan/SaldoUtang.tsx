@@ -7,7 +7,10 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useSaldoUtang } from '@/hooks/api/useInfo';
+import { useSaldoUtang, printSaldoUtang } from '@/hooks/api/useInfo';
+import { useToast } from '@/hooks/use-toast';
+import { Skeleton } from '@/components/ui/SkeletonLoader';
+import { exportToCSV } from '@/lib/export';
 
 interface UtangItem {
   id: string;
@@ -22,6 +25,7 @@ interface UtangItem {
 const SaldoUtang = () => {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
+  const { toast } = useToast();
 
   const { data, isLoading } = useSaldoUtang();
   const suppliers = (data?.data ?? []) as UtangItem[];
@@ -36,16 +40,35 @@ const SaldoUtang = () => {
     return matchSearch;
   });
 
-  const handlePrint = () => window.print();
+  const handlePrint = async () => {
+    try {
+      await printSaldoUtang();
+      toast({ title: 'PDF berhasil dibuka', description: 'Dokumen dibuka di tab baru' });
+    } catch (error) {
+      toast({ title: 'Gagal mencetak', description: 'Terjadi kesalahan saat mencetak dokumen', variant: 'destructive' });
+    }
+  };
 
   const handleExport = () => {
-    const rows = [['Kode', 'Nama Supplier', 'Telepon', 'Email', 'Alamat', 'Saldo Utang', 'Status'],
-    ...filtered.map(s => [`SUP-${s.id}`, s.name, s.phone, s.email, s.address, s.balance, s.balance > 0 ? 'Ada Utang' : 'Lunas'])];
-    const csv = rows.map(r => r.join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = 'saldo-utang.csv'; a.click();
-    URL.revokeObjectURL(url);
+    try {
+      const rows = [['Kode', 'Nama Supplier', 'Telepon', 'Email', 'Alamat', 'Saldo Utang', 'Status'],
+      ...filtered.map(s => [`SUP-${s.id}`, s.name, s.phone, s.email, s.address, s.balance, s.balance > 0 ? 'Ada Utang' : 'Lunas'])];
+      
+      const data = filtered.map(s => ({
+        'Kode': `SUP-${s.id}`,
+        'Nama Supplier': s.name,
+        'Telepon': s.phone || '-',
+        'Email': s.email || '-',
+        'Alamat': s.address || '-',
+        'Saldo Utang': s.balance,
+        'Status': s.balance > 0 ? 'Ada Utang' : 'Lunas',
+      }));
+
+      exportToCSV(data, `saldo-utang-${new Date().toISOString().slice(0, 10)}`);
+      toast({ title: 'Berhasil', description: 'Data telah diunduh sebagai CSV.' });
+    } catch (err) {
+      toast({ title: 'Error', description: 'Gagal mengekspor data.', variant: 'destructive' });
+    }
   };
 
   return (
@@ -66,9 +89,19 @@ const SaldoUtang = () => {
       />
 
       <div className="mb-5 grid gap-4 sm:grid-cols-3">
-        <StatCard title="Total Utang" value={total} icon={<TrendingDown className="h-5 w-5" />} color="destructive" />
-        <StatCard title="Supplier Berutang" value={`${withDebt.length} Supplier`} icon={<Building2 className="h-5 w-5" />} color="warning" />
-        <StatCard title="Supplier Lunas" value={`${suppliers.length - withDebt.length} Supplier`} icon={<TrendingDown className="h-5 w-5" />} color="success" />
+        {isLoading ? (
+          <>
+            <div className="rounded-lg border bg-card p-4"><div className="flex items-center justify-between mb-2"><Skeleton className="h-4 w-20" /><Skeleton className="h-5 w-5 rounded" /></div><Skeleton className="h-7 w-32" /></div>
+            <div className="rounded-lg border bg-card p-4"><div className="flex items-center justify-between mb-2"><Skeleton className="h-4 w-28" /><Skeleton className="h-5 w-5 rounded" /></div><Skeleton className="h-7 w-24" /></div>
+            <div className="rounded-lg border bg-card p-4"><div className="flex items-center justify-between mb-2"><Skeleton className="h-4 w-24" /><Skeleton className="h-5 w-5 rounded" /></div><Skeleton className="h-7 w-24" /></div>
+          </>
+        ) : (
+          <>
+            <StatCard title="Total Utang" value={total} icon={<TrendingDown className="h-5 w-5" />} color="destructive" />
+            <StatCard title="Supplier Berutang" value={`${withDebt.length} Supplier`} icon={<Building2 className="h-5 w-5" />} color="warning" />
+            <StatCard title="Supplier Lunas" value={`${suppliers.length - withDebt.length} Supplier`} icon={<TrendingDown className="h-5 w-5" />} color="success" />
+          </>
+        )}
       </div>
 
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -90,7 +123,21 @@ const SaldoUtang = () => {
       </div>
 
       {isLoading ? (
-        <div className="py-12 text-center text-muted-foreground">Loading...</div>
+        <DataTableContainer>
+          <div className="space-y-2 p-4">
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="flex gap-4 px-4 py-3 border-b">
+                <Skeleton className="h-8 w-20" />
+                <Skeleton className="h-8 w-40" />
+                <Skeleton className="h-8 w-28" />
+                <Skeleton className="h-8 w-40" />
+                <Skeleton className="h-8 w-32" />
+                <Skeleton className="h-8 w-24" />
+                <Skeleton className="h-8 w-20" />
+              </div>
+            ))}
+          </div>
+        </DataTableContainer>
       ) : (
         <DataTableContainer>
           <div className="overflow-x-auto">

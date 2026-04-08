@@ -10,6 +10,8 @@ import { Progress } from '@/components/ui/progress';
 import { Package, AlertTriangle, Search, Download, Printer, TrendingUp } from 'lucide-react';
 import { useStockReport, printStockReport } from '@/hooks/api/useReports';
 import { useToast } from '@/hooks/use-toast';
+import { Skeleton } from '@/components/ui/SkeletonLoader';
+import { exportToExcelWithMetadata, formatCurrency as fmtCurrency } from '@/lib/export';
 
 const formatRupiah = (value: number) =>
   new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(value);
@@ -71,6 +73,30 @@ const SaldoStok = () => {
     }
   };
 
+  const handleExportExcel = () => {
+    try {
+      const data = filtered.map((p: any) => ({
+        'Kode': p.code,
+        'Nama Produk': p.name,
+        'Kategori': p.category || '-',
+        'Stok': p.stock,
+        'Unit': p.unit,
+        'Harga Beli': p.buyPrice || 0,
+        'Harga Jual': p.sellPrice || 0,
+        'Nilai Persediaan': p.stockValue || 0,
+      }));
+
+      exportToExcelWithMetadata(data, {
+        title: 'Laporan Saldo Stok',
+        subtitle: `Nilai persediaan berdasarkan harga beli`,
+        filename: `saldo-stok-${new Date().toISOString().slice(0, 10)}`,
+        exportedBy: 'TokoSync ERP',
+      });
+    } catch (err) {
+      toast({ title: 'Error', description: 'Gagal mengekspor data Excel.', variant: 'destructive' });
+    }
+  };
+
   return (
     <MainLayout title="Saldo Stok" subtitle="Total stok dan nilai persediaan (Owner only)">
       <PageHeader
@@ -84,15 +110,29 @@ const SaldoStok = () => {
             <Button variant="outline" size="sm" onClick={handleExportPDF} disabled={isPrinting}>
               <Download className="h-4 w-4 mr-1.5" />{isPrinting ? 'Generating...' : 'Export PDF'}
             </Button>
+            <Button variant="outline" size="sm" onClick={handleExportExcel} disabled={filtered.length === 0}>
+              <Download className="h-4 w-4 mr-1.5" />Export Excel
+            </Button>
           </>
         }
       />
 
       <div className="mb-5 grid gap-4 sm:grid-cols-4">
-        <StatCard title="Nilai Persediaan (Beli)" value={totalNilai} icon={<Package className="h-5 w-5" />} color="primary" />
-        <StatCard title="Nilai Potensi Jual" value={totalNilaiJual} icon={<TrendingUp className="h-5 w-5" />} color="success" />
-        <StatCard title="Total Unit Stok" value={`${totalUnit.toLocaleString('id-ID')} Unit`} icon={<Package className="h-5 w-5" />} color="info" />
-        <StatCard title="Stok Rendah" value={`${lowStockItems.length} Produk`} icon={<AlertTriangle className="h-5 w-5" />} color={lowStockItems.length > 0 ? 'warning' : 'success'} />
+        {isLoading ? (
+          <>
+            <div className="rounded-lg border bg-card p-4"><div className="flex items-center justify-between mb-2"><Skeleton className="h-4 w-28" /><Skeleton className="h-5 w-5 rounded" /></div><Skeleton className="h-7 w-32" /></div>
+            <div className="rounded-lg border bg-card p-4"><div className="flex items-center justify-between mb-2"><Skeleton className="h-4 w-28" /><Skeleton className="h-5 w-5 rounded" /></div><Skeleton className="h-7 w-32" /></div>
+            <div className="rounded-lg border bg-card p-4"><div className="flex items-center justify-between mb-2"><Skeleton className="h-4 w-28" /><Skeleton className="h-5 w-5 rounded" /></div><Skeleton className="h-7 w-32" /></div>
+            <div className="rounded-lg border bg-card p-4"><div className="flex items-center justify-between mb-2"><Skeleton className="h-4 w-20" /><Skeleton className="h-5 w-5 rounded" /></div><Skeleton className="h-7 w-24" /></div>
+          </>
+        ) : (
+          <>
+            <StatCard title="Nilai Persediaan (Beli)" value={totalNilai} icon={<Package className="h-5 w-5" />} color="primary" />
+            <StatCard title="Nilai Potensi Jual" value={totalNilaiJual} icon={<TrendingUp className="h-5 w-5" />} color="success" />
+            <StatCard title="Total Unit Stok" value={`${totalUnit.toLocaleString('id-ID')} Unit`} icon={<Package className="h-5 w-5" />} color="info" />
+            <StatCard title="Stok Rendah" value={`${lowStockItems.length} Produk`} icon={<AlertTriangle className="h-5 w-5" />} color={lowStockItems.length > 0 ? 'warning' : 'success'} />
+          </>
+        )}
       </div>
 
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -119,7 +159,23 @@ const SaldoStok = () => {
       </div>
 
       {isLoading ? (
-        <div className="py-12 text-center text-muted-foreground">Loading...</div>
+        <DataTableContainer>
+          <div className="space-y-2 p-4">
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="flex gap-4 px-4 py-3 border-b">
+                <Skeleton className="h-8 w-20" />
+                <Skeleton className="h-8 w-40" />
+                <Skeleton className="h-8 w-24" />
+                <Skeleton className="h-8 w-20" />
+                <Skeleton className="h-8 w-16" />
+                <Skeleton className="h-8 w-24" />
+                <Skeleton className="h-8 w-24" />
+                <Skeleton className="h-8 w-32" />
+                <Skeleton className="h-8 w-20" />
+              </div>
+            ))}
+          </div>
+        </DataTableContainer>
       ) : (
         <DataTableContainer>
           <div className="overflow-x-auto">

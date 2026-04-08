@@ -59,6 +59,7 @@ class TransactionController extends Controller
             $transaction = Transaction::create([
                 'invoice_number' => $invoiceNumber,
                 'date'           => $request->date,
+                'due_date'       => $request->dueDate,
                 'type'           => $request->type,
                 'supplier_id'    => $request->supplierId,
                 'customer_id'    => $request->customerId,

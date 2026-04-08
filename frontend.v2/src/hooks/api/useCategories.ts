@@ -1,11 +1,18 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import type { Category, PaginatedResponse } from '@/types';
+import type { Category } from '@/types';
+
+interface CategoriesResponse {
+  data: Category[];
+}
 
 export const useCategories = () => {
   return useQuery({
     queryKey: ['categories'],
-    queryFn: () => api.get<Category[]>('/categories'),
+    queryFn: async () => {
+      const response = await api.get<CategoriesResponse>('/categories');
+      return response.data;
+    },
     staleTime: 5 * 60 * 1000,
   });
 };

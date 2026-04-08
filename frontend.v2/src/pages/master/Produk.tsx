@@ -18,6 +18,7 @@ import { Plus, Search, Pencil, Trash2, Package, AlertTriangle, Download } from '
 import { Badge } from '@/components/ui/badge';
 import { StatCard } from '@/components/ui/StatCard';
 import { Progress } from '@/components/ui/progress';
+import { Skeleton } from '@/components/ui/SkeletonLoader';
 import { useToast } from '@/hooks/use-toast';
 import { useProducts, useCreateProduct, useUpdateProduct, useDeleteProduct } from '@/hooks/api/useProducts';
 import { useCategories } from '@/hooks/api/useCategories';
@@ -47,8 +48,8 @@ const Produk = () => {
   const deleteMutation = useDeleteProduct();
 
   const products = (data?.data?.data ?? []) as Product[];
-  const categories = (categoriesData?.data ?? []) as { id: string; name: string }[];
-  const warehouses = (warehousesData?.data ?? []) as { id: string; name: string; status: string }[];
+  const categories = (categoriesData?.data ?? []) as { id: string; name: string }[] || [];
+  const warehouses = (warehousesData?.data?.data ?? []) as { id: string; name: string; status: string }[];
 
   const totalNilai = products.reduce((s, p) => s + (p.buyPrice || 0) * (p.stock || 0), 0);
   const lowStock = products.filter(p => (p.stock || 0) <= (p.minStock || 0)).length;
@@ -199,7 +200,21 @@ const Produk = () => {
       </div>
 
       {isLoading ? (
-        <div className="py-12 text-center text-muted-foreground">Loading...</div>
+        <Card>
+          <CardContent className="p-0">
+            <div className="space-y-2 p-4">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="flex gap-4">
+                  <Skeleton className="h-10 w-20" />
+                  <Skeleton className="h-10 flex-1" />
+                  <Skeleton className="h-10 w-24" />
+                  <Skeleton className="h-10 w-24" />
+                  <Skeleton className="h-10 w-20" />
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       ) : (
         <Card>
           <CardContent className="p-0">

@@ -7,7 +7,10 @@ use App\Http\Requests\Api\StoreAdminRequest;
 use App\Http\Requests\Api\UpdateAdminRequest;
 use App\Http\Requests\Api\UpdateAdminPermissionsRequest;
 use App\Http\Resources\AdminResource;
+use App\Http\Resources\AdminActivityLogResource;
 use App\Models\User;
+use App\Models\AdminActivityLog;
+use App\Services\AdminActivityService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -43,6 +46,13 @@ class AdminManagementController extends Controller
             'permissions' => $request->permissions ?? (new User())->getDefaultPermissions(),
         ]);
 
+        // Log the activity
+        AdminActivityService::logAdminCreated($admin, [
+            'name' => $admin->name,
+            'email' => $admin->email,
+            'permissions' => $admin->permissions,
+        ]);
+
         return response()->json([
             'data' => new AdminResource($admin),
             'message' => 'Admin berhasil ditambahkan.',
@@ -64,6 +74,7 @@ class AdminManagementController extends Controller
             return response()->json(['message' => 'User bukan admin.'], 404);
         }
 
+        $oldData = $admin->toArray();
         $data = $request->validated();
 
         if (isset($data['password'])) {
@@ -71,6 +82,9 @@ class AdminManagementController extends Controller
         }
 
         $admin->update($data);
+
+        // Log the activity
+        AdminActivityService::logAdminUpdated($admin, $oldData, $admin->fresh()->toArray());
 
         return response()->json([
             'data' => new AdminResource($admin->fresh()),
@@ -84,7 +98,11 @@ class AdminManagementController extends Controller
             return response()->json(['message' => 'User bukan admin.'], 404);
         }
 
+        $oldPermissions = $admin->permissions;
         $admin->update(['permissions' => $request->permissions]);
+
+        // Log the activity
+        AdminActivityService::logAdminPermissionsUpdated($admin, $oldPermissions, $request->permissions);
 
         return response()->json([
             'data' => new AdminResource($admin->fresh()),
@@ -98,7 +116,11 @@ class AdminManagementController extends Controller
             return response()->json(['message' => 'User bukan admin.'], 404);
         }
 
+        $previousStatus = $admin->is_active;
         $admin->update(['is_active' => !$admin->is_active]);
+
+        // Log the activity
+        AdminActivityService::logAdminToggleActive($admin, $previousStatus, $admin->is_active);
 
         return response()->json([
             'data' => new AdminResource($admin->fresh()),
@@ -112,9 +134,41 @@ class AdminManagementController extends Controller
             return response()->json(['message' => 'User bukan admin.'], 404);
         }
 
+        // Store data before deletion
+        $adminData = $admin->toArray();
+
+        // Log the activity
+        AdminActivityService::logAdminDeleted($admin, $adminData);
+
         $admin->delete();
 
         return response()->json(['message' => 'Admin berhasil dihapus.']);
+    }
+
+    public function resetPassword(User $admin): JsonResponse
+    {
+        if ($admin->role !== 'admin') {
+            return response()->json(['message' => 'User bukan admin.'], 404);
+        }
+
+        // Generate temporary password
+        $tempPassword = substr(bin2hex(random_bytes(16)), 0, 12);
+        
+        $admin->update([
+            'temp_password' => $tempPassword,
+            'temp_password_expires_at' => now()->addHours(24),
+        ]);
+
+        // Log the activity
+        AdminActivityService::logAdminPasswordReset($admin);
+
+        return response()->json([
+            'data' => [
+                'tempPassword' => $tempPassword,
+                'expiresAt' => $admin->temp_password_expires_at->toISOString(),
+            ],
+            'message' => 'Password reset berhasil. Bagikan password sementara kepada admin.',
+        ]);
     }
 
     public function permissionPresets(): JsonResponse
@@ -164,6 +218,46 @@ class AdminManagementController extends Controller
                         'transactions' => ['view' => false, 'create' => false, 'update' => false, 'delete' => false, 'print' => false],
                     ]),
                 ],
+            ],
+        ]);
+    }
+
+    public function activityLogs(Request $request): JsonResponse
+    {
+        $query = AdminActivityLog::with('admin')->orderBy('created_at', 'desc');
+
+        // Filter by admin
+        if ($request->adminId) {
+            $query->where('admin_id', $request->adminId);
+        }
+
+        // Filter by action
+        if ($request->action) {
+            $query->where('action', $request->action);
+        }
+
+        // Filter by module
+        if ($request->module) {
+            $query->where('module', $request->module);
+        }
+
+        // Filter by date range
+        if ($request->startDate) {
+            $query->whereDate('created_at', '>=', $request->startDate);
+        }
+        if ($request->endDate) {
+            $query->whereDate('created_at', '<=', $request->endDate);
+        }
+
+        $logs = $query->paginate($request->perPage ?? 50);
+
+        return response()->json([
+            'data' => AdminActivityLogResource::collection($logs->items()),
+            'pagination' => [
+                'currentPage' => $logs->currentPage(),
+                'perPage' => $logs->perPage(),
+                'total' => $logs->total(),
+                'lastPage' => $logs->lastPage(),
             ],
         ]);
     }

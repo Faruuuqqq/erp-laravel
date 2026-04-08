@@ -15,6 +15,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Plus, Search, Pencil, Trash2, Phone, MapPin, AlertCircle, Download, Users } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { StatCard } from '@/components/ui/StatCard';
+import { Skeleton } from '@/components/ui/SkeletonLoader';
 import { useToast } from '@/hooks/use-toast';
 import { useCustomers, useCreateCustomer, useUpdateCustomer, useDeleteCustomer } from '@/hooks/api/useCustomers';
 import type { Customer } from '@/types';
@@ -145,7 +146,24 @@ const CustomerPage = () => {
       </div>
 
       {isLoading ? (
-        <div className="py-12 text-center text-muted-foreground">Loading...</div>
+        <Card>
+          <CardContent className="p-0">
+            <div className="space-y-2 p-4">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="flex gap-4">
+                  <Skeleton className="h-10 w-16" />
+                  <Skeleton className="h-10 w-32" />
+                  <Skeleton className="h-10 w-28" />
+                  <Skeleton className="h-10 w-40" />
+                  <Skeleton className="h-10 flex-1" />
+                  <Skeleton className="h-10 w-28" />
+                  <Skeleton className="h-10 w-28" />
+                  <Skeleton className="h-10 w-24" />
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       ) : (
         <Card>
           <CardContent className="p-0">

@@ -11,6 +11,7 @@ import { useState } from 'react';
 import { useHistoryReturPenjualan } from '@/hooks/api/useReports';
 import { formatCurrency } from '@/lib/utils';
 import { formatDateRange } from '@/lib/export';
+import { Skeleton } from '@/components/ui/SkeletonLoader';
 
 const HistoriReturPenjualan = () => {
   const [page, setPage] = useState(1);
@@ -122,7 +123,6 @@ const HistoriReturPenjualan = () => {
           <ExportButton
             data={returns}
             filename={`retur_penjualan_${formatDateRange(fromDate, toDate)}`}
-            onPrint={() => window.print()}
             disabled={!returns.length}
             isLoading={isLoading}
           />
@@ -143,45 +143,55 @@ const HistoriReturPenjualan = () => {
       </div>
 
       <div className="mb-6 grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                <RotateCcw className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Total Retur</p>
-                <p className="text-2xl font-bold text-primary">{totalReturns}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-success/10">
-                <RotateCcw className="h-5 w-5 text-success" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Total Item (Halaman)</p>
-                <p className="text-2xl font-bold text-success">{totalItems}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-warning/10">
-                <RotateCcw className="h-5 w-5 text-warning" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Total Nilai (Halaman)</p>
-                <p className="text-2xl font-bold text-warning">{formatCurrency(totalValue)}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        {isLoading ? (
+          <>
+            <Card><CardContent className="p-4"><div className="flex items-center gap-3"><Skeleton className="h-10 w-10 rounded-lg" /><div className="flex-1"><Skeleton className="h-4 w-20 mb-2" /><Skeleton className="h-6 w-12" /></div></div></CardContent></Card>
+            <Card><CardContent className="p-4"><div className="flex items-center gap-3"><Skeleton className="h-10 w-10 rounded-lg" /><div className="flex-1"><Skeleton className="h-4 w-28 mb-2" /><Skeleton className="h-6 w-12" /></div></div></CardContent></Card>
+            <Card><CardContent className="p-4"><div className="flex items-center gap-3"><Skeleton className="h-10 w-10 rounded-lg" /><div className="flex-1"><Skeleton className="h-4 w-28 mb-2" /><Skeleton className="h-6 w-32" /></div></div></CardContent></Card>
+          </>
+        ) : (
+          <>
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                    <RotateCcw className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Total Retur</p>
+                    <p className="text-2xl font-bold text-primary">{totalReturns}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-success/10">
+                    <RotateCcw className="h-5 w-5 text-success" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Total Item (Halaman)</p>
+                    <p className="text-2xl font-bold text-success">{totalItems}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-warning/10">
+                    <RotateCcw className="h-5 w-5 text-warning" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Total Nilai (Halaman)</p>
+                    <p className="text-2xl font-bold text-warning">{formatCurrency(totalValue)}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </>
+        )}
       </div>
 
       <Card>
@@ -189,26 +199,42 @@ const HistoriReturPenjualan = () => {
           <CardTitle>Daftar Retur Penjualan</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <VirtualTable
-            data={returns}
-            columns={columns}
-            rowHeight={48}
-            height={500}
-            isLoading={isLoading}
-            error={error}
-            emptyMessage="Tidak ada data retur penjualan"
-          >
-            {meta && (
-              <Pagination
-                currentPage={meta.current_page}
-                totalPages={meta.last_page}
-                totalItems={meta.total}
-                itemsPerPage={perPage}
-                onPageChange={handlePageChange}
-                onItemsPerPageChange={handleItemsPerPageChange}
-              />
-            )}
-          </VirtualTable>
+          {isLoading ? (
+            <div className="space-y-2 p-4">
+              {[...Array(8)].map((_, i) => (
+                <div key={i} className="flex gap-4">
+                  <Skeleton className="h-12 w-40" />
+                  <Skeleton className="h-12 w-32" />
+                  <Skeleton className="h-12 w-40" />
+                  <Skeleton className="h-12 w-20" />
+                  <Skeleton className="h-12 w-32" />
+                  <Skeleton className="h-12 w-20" />
+                  <Skeleton className="h-12 w-16" />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <VirtualTable
+              data={returns}
+              columns={columns}
+              rowHeight={48}
+              height={500}
+              isLoading={false}
+              error={error}
+              emptyMessage="Tidak ada data retur penjualan"
+            >
+              {meta && (
+                <Pagination
+                  currentPage={meta.current_page}
+                  totalPages={meta.last_page}
+                  totalItems={meta.total}
+                  itemsPerPage={perPage}
+                  onPageChange={handlePageChange}
+                  onItemsPerPageChange={handleItemsPerPageChange}
+                />
+              )}
+            </VirtualTable>
+          )}
         </CardContent>
       </Card>
     </MainLayout>

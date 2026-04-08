@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\ExpenseController;
 use App\Http\Controllers\Api\AdminManagementController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\CustomerController;
 use App\Http\Controllers\Api\DashboardController;
@@ -37,6 +38,11 @@ Route::middleware(['auth:sanctum', 'throttle:60,1'])->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
     Route::post('/logout', [AuthController::class, 'logout']);
 
+    // ── Profile (All Authenticated Users) ──────────────────────────────────────
+    Route::get('/profile', [ProfileController::class, 'show']);
+    Route::put('/profile', [ProfileController::class, 'update']);
+    Route::put('/profile/change-password', [ProfileController::class, 'changePassword']);
+
     // ── Settings (All Authenticated Users) ─────────────────────────────────────
     Route::get('/settings', [SettingsController::class, 'index']);
     Route::patch('/settings/profile', [SettingsController::class, 'updateProfile']);
@@ -66,7 +72,9 @@ Route::middleware(['auth:sanctum', 'throttle:60,1'])->group(function () {
 
     // ── Returns (Admin & Owner) ────────────────────────────────────────────────
     Route::apiResource('return-sales', ReturnSaleController::class);
+    Route::get('return-sales/{returnSale}/print', [ReturnSaleController::class, 'print']);
     Route::apiResource('return-purchases', ReturnPurchaseController::class);
+    Route::get('return-purchases/{returnPurchase}/print', [ReturnPurchaseController::class, 'print']);
 
     // ── Delivery Notes (Admin & Owner) ───────────────────────────────
     Route::apiResource('delivery-notes', DeliveryNoteController::class);
@@ -104,9 +112,12 @@ Route::middleware(['auth:sanctum', 'throttle:60,1'])->group(function () {
 
         Route::prefix('info')->group(function () {
             Route::get('saldo-piutang', [InfoController::class, 'saldoPiutang']);
+            Route::get('saldo-piutang/print', [InfoController::class, 'printSaldoPiutang']);
             Route::get('saldo-utang', [InfoController::class, 'saldoUtang']);
+            Route::get('saldo-utang/print', [InfoController::class, 'printSaldoUtang']);
             Route::get('saldo-stok', [InfoController::class, 'saldoStok']);
             Route::get('kartu-stok', [InfoController::class, 'kartuStok']);
+            Route::get('kartu-stok/print', [InfoController::class, 'printKartuStok']);
             Route::get('laporan-harian', [InfoController::class, 'laporanHarian']);
         });
 
@@ -117,7 +128,9 @@ Route::middleware(['auth:sanctum', 'throttle:60,1'])->group(function () {
         Route::put('/admins/{admin}', [AdminManagementController::class, 'update']);
         Route::put('/admins/{admin}/permissions', [AdminManagementController::class, 'updatePermissions']);
         Route::patch('/admins/{admin}/toggle-active', [AdminManagementController::class, 'toggleActive']);
+        Route::post('/admins/{admin}/reset-password', [AdminManagementController::class, 'resetPassword']);
         Route::delete('/admins/{admin}', [AdminManagementController::class, 'destroy']);
+        Route::get('/admin-activity-logs', [AdminManagementController::class, 'activityLogs']);
         Route::get('/admin-presets', [AdminManagementController::class, 'permissionPresets']);
     });
 

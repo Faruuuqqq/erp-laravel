@@ -7,9 +7,11 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Search, History, Eye, FileDown, Filter } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Skeleton } from '@/components/ui/SkeletonLoader';
 import { useToast } from '@/hooks/use-toast';
 import { useHistoryPembelian } from '@/hooks/api/useReports';
 import { useSuppliers } from '@/hooks/api/useSuppliers';
+import { printInvoice } from '@/hooks/api/useTransactions';
 
 const formatRupiah = (value: number) =>
   new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(value);
@@ -82,9 +84,6 @@ const HistoriPembelian = () => {
           <Input type="date" className="text-xs h-8 w-36" value={from} onChange={e => setFrom(e.target.value)} />
           <Input type="date" className="text-xs h-8 w-36" value={to} onChange={e => setTo(e.target.value)} />
         </div>
-        <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={() => window.print()}>
-          <FileDown className="h-3.5 w-3.5" />Export PDF
-        </Button>
       </div>
 
       <Card>
@@ -104,13 +103,27 @@ const HistoriPembelian = () => {
                   <th className="w-10"></th>
                 </tr>
               </thead>
-              <tbody>
-                {isLoading ? (
-                  <tr><td colSpan={9} className="text-center py-10 text-muted-foreground">Loading...</td></tr>
-                ) : filtered.length === 0 ? (
-                  <tr><td colSpan={9} className="text-center py-10 text-muted-foreground">Tidak ada data</td></tr>
-                ) : (
-                  filtered.map((t: any) => (
+               <tbody>
+                 {isLoading ? (
+                   <>
+                     {[...Array(5)].map((_, i) => (
+                       <tr key={i}>
+                         <td className="px-4 py-2.5"><Skeleton className="h-4 w-20" /></td>
+                         <td className="px-4 py-2.5"><Skeleton className="h-4 w-24" /></td>
+                         <td className="px-4 py-2.5"><Skeleton className="h-4 w-32" /></td>
+                         <td className="px-4 py-2.5"><Skeleton className="h-4 w-24" /></td>
+                         <td className="px-4 py-2.5"><Skeleton className="h-4 w-20" /></td>
+                         <td className="px-4 py-2.5"><Skeleton className="h-4 w-24" /></td>
+                         <td className="px-4 py-2.5"><Skeleton className="h-4 w-24" /></td>
+                         <td className="px-4 py-2.5"><Skeleton className="h-4 w-20" /></td>
+                         <td className="px-4 py-2.5"><Skeleton className="h-4 w-16" /></td>
+                       </tr>
+                     ))}
+                   </>
+                 ) : filtered.length === 0 ? (
+                   <tr><td colSpan={9} className="text-center py-10 text-muted-foreground">Tidak ada data</td></tr>
+                 ) : (
+                   filtered.map((t: any) => (
                     <tr key={t.id} className="border-b hover:bg-muted/30 text-sm">
                       <td className="px-4 py-2.5 font-mono text-xs text-primary font-semibold">{t.invoice_number}</td>
                       <td className="px-4 py-2.5 text-xs">{t.date}</td>
@@ -175,7 +188,7 @@ const HistoriPembelian = () => {
                 <span className="text-lg font-bold text-primary tabular-nums">{formatRupiah(selectedTrx.total)}</span>
               </div>
               <div className="flex gap-2 justify-end">
-                <Button variant="outline" size="sm" onClick={() => window.print()}><FileDown className="mr-1.5 h-3.5 w-3.5" />Export PDF</Button>
+                <Button variant="outline" size="sm" onClick={() => printInvoice(selectedTrx.id)}><FileDown className="mr-1.5 h-3.5 w-3.5" />Export PDF</Button>
                 <Button size="sm" onClick={() => setSelectedTrx(null)}>Tutup</Button>
               </div>
             </div>
