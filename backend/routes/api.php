@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\DeliveryNoteController;
 use App\Http\Controllers\Api\InfoController;
 use App\Http\Controllers\Api\KontraBonController;
+use App\Http\Controllers\Api\PermissionPresetController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\ReturnPurchaseController;
@@ -132,6 +133,16 @@ Route::middleware(['auth:sanctum', 'throttle:60,1'])->group(function () {
         Route::delete('/admins/{admin}', [AdminManagementController::class, 'destroy']);
         Route::get('/admin-activity-logs', [AdminManagementController::class, 'activityLogs']);
         Route::get('/admin-presets', [AdminManagementController::class, 'permissionPresets']);
+
+        // ── Permission Presets (Owner Only) ──────────────────────────
+        Route::prefix('permission-presets')->group(function () {
+            Route::get('/', [PermissionPresetController::class, 'index']);
+            Route::post('/', [PermissionPresetController::class, 'store']);
+            Route::get('/{preset}', [PermissionPresetController::class, 'show']);
+            Route::put('/{preset}', [PermissionPresetController::class, 'update']);
+            Route::delete('/{preset}', [PermissionPresetController::class, 'destroy']);
+            Route::post('/{preset}/duplicate', [PermissionPresetController::class, 'duplicate']);
+        });
     });
 
     // ─── Catch-all route for unmatched API routes ───────────────────

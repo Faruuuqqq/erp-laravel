@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog';
@@ -13,10 +14,12 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/SkeletonLoader';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
-import { Plus, Search, Trash2, Shield, Power, PowerOff, Eye, PlusCircle, Edit, Trash, Printer, Key } from 'lucide-react';
+import { Plus, Search, Trash2, Shield, Power, PowerOff, Eye, PlusCircle, Edit, Trash, Printer, Key, Copy, Zap } from 'lucide-react';
+import { PermissionPreview } from '@/components/PermissionPreview';
 import apiClient from '@/lib/api-client';
 
 const MODULES = [
@@ -56,6 +59,15 @@ interface Admin {
   createdAt: string;
 }
 
+interface PermissionPreset {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  permissions: Record<string, Record<string, boolean>>;
+  isSystem: boolean;
+}
+
 const AdminManagement = () => {
   const { isOwner } = useAuth();
   const { toast } = useToast();
@@ -66,7 +78,8 @@ const AdminManagement = () => {
   const [editAdmin, setEditAdmin] = useState<Admin | null>(null);
   const [form, setForm] = useState({ name: '', email: '', password: '' });
   const [selectedPreset, setSelectedPreset] = useState('default');
-  const [presets, setPresets] = useState<Record<string, any>>({});
+  const [presets, setPresets] = useState<PermissionPreset[]>([]);
+  const [systemPresets, setSystemPresets] = useState<Record<string, any>>({});
 
   const fetchAdmins = async () => {
     try {
@@ -82,8 +95,12 @@ const AdminManagement = () => {
 
   const fetchPresets = async () => {
     try {
-      const res = await apiClient.get('/admin-presets');
-      setPresets(res.data.data || {});
+      const [customRes, systemRes] = await Promise.all([
+        apiClient.get('/permission-presets'),
+        apiClient.get('/admin-presets'),
+      ]);
+      setPresets(customRes.data.data || []);
+      setSystemPresets(systemRes.data.data || {});
     } catch {
       // silent fail
     }
@@ -103,8 +120,15 @@ const AdminManagement = () => {
     }
     try {
       let permissions = undefined;
-      if (selectedPreset !== 'default' && presets[selectedPreset]) {
-        permissions = presets[selectedPreset].permissions;
+      if (selectedPreset !== 'default' && selectedPreset !== 'system') {
+        const preset = presets.find(p => p.id === selectedPreset);
+        permissions = preset?.permissions;
+      } else if (selectedPreset === 'system') {
+        // Find selected system preset
+        for (const [key, preset] of Object.entries(systemPresets)) {
+          permissions = (preset as any).permissions;
+          break;
+        }
       }
       await apiClient.post('/admins', { ...form, permissions });
       toast({ title: 'Berhasil', description: `Admin ${form.name} berhasil ditambahkan` });
@@ -151,218 +175,154 @@ const AdminManagement = () => {
     }
   };
 
-  const filtered = admins.filter(a =>
-    a.name.toLowerCase().includes(search.toLowerCase()) ||
-    a.email.toLowerCase().includes(search.toLowerCase())
-  );
-
-  if (!isOwner) {
-    return (
-      <MainLayout title="Kelola Admin" subtitle="Halaman ini hanya untuk Owner">
-        <div className="py-12 text-center text-muted-foreground">
-          <Shield className="h-12 w-12 mx-auto mb-4 text-muted-foreground/30" />
-          <p className="text-lg font-medium">Akses Ditolak</p>
-          <p className="text-sm">Halaman ini hanya dapat diakses oleh Owner.</p>
+  const FormDialog = ({ open, onOpenChange, title }: { open: boolean; onOpenChange: (v: boolean) => void; title: string }) => (
+    <Dialog open={open} onOpenChange={v => onOpenChange(v)}>
+      <DialogContent>
+        <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
+        <div className="space-y-4 pt-4">
+          <div className="space-y-1.5">
+            <Label>Nama Admin *</Label>
+            <Input placeholder="Nama admin" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Email *</Label>
+            <Input type="email" placeholder="admin@example.com" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Password *</Label>
+            <Input type="password" placeholder="Minimal 6 karakter" value={form.password} onChange={e => setForm(p => ({ ...p, password: e.target.value }))} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Template Permission</Label>
+            <select
+              value={selectedPreset}
+              onChange={e => setSelectedPreset(e.target.value)}
+              className="w-full px-3 py-2 border rounded-md text-sm"
+            >
+              <option value="default">Default Permissions</option>
+              <optgroup label="System Presets">
+                {Object.entries(systemPresets).map(([key, preset]: [string, any]) => (
+                  <option key={key} value={key}>{preset.name}</option>
+                ))}
+              </optgroup>
+              <optgroup label="Custom Presets">
+                {presets.map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </optgroup>
+            </select>
+          </div>
         </div>
-      </MainLayout>
-    );
-  }
+        <div className="flex justify-end gap-2 mt-6">
+          <Button variant="outline" onClick={() => { onOpenChange(false); }}>Batal</Button>
+          <Button onClick={handleCreate}>Tambah Admin</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
 
   return (
     <MainLayout title="Kelola Admin" subtitle="Tambah dan atur permission admin">
-      <div className="mb-5 grid gap-4 sm:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Admin</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{admins.length}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Admin Aktif</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-success">{admins.filter(a => a.isActive).length}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Admin Nonaktif</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-destructive">{admins.filter(a => !a.isActive).length}</div>
-          </CardContent>
-        </Card>
+      <div className="space-y-6">
+        <Tabs defaultValue="admins" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="admins">Admin Management</TabsTrigger>
+            <TabsTrigger value="presets">Permission Presets</TabsTrigger>
+          </TabsList>
+
+          {/* Tab 1: Admin Management */}
+          <TabsContent value="admins" className="space-y-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>Data Admin</CardTitle>
+                <Button size="sm" onClick={() => { setForm({ name: '', email: '', password: '' }); setIsAddOpen(true); }}>
+                  <Plus size={16} className="mr-1" /> Tambah Admin
+                </Button>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="relative">
+                  <Search size={18} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <Input placeholder="Cari admin..." value={search} onChange={e => setSearch(e.target.value)} className="pl-8" />
+                </div>
+
+                {isLoading ? (
+                  <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => (<Skeleton key={i} className="h-12 w-full" />))}</div>
+                ) : admins.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">Tidak ada admin</div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-muted/50">
+                          <th className="text-left py-2 px-4 font-semibold">Nama</th>
+                          <th className="text-left py-2 px-4 font-semibold">Email</th>
+                          <th className="text-center py-2 px-4 font-semibold">Permission</th>
+                          <th className="text-center py-2 px-4 font-semibold">Status</th>
+                          <th className="text-center py-2 px-4 font-semibold">Aksi</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {admins
+                          .filter(a => a.name.toLowerCase().includes(search.toLowerCase()) || a.email.toLowerCase().includes(search.toLowerCase()))
+                          .map(admin => (
+                            <tr key={admin.id} className="border-b hover:bg-muted/50">
+                              <td className="py-2 px-4 font-medium">{admin.name}</td>
+                              <td className="py-2 px-4 text-xs">{admin.email}</td>
+                              <td className="py-2 px-4 text-center"><PermissionSummary permissions={admin.permissions} /></td>
+                              <td className="py-2 px-4 text-center">
+                                {admin.isActive
+                                  ? <Badge className="bg-green-100 text-green-800">Aktif</Badge>
+                                  : <Badge variant="outline" className="text-red-700">Tidak Aktif</Badge>}
+                              </td>
+                              <td className="py-2 px-4 text-center">
+                                <div className="flex justify-center gap-2">
+                                  <Button variant="ghost" size="sm" onClick={() => setEditAdmin(admin)} title="Edit Permission">
+                                    <Shield size={16} />
+                                  </Button>
+                                  <Button variant="ghost" size="sm" onClick={() => handleToggleActive(admin)} title={admin.isActive ? 'Nonaktifkan' : 'Aktifkan'}>
+                                    {admin.isActive ? <PowerOff size={16} /> : <Power size={16} />}
+                                  </Button>
+                                  <Button variant="ghost" size="sm" onClick={() => handleResetPassword(admin)} title="Reset Password">
+                                    <Key size={16} />
+                                  </Button>
+                                  <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                      <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
+                                        <Trash2 size={16} />
+                                      </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                      <AlertDialogHeader>
+                                        <AlertDialogTitle>Hapus Admin?</AlertDialogTitle>
+                                        <AlertDialogDescription>Apakah Anda yakin ingin menghapus {admin.name}?</AlertDialogDescription>
+                                      </AlertDialogHeader>
+                                      <AlertDialogFooter>
+                                        <AlertDialogCancel>Batal</AlertDialogCancel>
+                                        <AlertDialogAction onClick={() => handleDelete(admin)} className="bg-destructive hover:bg-destructive/90">Hapus</AlertDialogAction>
+                                      </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                  </AlertDialog>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Tab 2: Permission Presets */}
+          <TabsContent value="presets" className="space-y-4">
+            <PresetsManager presets={presets} systemPresets={systemPresets} onPresetsChange={fetchPresets} />
+          </TabsContent>
+        </Tabs>
       </div>
 
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="relative w-64">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input placeholder="Cari admin..." className="pl-9 h-9" value={search} onChange={e => setSearch(e.target.value)} />
-        </div>
-        <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-          <DialogTrigger asChild>
-            <Button size="sm"><Plus className="mr-1.5 h-4 w-4" />Tambah Admin</Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-lg">
-            <DialogHeader><DialogTitle>Tambah Admin Baru</DialogTitle></DialogHeader>
-            <div className="space-y-4 pt-2">
-              <div className="space-y-1.5">
-                <Label>Nama *</Label>
-                <Input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="Nama lengkap" />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Email *</Label>
-                <Input type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} placeholder="email@domain.com" />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Password *</Label>
-                <Input type="password" value={form.password} onChange={e => setForm(p => ({ ...p, password: e.target.value }))} placeholder="Min. 6 karakter" />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Template Permission</Label>
-                <select
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
-                  value={selectedPreset}
-                  onChange={e => setSelectedPreset(e.target.value)}
-                >
-                  <option value="default">Default (Semua modul aktif)</option>
-                  {Object.entries(presets).map(([key, val]: [string, any]) => (
-                    <option key={key} value={key}>{val.name} — {val.description}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <Button variant="outline" onClick={() => setIsAddOpen(false)}>Batal</Button>
-                <Button onClick={handleCreate}>Simpan</Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      {isLoading ? (
-        <>
-          <div className="mb-5 grid gap-4 sm:grid-cols-3">
-            {[1, 2, 3].map(i => (
-              <Card key={i}>
-                <CardHeader className="pb-2">
-                  <Skeleton className="h-4 w-24" />
-                </CardHeader>
-                <CardContent>
-                  <Skeleton className="h-8 w-16" />
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <Skeleton className="h-9 w-64" />
-            <Skeleton className="h-9 w-32" />
-          </div>
-          <Card>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-muted/40">
-                      <th className="px-4 py-3 text-left"><Skeleton className="h-4 w-16" /></th>
-                      <th className="px-4 py-3 text-left"><Skeleton className="h-4 w-20" /></th>
-                      <th className="px-4 py-3 text-center"><Skeleton className="h-4 w-12" /></th>
-                      <th className="px-4 py-3 text-center"><Skeleton className="h-4 w-16" /></th>
-                      <th className="px-4 py-3 text-center"><Skeleton className="h-4 w-12" /></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[1, 2, 3, 4, 5].map(i => (
-                      <tr key={i} className="border-b">
-                        <td className="px-4 py-3"><Skeleton className="h-4 w-32" /></td>
-                        <td className="px-4 py-3"><Skeleton className="h-4 w-40" /></td>
-                        <td className="px-4 py-3"><Skeleton className="h-6 w-16 mx-auto" /></td>
-                        <td className="px-4 py-3"><Skeleton className="h-6 w-20 mx-auto" /></td>
-                        <td className="px-4 py-3"><Skeleton className="h-8 w-24 mx-auto" /></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
-        </>
-      ) : (
-        <Card>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-muted/40 text-xs text-muted-foreground">
-                    <th className="px-4 py-3 text-left font-semibold">Nama</th>
-                    <th className="px-4 py-3 text-left font-semibold">Email</th>
-                    <th className="px-4 py-3 text-center font-semibold">Status</th>
-                    <th className="px-4 py-3 text-center font-semibold">Permission</th>
-                    <th className="px-4 py-3 text-center font-semibold">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.length === 0 ? (
-                    <tr><td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">Tidak ada admin.</td></tr>
-                  ) : (
-                    filtered.map(admin => (
-                      <tr key={admin.id} className="border-b transition-colors hover:bg-muted/20">
-                        <td className="px-4 py-3 font-medium">{admin.name}</td>
-                        <td className="px-4 py-3 text-muted-foreground">{admin.email}</td>
-                        <td className="px-4 py-3 text-center">
-                          <Badge variant={admin.isActive ? 'outline' : 'destructive'} className="text-xs">
-                            {admin.isActive ? 'Aktif' : 'Nonaktif'}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <PermissionSummary permissions={admin.permissions} />
-                        </td>
-                         <td className="px-4 py-3">
-                           <div className="flex justify-center gap-1">
-                             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditAdmin(admin)} title="Edit Permission">
-                               <Shield className="h-3.5 w-3.5" />
-                             </Button>
-                             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleResetPassword(admin)} title="Reset Password">
-                               <Key className="h-3.5 w-3.5" />
-                             </Button>
-                             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleToggleActive(admin)} title={admin.isActive ? 'Nonaktifkan' : 'Aktifkan'}>
-                               {admin.isActive ? <PowerOff className="h-3.5 w-3.5 text-warning" /> : <Power className="h-3.5 w-3.5 text-success" />}
-                             </Button>
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" title="Hapus">
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>Hapus Admin</AlertDialogTitle>
-                                  <AlertDialogDescription>Apakah Anda yakin ingin menghapus admin <strong>{admin.name}</strong>?</AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Batal</AlertDialogCancel>
-                                  <AlertDialogAction className="bg-destructive hover:bg-destructive/90" onClick={() => handleDelete(admin)}>Hapus</AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {editAdmin && (
-        <PermissionEditor admin={editAdmin} onClose={() => setEditAdmin(null)} onSaved={() => { setEditAdmin(null); fetchAdmins(); }} presets={presets} />
-      )}
+      <PermissionEditor admin={editAdmin} onClose={() => setEditAdmin(null)} onSaved={() => { setEditAdmin(null); fetchAdmins(); }} />
+      <FormDialog open={isAddOpen} onOpenChange={setIsAddOpen} title="Tambah Admin Baru" />
     </MainLayout>
   );
 };
@@ -370,25 +330,21 @@ const AdminManagement = () => {
 const PermissionSummary = ({ permissions }: { permissions: Record<string, Record<string, boolean>> }) => {
   const modulesWithAccess = Object.keys(permissions || {}).filter(m => {
     const perms = permissions[m];
-    return perms && Object.values(perms).some(v => v);
-  });
-  return (
-    <div className="flex flex-wrap gap-1 justify-center">
-      {modulesWithAccess.length > 5 ? (
-        <Badge variant="secondary" className="text-xs">{modulesWithAccess.length} modul</Badge>
-      ) : (
-        modulesWithAccess.slice(0, 3).map(m => (
-          <Badge key={m} variant="secondary" className="text-xs">{m.split('.').pop()}</Badge>
-        ))
-      )}
-    </div>
-  );
+    return Object.values(perms).some(p => p === true);
+  }).length;
+  return <Badge variant="secondary">{modulesWithAccess} modul</Badge>;
 };
 
-const PermissionEditor = ({ admin, onClose, onSaved, presets }: { admin: Admin; onClose: () => void; onSaved: () => void; presets: Record<string, any> }) => {
+const PermissionEditor = ({ admin, onClose, onSaved }: { admin: Admin | null; onClose: () => void; onSaved: () => void }) => {
   const { toast } = useToast();
-  const [permissions, setPermissions] = useState<Record<string, Record<string, boolean>>>(admin.permissions || {});
+  const [permissions, setPermissions] = useState<Record<string, Record<string, boolean>>>({});
   const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (admin) {
+      setPermissions(admin.permissions || {});
+    }
+  }, [admin]);
 
   const togglePermission = (module: string, action: string) => {
     setPermissions(prev => ({
@@ -401,89 +357,272 @@ const PermissionEditor = ({ admin, onClose, onSaved, presets }: { admin: Admin; 
   };
 
   const handleSave = async () => {
+    if (!admin) return;
     try {
       setIsSaving(true);
       await apiClient.put(`/admins/${admin.id}/permissions`, { permissions });
       toast({ title: 'Berhasil', description: 'Permission berhasil diperbarui' });
       onSaved();
-    } catch {
+    } catch (err: any) {
       toast({ title: 'Error', description: 'Gagal menyimpan permission', variant: 'destructive' });
     } finally {
       setIsSaving(false);
     }
   };
 
-  const applyPreset = (presetKey: string) => {
-    const preset = presets[presetKey];
-    if (preset) {
-      setPermissions(preset.permissions);
+  if (!admin) return null;
+
+  return (
+    <Dialog open={Boolean(admin)} onOpenChange={v => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader><DialogTitle>Edit Permission — {admin.name}</DialogTitle></DialogHeader>
+
+        <div className="grid grid-cols-2 gap-6 py-4">
+          {/* Left: Permission Editor */}
+          <div className="space-y-4">
+            <h3 className="font-semibold text-sm">Atur Permission</h3>
+            <div className="overflow-y-auto max-h-80 space-y-2 border rounded-lg p-3">
+              {MODULES.map(mod => (
+                <div key={mod.key} className="border rounded p-2">
+                  <p className="text-sm font-medium mb-2">{mod.label}</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {PERMISSION_ACTIONS.map(a => (
+                      <label key={`${mod.key}-${a.key}`} className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 p-1 rounded text-xs">
+                        <Checkbox
+                          checked={permissions[mod.key]?.[a.key] || false}
+                          onCheckedChange={() => togglePermission(mod.key, a.key)}
+                        />
+                        {a.label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Right: Permission Preview */}
+          <div className="space-y-4">
+            <PermissionPreview permissions={permissions} title="Preview Akses" />
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 mt-6">
+          <Button variant="outline" onClick={onClose}>Batal</Button>
+          <Button onClick={handleSave} disabled={isSaving}>{isSaving ? 'Menyimpan...' : 'Simpan Permission'}</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+const PresetsManager = ({ presets, systemPresets, onPresetsChange }: { presets: PermissionPreset[]; systemPresets: Record<string, any>; onPresetsChange: () => void }) => {
+  const { toast } = useToast();
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [editPreset, setEditPreset] = useState<PermissionPreset | null>(null);
+  const [form, setForm] = useState({ name: '', description: '' });
+
+  const handleDelete = async (preset: PermissionPreset) => {
+    try {
+      await apiClient.delete(`/permission-presets/${preset.slug}`);
+      toast({ title: 'Berhasil', description: 'Preset berhasil dihapus' });
+      onPresetsChange();
+    } catch {
+      toast({ title: 'Error', description: 'Gagal menghapus preset', variant: 'destructive' });
+    }
+  };
+
+  const handleDuplicate = async (preset: PermissionPreset) => {
+    try {
+      await apiClient.post(`/permission-presets/${preset.slug}/duplicate`);
+      toast({ title: 'Berhasil', description: 'Preset berhasil diduplikasi' });
+      onPresetsChange();
+    } catch {
+      toast({ title: 'Error', description: 'Gagal menduplikasi preset', variant: 'destructive' });
     }
   };
 
   return (
-    <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Edit Permission — {admin.name}</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4 pt-2">
-          <div className="flex gap-2 items-center">
-            <Label className="shrink-0">Template:</Label>
-            <select
-              className="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-              onChange={e => applyPreset(e.target.value)}
-              defaultValue=""
-            >
-              <option value="" disabled>Pilih template...</option>
-              {Object.entries(presets).map(([key, val]: [string, any]) => (
-                <option key={key} value={key}>{val.name}</option>
-              ))}
-            </select>
-          </div>
-
-          <Tabs defaultValue="modules">
-            <TabsList>
-              <TabsTrigger value="modules">Modules</TabsTrigger>
-            </TabsList>
-            <TabsContent value="modules">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-muted/40 text-xs text-muted-foreground">
-                      <th className="px-3 py-2 text-left font-semibold">Modul</th>
-                      {PERMISSION_ACTIONS.map(a => (
-                        <th key={a.key} className="px-3 py-2 text-center font-semibold">
-                          <a.icon className="h-3.5 w-3.5 mx-auto" />
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {MODULES.map(mod => (
-                      <tr key={mod.key} className="border-b hover:bg-muted/20">
-                        <td className="px-3 py-2 font-medium text-sm">{mod.label}</td>
-                        {PERMISSION_ACTIONS.map(a => (
-                          <td key={a.key} className="px-3 py-2 text-center">
-                            <input
-                              type="checkbox"
-                              checked={permissions[mod.key]?.[a.key] || false}
-                              onChange={() => togglePermission(mod.key, a.key)}
-                              className="h-4 w-4 rounded border-input"
-                            />
-                          </td>
-                        ))}
-                      </tr>
+    <div className="space-y-4">
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>System Presets (Built-in)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {Object.entries(systemPresets).map(([key, preset]: [string, any]) => (
+              <Card key={key} className="p-4 border">
+                <h4 className="font-semibold text-sm">{preset.name}</h4>
+                <p className="text-xs text-muted-foreground mt-1">{preset.description}</p>
+                <div className="mt-3 flex flex-wrap gap-1">
+                  {Object.entries(preset.permissions)
+                    .filter(([_, perms]: [string, any]) => Object.values(perms).some((p: boolean) => p))
+                    .slice(0, 5)
+                    .map(([mod, _]: [string, any]) => (
+                      <Badge key={mod} variant="outline" className="text-xs">{mod}</Badge>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-            </TabsContent>
-          </Tabs>
-
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={onClose}>Batal</Button>
-            <Button onClick={handleSave} disabled={isSaving}>{isSaving ? 'Menyimpan...' : 'Simpan'}</Button>
+                </div>
+              </Card>
+            ))}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>Custom Presets</CardTitle>
+          <Button size="sm" onClick={() => { setForm({ name: '', description: '' }); setIsCreateOpen(true); }}>
+            <Plus size={16} className="mr-1" /> Buat Preset Baru
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {presets.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">Belum ada custom preset</div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {presets.map(preset => (
+                <Card key={preset.id} className="p-4 border">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-sm">{preset.name}</h4>
+                      <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{preset.description}</p>
+                    </div>
+                    {!preset.isSystem && <Badge variant="secondary" className="ml-2 text-xs">Custom</Badge>}
+                  </div>
+                  <div className="mt-3 flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => handleDuplicate(preset)}>
+                      <Copy size={14} className="mr-1" /> Copy
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => handleDelete(preset)}
+                    >
+                      <Trash size={14} />
+                    </Button>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Create/Edit Dialog */}
+      <CreatePresetDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} onSaved={onPresetsChange} />
+    </div>
+  );
+};
+
+const CreatePresetDialog = ({ open, onOpenChange, onSaved }: { open: boolean; onOpenChange: (v: boolean) => void; onSaved: () => void }) => {
+  const { toast } = useToast();
+  const [form, setForm] = useState({ name: '', description: '' });
+  const [permissions, setPermissions] = useState<Record<string, Record<string, boolean>>>({});
+  const [isSaving, setIsSaving] = useState(false);
+
+  const initializePermissions = () => {
+    const newPerms: Record<string, Record<string, boolean>> = {};
+    MODULES.forEach(m => {
+      newPerms[m.key] = {
+        view: false,
+        create: false,
+        update: false,
+        delete: false,
+        print: false,
+      };
+    });
+    setPermissions(newPerms);
+  };
+
+  useEffect(() => {
+    if (open) {
+      initializePermissions();
+      setForm({ name: '', description: '' });
+    }
+  }, [open]);
+
+  const togglePermission = (module: string, action: string) => {
+    setPermissions(prev => ({
+      ...prev,
+      [module]: {
+        ...prev[module],
+        [action]: !prev[module]?.[action],
+      },
+    }));
+  };
+
+  const handleSave = async () => {
+    if (!form.name.trim()) {
+      toast({ title: 'Error', description: 'Nama preset wajib diisi', variant: 'destructive' });
+      return;
+    }
+    try {
+      setIsSaving(true);
+      await apiClient.post('/permission-presets', {
+        name: form.name,
+        description: form.description,
+        permissions,
+      });
+      toast({ title: 'Berhasil', description: 'Preset berhasil dibuat' });
+      onOpenChange(false);
+      onSaved();
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.response?.data?.message || 'Gagal membuat preset', variant: 'destructive' });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader><DialogTitle>Buat Permission Preset Baru</DialogTitle></DialogHeader>
+
+        <div className="grid grid-cols-2 gap-6 py-4">
+          {/* Left: Basic Info + Editor */}
+          <div className="space-y-4">
+            <div>
+              <Label>Nama Preset *</Label>
+              <Input placeholder="e.g., Sales Manager" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} className="mt-1" />
+            </div>
+            <div>
+              <Label>Deskripsi</Label>
+              <Textarea placeholder="Deskripsi preset ini..." value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} className="mt-1" rows={2} />
+            </div>
+
+            <div>
+              <Label className="text-sm">Set Permission</Label>
+              <div className="mt-2 space-y-2 border rounded-lg p-3 max-h-64 overflow-y-auto">
+                {MODULES.map(mod => (
+                  <div key={mod.key} className="border rounded p-2">
+                    <p className="text-xs font-medium mb-1">{mod.label}</p>
+                    <div className="grid grid-cols-2 gap-1">
+                      {PERMISSION_ACTIONS.map(a => (
+                        <label key={`${mod.key}-${a.key}`} className="flex items-center gap-2 cursor-pointer text-xs hover:bg-muted/50 p-0.5 rounded">
+                          <Checkbox
+                            checked={permissions[mod.key]?.[a.key] || false}
+                            onCheckedChange={() => togglePermission(mod.key, a.key)}
+                          />
+                          {a.label}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Right: Preview */}
+          <div>
+            <PermissionPreview permissions={permissions} title="Preview Preset" />
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 mt-6">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Batal</Button>
+          <Button onClick={handleSave} disabled={isSaving}>{isSaving ? 'Membuat...' : 'Buat Preset'}</Button>
         </div>
       </DialogContent>
     </Dialog>

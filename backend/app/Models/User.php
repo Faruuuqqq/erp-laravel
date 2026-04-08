@@ -45,6 +45,12 @@ class User extends Authenticatable
         return $query->where('role', 'admin');
     }
 
+    // Relationships
+    public function permissionPresets()
+    {
+        return $this->hasMany(PermissionPreset::class);
+    }
+
     public function isOwner(): bool
     {
         return $this->role === 'owner';
