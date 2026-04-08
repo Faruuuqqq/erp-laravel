@@ -1,6 +1,5 @@
 import { ReactNode } from 'react';
-import { cn } from '@/lib/utils';
-import { formatRupiah } from '@/data/mockData';
+import { cn, formatCurrency } from '@/lib/utils';
 import { ArrowUpRight, ArrowDownRight, Minus } from 'lucide-react';
 
 interface StatCardProps {
@@ -79,7 +78,7 @@ export const StatCard = ({
 
       <div className="mt-4">
         <p className={cn('text-2xl font-bold tabular', colors.text)}>
-          {typeof value === 'number' ? formatRupiah(value) : value}
+          {typeof value === 'number' ? formatCurrency(value) : value}
         </p>
         <p className="mt-1 text-sm text-muted-foreground">{title}</p>
         {subValue && <p className="mt-0.5 text-xs text-muted-foreground">{subValue}</p>}
