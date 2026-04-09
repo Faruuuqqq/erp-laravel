@@ -91,7 +91,7 @@ const CustomerPage = () => {
   const deleteMutation = useDeleteCustomer();
 
   const customers = (data?.data?.data ?? []) as Customer[];
-  const warehouses = (warehousesData?.data ?? []) as Warehouse[];
+  const warehouses = (warehousesData?.data?.data ?? []) as Warehouse[];
 
   const totalPiutang = customers.reduce((s, c) => s + (c.balance || 0), 0);
   const overLimit = customers.filter(c => (c.creditLimit || 0) > 0 && (c.balance || 0) > (c.creditLimit || 0)).length;
@@ -275,13 +275,13 @@ const CustomerPage = () => {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label>Warehouse</Label>
-                <Select value={form.warehouse_id} onValueChange={v => setForm(p => ({ ...p, warehouse_id: v }))}>
+                <Select value={form.warehouse_id || ''} onValueChange={v => setForm(p => ({ ...p, warehouse_id: v === 'none' ? '' : v }))}>
                   <SelectTrigger>
                     <SelectValue placeholder="Pilih warehouse" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Tidak ada</SelectItem>
-                    {warehouses.map(w => (
+                    <SelectItem value="none">Tidak ada</SelectItem>
+                    {(warehouses ?? []).map(w => (
                       <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
                     ))}
                   </SelectContent>

@@ -42,7 +42,7 @@ const SaldoStok = () => {
 
   const items = data?.data?.data?.items ?? [];
   const totalValue = data?.data?.data?.totalValue ?? 0;
-  const warehouses = warehousesData?.data ?? [];
+  const warehouses = warehousesData?.data?.data ?? [];
 
   const categories = Array.from(new Set(items.map((p: any) => p.category).filter(Boolean)));
 
