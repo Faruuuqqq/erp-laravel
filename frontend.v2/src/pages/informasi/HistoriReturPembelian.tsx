@@ -26,12 +26,13 @@ const HistoriReturPembelian = () => {
     perPage,
   });
 
-  const returns = data?.data || [];
-  const meta = data?.meta;
+  const returns = data?.data?.data ?? [];
+  const meta = data?.data?.meta;
 
-  const totalReturns = meta?.total || 0;
-  const totalItems = returns?.reduce((sum, item) => sum + item.itemsCount, 0) || 0;
-  const totalValue = returns?.reduce((sum, item) => sum + item.total, 0) || 0;
+  const totalReturns = meta?.total ?? 0;
+  const returnsArray = Array.isArray(returns) ? returns : [];
+  const totalItems = returnsArray.reduce((sum, item) => sum + (item.itemsCount || 0), 0);
+  const totalValue = returnsArray.reduce((sum, item) => sum + (item.total || 0), 0);
 
   const columns: ColumnDef[] = [
     {

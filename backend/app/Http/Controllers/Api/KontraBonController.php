@@ -68,7 +68,7 @@ class KontraBonController extends Controller
         $interestAmount = $totalAmount * ($interestRate / 100);
         $grandTotal = $totalAmount + $interestAmount;
 
-        $aging = $this->calculateAging($transactions);
+        $aging = $this->calculateAgingFromTransactions($transactions);
 
         $data = [
             'billingNumber' => 'KB-' . now()->format('Ymd-His'),
@@ -119,7 +119,7 @@ class KontraBonController extends Controller
             ->orderBy('date')
             ->get();
 
-        $aging = $this->calculateAging($transactions);
+        $aging = $this->calculateAgingFromTransactions($transactions);
 
         return response()->json([
             'data' => [
@@ -130,7 +130,7 @@ class KontraBonController extends Controller
         ]);
     }
 
-    private function calculateAging($transactions): array
+    private function calculateAgingFromTransactions($transactions): array
     {
         $current = $transactions->whereBetween('date', [now()->subDays(30), now()])->sum('remaining');
         $days_1_30 = $transactions->whereBetween('date', [now()->subDays(60), now()->subDays(31)])->sum('remaining');

@@ -26,11 +26,12 @@ const HistoriPembayaranUtang = () => {
     perPage,
   });
 
-  const payments = data?.data || [];
-  const meta = data?.meta;
+  const payments = data?.data?.data ?? [];
+  const meta = data?.data?.meta;
 
-  const totalPaid = payments?.reduce((sum, item) => sum + item.amount, 0) || 0;
-  const paymentCount = meta?.total || 0;
+  const paymentsArray = Array.isArray(payments) ? payments : [];
+  const totalPaid = paymentsArray.reduce((sum, item) => sum + (item.amount || 0), 0);
+  const paymentCount = meta?.total ?? 0;
 
   const columns: ColumnDef[] = [
     {
