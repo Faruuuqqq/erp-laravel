@@ -44,15 +44,18 @@ interface PermissionPreviewProps {
 
 export const PermissionPreview = ({ permissions, title = 'Permission Preview' }: PermissionPreviewProps) => {
   const getAccessLevel = () => {
+    if (!permissions) return 0;
     const modules = Object.keys(permissions);
     const modulesWithAccess = modules.filter(m => {
       const perms = permissions[m];
+      if (!perms) return false;
       return Object.values(perms).some(p => p === true);
     }).length;
     return modulesWithAccess;
   };
 
   const hasFullAccess = (module: string) => {
+    if (!permissions) return false;
     const perms = permissions[module];
     if (!perms) return false;
     const actions = Object.values(perms);
@@ -60,6 +63,7 @@ export const PermissionPreview = ({ permissions, title = 'Permission Preview' }:
   };
 
   const hasReadOnly = (module: string) => {
+    if (!permissions) return false;
     const perms = permissions[module];
     if (!perms) return false;
     const hasView = perms.view === true;
@@ -68,6 +72,7 @@ export const PermissionPreview = ({ permissions, title = 'Permission Preview' }:
   };
 
   const getModuleStatus = (module: string) => {
+    if (!permissions) return 'no-access';
     const perms = permissions[module];
     if (!perms) return 'no-access';
     const trueCount = Object.values(perms).filter(p => p === true).length;
@@ -76,6 +81,16 @@ export const PermissionPreview = ({ permissions, title = 'Permission Preview' }:
     if (perms.view === true && trueCount === 1) return 'read-only';
     return 'limited-access';
   };
+
+  if (!permissions) {
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <p className="text-sm text-muted-foreground">No permissions data available</p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-4">
