@@ -23,8 +23,15 @@ class ReportController extends Controller
     {
         $date = $request->date ?? today()->toDateString();
 
-        $sales     = Transaction::whereDate('date', $date)->sales()->get();
-        $purchases = Transaction::whereDate('date', $date)->purchases()->get();
+        $sales = Transaction::whereDate('date', $date)->sales()
+            ->select(['id', 'invoice_number', 'date', 'type', 'customer_id', 'total', 'status', 'created_at'])
+            ->with(['customer:id,name'])
+            ->get();
+        
+        $purchases = Transaction::whereDate('date', $date)->purchases()
+            ->select(['id', 'invoice_number', 'date', 'type', 'supplier_id', 'total', 'status', 'created_at'])
+            ->with(['supplier:id,name'])
+            ->get();
 
         $totalSales     = $sales->sum('total');
         $totalPurchases = $purchases->sum('total');
@@ -48,7 +55,9 @@ class ReportController extends Controller
      */
     public function stock(): JsonResponse
     {
-        $products = Product::with('category')->get();
+        $products = Product::with('category:id,name')
+            ->select(['id', 'code', 'name', 'category_id', 'stock', 'unit', 'buy_price', 'sell_price'])
+            ->get();
 
         $data = $products->map(fn($p) => [
             'id'         => (string) $p->id,
@@ -70,16 +79,12 @@ class ReportController extends Controller
         ]);
     }
 
-    /**
-     * GET /api/reports/balance
-     * Laporan laba-rugi ringkasan berdasarkan periode.
-     */
     public function balance(Request $request): JsonResponse
     {
         $from = $request->from ?? today()->startOfMonth()->toDateString();
         $to   = $request->to   ?? today()->toDateString();
 
-        $totalSales     = Transaction::whereBetween('date', [$from, $to])->sales()->sum('total');
+        $totalSales = Transaction::whereBetween('date', [$from, $to])->sales()->sum('total');
         $totalPurchases = Transaction::whereBetween('date', [$from, $to])->purchases()->sum('total');
 
         return response()->json([

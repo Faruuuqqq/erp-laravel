@@ -15,7 +15,11 @@ class KontraBonController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $query = Transaction::with(['customer'])
+        $query = Transaction::with(['customer:id,name'])
+            ->select([
+                'id', 'invoice_number', 'date', 'type', 
+                'customer_id', 'total', 'paid', 'remaining', 'created_at'
+            ])
             ->whereIn('type', ['penjualan_tunai', 'penjualan_kredit'])
             ->where('remaining', '>', 0)
             ->orderBy('date');
@@ -64,12 +68,7 @@ class KontraBonController extends Controller
         $interestAmount = $totalAmount * ($interestRate / 100);
         $grandTotal = $totalAmount + $interestAmount;
 
-        $aging = [
-            'current' => $transactions->whereBetween('date', [now()->subDays(30), now()])->sum('remaining'),
-            'days_1_30' => $transactions->whereBetween('date', [now()->subDays(60), now()->subDays(31)])->sum('remaining'),
-            'days_31_60' => $transactions->whereBetween('date', [now()->subDays(90), now()->subDays(61)])->sum('remaining'),
-            'days_60_plus' => $transactions->where('date', '<', now()->subDays(90))->sum('remaining'),
-        ];
+        $aging = $this->calculateAging($transactions);
 
         $data = [
             'billingNumber' => 'KB-' . now()->format('Ymd-His'),
@@ -114,18 +113,13 @@ class KontraBonController extends Controller
         $customer = Customer::find($validated['customer_id']);
         
         $transactions = Transaction::with('details')
+            ->select(['id', 'invoice_number', 'date', 'total', 'paid', 'remaining'])
             ->where('customer_id', $customer->id)
             ->where('remaining', '>', 0)
             ->orderBy('date')
             ->get();
 
-        $aging = [
-            'current' => $transactions->whereBetween('date', [now()->subDays(30), now()])->sum('remaining'),
-            'days_1_30' => $transactions->whereBetween('date', [now()->subDays(60), now()->subDays(31)])->sum('remaining'),
-            'days_31_60' => $transactions->whereBetween('date', [now()->subDays(90), now()->subDays(61)])->sum('remaining'),
-            'days_60_plus' => $transactions->where('date', '<', now()->subDays(90))->sum('remaining'),
-            'total' => $transactions->sum('remaining'),
-        ];
+        $aging = $this->calculateAging($transactions);
 
         return response()->json([
             'data' => [
@@ -134,5 +128,21 @@ class KontraBonController extends Controller
                 'aging' => $aging,
             ],
         ]);
+    }
+
+    private function calculateAging($transactions): array
+    {
+        $current = $transactions->whereBetween('date', [now()->subDays(30), now()])->sum('remaining');
+        $days_1_30 = $transactions->whereBetween('date', [now()->subDays(60), now()->subDays(31)])->sum('remaining');
+        $days_31_60 = $transactions->whereBetween('date', [now()->subDays(90), now()->subDays(61)])->sum('remaining');
+        $days_60_plus = $transactions->where('date', '<', now()->subDays(90))->sum('remaining');
+
+        return [
+            'current' => $current,
+            'days_1_30' => $days_1_30,
+            'days_31_60' => $days_31_60,
+            'days_60_plus' => $days_60_plus,
+            'total' => $current + $days_1_30 + $days_31_60 + $days_60_plus,
+        ];
     }
 }

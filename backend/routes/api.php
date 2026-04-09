@@ -20,6 +20,8 @@ use App\Http\Controllers\Api\SettingsController;
 use App\Http\Controllers\Api\SupplierController;
 use App\Http\Controllers\Api\TransactionController;
 use App\Http\Controllers\Api\WarehouseController;
+use App\Http\Controllers\Api\ExportController;
+use App\Http\Controllers\Api\BatchController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -70,6 +72,20 @@ Route::middleware(['auth:sanctum', 'throttle:60,1'])->group(function () {
     Route::apiResource('kontra-bon', KontraBonController::class)->only(['index']);
     Route::post('kontra-bon/print', [KontraBonController::class, 'printBilling']);
     Route::get('kontra-bon/aging', [KontraBonController::class, 'calculateAging']);
+
+    // ── Export CSV (Admin & Owner) ──────────────────────────────────────────
+    Route::get('export/products', [ExportController::class, 'products']);
+    Route::get('export/customers', [ExportController::class, 'customers']);
+    Route::get('export/suppliers', [ExportController::class, 'suppliers']);
+    Route::get('export/transactions', [ExportController::class, 'transactions']);
+    Route::get('export/expenses', [ExportController::class, 'expenses']);
+
+    // ── Batch Operations (Admin & Owner) ─────────────────────────────────────
+    Route::post('batch/products/delete', [BatchController::class, 'deleteProducts']);
+    Route::post('batch/products/update', [BatchController::class, 'updateProducts']);
+    Route::post('batch/customers/delete', [BatchController::class, 'deleteCustomers']);
+    Route::post('batch/customers/verify', [BatchController::class, 'verifyCustomers']);
+    Route::post('batch/suppliers/delete', [BatchController::class, 'deleteSuppliers']);
 
     // ── Returns (Admin & Owner) ────────────────────────────────────────────────
     Route::apiResource('return-sales', ReturnSaleController::class);

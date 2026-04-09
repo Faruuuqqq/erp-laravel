@@ -28,7 +28,13 @@ class TransactionController extends Controller
     // ─── Index ────────────────────────────────────────────────────────────────
     public function index(Request $request)
     {
-        $query = Transaction::with(['customer', 'supplier'])
+        $query = Transaction::with(['customer:id,name', 'supplier:id,name'])
+            ->select([
+                'id', 'invoice_number', 'date', 'due_date', 'type', 
+                'customer_id', 'supplier_id', 'sales_rep_id',
+                'discount', 'tax', 'subtotal', 'total', 'paid', 'remaining',
+                'status', 'notes', 'created_at'
+            ])
             ->search($request->search);
 
         if ($request->type) {

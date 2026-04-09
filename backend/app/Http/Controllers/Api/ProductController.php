@@ -11,13 +11,21 @@ use App\Models\Product;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\ResourceCollection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 class ProductController extends Controller
 {
+    private const CACHE_TTL = 3600; // 1 hour
+
     public function index(Request $request): ResourceCollection
     {
-        $query = Product::with(['category', 'warehouse'])
+        $query = Product::with(['category:id,name', 'warehouse:id,name'])
+            ->select([
+                'id', 'code', 'name', 'category_id', 'buy_price', 
+                'sell_price', 'stock', 'min_stock', 'unit', 'warehouse_id',
+                'total_sales', 'avg_daily_sales', 'days_of_stock', 'created_at'
+            ])
             ->search($request->search);
 
         if ($request->category) {
@@ -34,7 +42,10 @@ class ProductController extends Controller
 
     public function store(StoreProductRequest $request): JsonResponse
     {
-        $category = Category::where('name', $request->category)->firstOrCreate(['name' => $request->category]);
+        $category = Category::firstOrCreate(
+            ['name' => $request->category],
+            ['user_id' => auth()->user()->id]
+        );
 
         $product = Product::create([
             'code'         => $request->code,
@@ -48,6 +59,9 @@ class ProductController extends Controller
             'warehouse_id' => $request->warehouseId,
         ]);
 
+        Cache::forget('categories_' . auth()->user()->id);
+        Cache::forget('products_count');
+
         return response()->json([
             'data'    => new ProductResource($product->load('category')),
             'message' => 'Produk berhasil ditambahkan.',
@@ -56,7 +70,8 @@ class ProductController extends Controller
 
     public function show(Product $product): JsonResponse
     {
-        return response()->json(['data' => new ProductResource($product->load(['category', 'warehouse']))]);
+        $product->load(['category', 'warehouse']);
+        return response()->json(['data' => new ProductResource($product)]);
     }
 
     public function update(UpdateProductRequest $request, Product $product): JsonResponse
@@ -64,7 +79,10 @@ class ProductController extends Controller
         $data = [];
 
         if ($request->has('category')) {
-            $category = Category::where('name', $request->category)->firstOrCreate(['name' => $request->category]);
+            $category = Category::firstOrCreate(
+                ['name' => $request->category],
+                ['user_id' => auth()->user()->id]
+            );
             $data['category_id'] = $category->id;
         }
 
@@ -87,6 +105,9 @@ class ProductController extends Controller
 
         $product->update($data);
 
+        Cache::forget('categories_' . auth()->user()->id);
+        Cache::forget('products_count');
+
         return response()->json([
             'data'    => new ProductResource($product->fresh(['category', 'warehouse'])),
             'message' => 'Produk berhasil diperbarui.',
@@ -95,15 +116,13 @@ class ProductController extends Controller
 
     public function destroy(Product $product): JsonResponse
     {
-        $product->delete(); // SoftDelete
+        $product->delete();
+
+        Cache::forget('products_count');
 
         return response()->json(['message' => 'Produk berhasil dihapus.']);
     }
 
-    /**
-     * PATCH /api/products/{product}/stock
-     * Update stok manual (penyesuaian inventaris).
-     */
     public function updateStock(Request $request, Product $product): JsonResponse
     {
         $validated = $request->validate([
@@ -112,6 +131,8 @@ class ProductController extends Controller
         ]);
 
         $product->update(['stock' => $validated['stock']]);
+
+        Cache::forget('products_count');
 
         return response()->json([
             'data'    => new ProductResource($product->fresh('category')),
