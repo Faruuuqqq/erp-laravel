@@ -330,6 +330,7 @@ const AdminManagement = () => {
 const PermissionSummary = ({ permissions }: { permissions: Record<string, Record<string, boolean>> }) => {
   const modulesWithAccess = Object.keys(permissions || {}).filter(m => {
     const perms = permissions[m];
+    if (!perms) return false;
     return Object.values(perms).some(p => p === true);
   }).length;
   return <Badge variant="secondary">{modulesWithAccess} modul</Badge>;
@@ -456,7 +457,7 @@ const PresetsManager = ({ presets, systemPresets, onPresetsChange }: { presets: 
                 <p className="text-xs text-muted-foreground mt-1">{preset.description}</p>
                 <div className="mt-3 flex flex-wrap gap-1">
                   {Object.entries(preset.permissions)
-                    .filter(([_, perms]: [string, any]) => Object.values(perms).some((p: boolean) => p))
+                    .filter(([_, perms]: [string, any]) => perms && Object.values(perms).some((p: boolean) => p))
                     .slice(0, 5)
                     .map(([mod, _]: [string, any]) => (
                       <Badge key={mod} variant="outline" className="text-xs">{mod}</Badge>
