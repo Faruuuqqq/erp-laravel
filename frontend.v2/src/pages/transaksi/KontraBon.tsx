@@ -36,7 +36,7 @@ const KontraBon = () => {
   const { data: customersData } = useCustomers({ per_page: 100 });
   const { data, isLoading, refetch } = useKontraBon({ perPage: 100 });
   const customers = (customersData?.data?.data ?? []) as Customer[];
-  const invoices = (data?.data ?? []) as Invoice[];
+  const invoices = Array.isArray(data?.data) ? (data.data as Invoice[]) : [];
 
   const grouped = invoices.reduce<Record<string, Invoice[]>>((acc, item) => {
     const customerName = item.customer?.name || 'Unknown';

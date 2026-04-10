@@ -1,0 +1,197 @@
+- generic [ref=e2]:
+  - region "Notifications (F8)":
+    - list
+  - region "Notifications alt+T"
+  - generic [ref=e536]:
+    - complementary [ref=e537]:
+      - generic [ref=e538]:
+        - generic [ref=e539]:
+          - img [ref=e541] [cursor=pointer]
+          - generic [ref=e543]:
+            - paragraph [ref=e544]: StoreMate Genie
+            - paragraph [ref=e545]: ERP v2.0
+        - navigation [ref=e546]:
+          - button "Dashboard" [ref=e547] [cursor=pointer]:
+            - img [ref=e548]
+            - generic [ref=e553]: Dashboard
+          - button "Data Utama" [ref=e555] [cursor=pointer]:
+            - img [ref=e556]
+            - generic [ref=e561]: Data Utama
+            - img [ref=e562]
+          - button "Transaksi" [ref=e565] [cursor=pointer]:
+            - img [ref=e566]
+            - generic [ref=e570]: Transaksi
+            - img [ref=e571]
+          - button "Informasi" [ref=e574] [cursor=pointer]:
+            - img [ref=e575]
+            - generic [ref=e579]: Informasi
+            - img [ref=e580]
+          - button "Laporan" [ref=e583] [cursor=pointer]:
+            - img [ref=e584]
+            - generic [ref=e586]: Laporan
+            - img [ref=e587]
+          - button "Pengaturan" [ref=e589] [cursor=pointer]:
+            - img [ref=e590]
+            - generic [ref=e593]: Pengaturan
+      - generic [ref=e594]:
+        - generic [ref=e595]:
+          - generic [ref=e596]: U
+          - generic [ref=e597]:
+            - paragraph [ref=e598]: User
+            - paragraph [ref=e599]: Admin
+        - button "Keluar" [ref=e600] [cursor=pointer]:
+          - img [ref=e601]
+          - generic [ref=e604]: Keluar
+    - generic [ref=e605]:
+      - banner [ref=e606]:
+        - generic [ref=e607]:
+          - heading "Pengaturan" [level=1] [ref=e608]
+          - paragraph [ref=e609]: Kelola pengaturan aplikasi
+        - generic [ref=e610]:
+          - generic [ref=e611]:
+            - img [ref=e612]
+            - textbox "Cari..." [ref=e615]
+          - 'button "Toggle theme. Current: system" [ref=e616] [cursor=pointer]':
+            - 'button "Toggle theme. Current: system" [ref=e617]':
+              - img
+          - button [ref=e618] [cursor=pointer]:
+            - img
+          - generic [ref=e620]:
+            - generic [ref=e621]: U
+            - generic [ref=e622]:
+              - paragraph [ref=e623]: User
+              - paragraph
+      - main [ref=e624]:
+        - generic [ref=e625]:
+          - generic [ref=e626]:
+            - generic [ref=e627]:
+              - heading "Profil Pengguna" [level=3] [ref=e629]:
+                - img [ref=e630]
+                - text: Profil Pengguna
+              - generic [ref=e633]:
+                - generic [ref=e634]:
+                  - generic [ref=e635]: U
+                  - paragraph [ref=e637]: User
+                - generic [ref=e640]:
+                  - generic [ref=e641]:
+                    - text: Nama Lengkap
+                    - textbox "Nama Lengkap" [ref=e642]:
+                      - /placeholder: Masukkan nama lengkap
+                  - generic [ref=e643]:
+                    - text: Email
+                    - textbox "Email" [ref=e644]:
+                      - /placeholder: email@contoh.com
+                - button "Simpan Perubahan" [ref=e645] [cursor=pointer]:
+                  - img
+                  - text: Simpan Perubahan
+            - generic [ref=e646]:
+              - heading "Informasi Toko" [level=3] [ref=e648]:
+                - img [ref=e649]
+                - text: Informasi Toko
+              - generic [ref=e654]:
+                - generic [ref=e655]:
+                  - generic [ref=e656]:
+                    - text: Nama Toko *
+                    - textbox "Nama Toko *" [ref=e657]:
+                      - /placeholder: Nama toko Anda
+                  - generic [ref=e658]:
+                    - text: No. Telepon
+                    - textbox "No. Telepon" [ref=e659]:
+                      - /placeholder: 021-1234567
+                - generic [ref=e660]:
+                  - text: Alamat
+                  - textbox "Alamat" [ref=e661]:
+                    - /placeholder: Jl. Raya No. 123, Jakarta
+                - generic [ref=e662]:
+                  - generic [ref=e663]:
+                    - text: NPWP
+                    - textbox "NPWP" [ref=e664]:
+                      - /placeholder: Masukkan NPWP
+                  - generic [ref=e665]:
+                    - text: No. Izin Usaha (SIUP)
+                    - textbox "No. Izin Usaha (SIUP)" [ref=e666]:
+                      - /placeholder: Masukkan No. SIUP
+                - button "Simpan Perubahan" [ref=e667] [cursor=pointer]:
+                  - img
+                  - text: Simpan Perubahan
+            - generic [ref=e668]:
+              - heading "Keamanan" [level=3] [ref=e670]:
+                - img [ref=e671]
+                - text: Keamanan
+              - generic [ref=e674]:
+                - generic [ref=e675]:
+                  - text: Password Saat Ini *
+                  - textbox "Password Saat Ini *" [ref=e676]:
+                    - /placeholder: Masukkan password saat ini
+                - generic [ref=e677]:
+                  - generic [ref=e678]:
+                    - text: Password Baru *
+                    - textbox "Password Baru *" [ref=e679]:
+                      - /placeholder: Minimal 8 karakter
+                  - generic [ref=e680]:
+                    - text: Konfirmasi Password *
+                    - textbox "Konfirmasi Password *" [ref=e681]:
+                      - /placeholder: Ulangi password baru
+                - paragraph [ref=e683]: "Info: Password harus minimal 8 karakter untuk keamanan akun Anda."
+                - button "Ubah Password" [ref=e684] [cursor=pointer]:
+                  - img
+                  - text: Ubah Password
+          - generic [ref=e685]:
+            - generic [ref=e686]:
+              - heading "Notifikasi" [level=3] [ref=e688]:
+                - img [ref=e689]
+                - text: Notifikasi
+              - generic [ref=e692]:
+                - generic [ref=e693]:
+                  - generic [ref=e694]:
+                    - paragraph [ref=e695]: Stok Menipis
+                    - paragraph [ref=e696]: Peringatan saat stok rendah
+                  - switch [checked] [ref=e697] [cursor=pointer]
+                - generic [ref=e698]:
+                  - generic [ref=e699]:
+                    - paragraph [ref=e700]: Piutang Jatuh Tempo
+                    - paragraph [ref=e701]: Peringatan piutang
+                  - switch [checked] [ref=e702] [cursor=pointer]
+                - generic [ref=e703]:
+                  - generic [ref=e704]:
+                    - paragraph [ref=e705]: Laporan Harian
+                    - paragraph [ref=e706]: Kirim laporan via email
+                  - switch [ref=e707] [cursor=pointer]
+                - button "Simpan Perubahan" [ref=e708] [cursor=pointer]:
+                  - img
+                  - text: Simpan Perubahan
+            - generic [ref=e709]:
+              - heading "Kontrol Akses" [level=3] [ref=e711]:
+                - img [ref=e712]
+                - text: Kontrol Akses
+              - generic [ref=e714]:
+                - generic [ref=e715]:
+                  - generic [ref=e716]:
+                    - generic [ref=e717]: Owner
+                    - generic [ref=e718]: Akses Penuh
+                  - paragraph [ref=e719]: Dapat mengakses semua fitur termasuk laporan dan pengaturan
+                - generic [ref=e720]:
+                  - generic [ref=e721]:
+                    - generic [ref=e722]: Admin
+                    - generic [ref=e723]: Terbatas
+                  - paragraph [ref=e724]: Dapat mengelola transaksi harian dan data master
+                - button "Profil Pemilik" [ref=e725] [cursor=pointer]:
+                  - text: Profil Pemilik
+                  - img
+            - generic [ref=e726]:
+              - heading "Tentang Aplikasi" [level=3] [ref=e728]:
+                - img [ref=e729]
+                - text: Tentang Aplikasi
+              - generic [ref=e732]:
+                - generic [ref=e733]:
+                  - generic [ref=e734]: Versi
+                  - generic [ref=e735]: 1.0.0
+                - generic [ref=e736]:
+                  - generic [ref=e737]: Build
+                  - generic [ref=e738]: 2026.03.04
+                - generic [ref=e739]:
+                  - generic [ref=e740]: Lisensi
+                  - generic [ref=e741]: Enterprise
+                - generic [ref=e742]:
+                  - paragraph [ref=e743]: TokoSync ERP
+                  - paragraph [ref=e744]: Sistem Manajemen Toko Terintegrasi

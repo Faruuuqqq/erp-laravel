@@ -66,9 +66,7 @@ export const MainLayout = ({ children, title, subtitle, actions }: MainLayoutPro
               <Input placeholder="Cari..." className="h-8 w-48 pl-8 text-sm" />
             </div>
 
-            <Button variant="ghost" size="icon" className="h-8 w-8">
-              <ThemeToggle />
-            </Button>
+            <ThemeToggle />
 
             <Button variant="ghost" size="icon" className="h-8 w-8 relative">
               <Bell className="h-4 w-4" />

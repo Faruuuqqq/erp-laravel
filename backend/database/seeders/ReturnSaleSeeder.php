@@ -3,8 +3,8 @@
 namespace Database\Seeders;
 
 use App\Models\ReturnSale;
-use App\Models\Transaction;
 use App\Models\ReturnSaleItem;
+use App\Models\Transaction;
 use App\Models\User;
 use App\Models\Customer;
 use App\Models\SalesRep;
@@ -19,53 +19,91 @@ class ReturnSaleSeeder extends Seeder
         $salesReps = SalesRep::all();
         $creditSales = Transaction::where('type', 'penjualan_kredit')->get();
 
+        if ($creditSales->isEmpty()) {
+            $this->command->warn('No credit sales found. Skipping return sales seeder.');
+            return;
+        }
+
         $returnCount = rand(4, 6);
+        $created = 0;
+        $dateRange = $this->getDateRange();
 
         for ($i = 0; $i < $returnCount; $i++) {
             $creditSale = $creditSales->random();
-            $returnNumber = 'RET-J' . now()->format('Ymd') . '-' . str_pad($i + 1, 2, '0');
+            $returnNumber = 'RET-J' . date('Ymd') . '-' . str_pad($i + 1, 3, '0', STR_PAD_LEFT);
 
-            $returnSale = ReturnSale::create([
-                'return_number' => $returnNumber,
-                'transaction_id' => $creditSale ? $creditSale->id : null,
-                'customer_id' => $customers->random()->id,
-                'sales_rep_id' => $salesReps->random()->id,
-                'reason' => $this->getReason(),
-                'total' => rand(50000, 500000),
-                'status' => $this->getStatus(),
-                'notes' => $this->getNotes(),
-                'created_by' => $users->random()->id,
-            ]);
+            $reason = $this->getReason();
+            $status = $this->getStatus();
 
-            if ($creditSale) {
-                ReturnSaleItem::create([
-                    'return_sale_id' => $returnSale->id,
-                    'product_id' => rand(1, 28),
-                    'product_name' => $this->getProductName(),
-                    'quantity' => rand(1, 10),
-                    'price' => rand(5000, 50000),
-                    'discount' => $this->getItemDiscount(),
-                    'subtotal' => rand(50000, 500000),
-                ]);
+            $returnSale = ReturnSale::firstOrCreate(
+                ['return_number' => $returnNumber],
+                [
+                    'date' => $dateRange[array_rand($dateRange)],
+                    'transaction_id' => $creditSale ? $creditSale->id : null,
+                    'customer_id' => $creditSale ? $creditSale->customer_id : $customers->random()->id,
+                    'reason' => $reason,
+                    'status' => $status,
+                    'notes' => $this->getNotes(),
+                    'created_by' => $users->random()->id,
+                ]
+            );
+
+            if ($returnSale->wasRecentlyCreated || ReturnSaleItem::where('return_sale_id', $returnSale->id)->count() === 0) {
+                if ($creditSale && $creditSale->details->isNotEmpty()) {
+                    $numItems = min(rand(1, 3), $creditSale->details->count());
+                    $selectedDetails = $creditSale->details->random($numItems);
+
+                    foreach ($selectedDetails as $detail) {
+                        $quantity = rand(1, min($detail->quantity, 5));
+                        $price = $detail->price;
+                        $subtotal = $quantity * $price;
+                        $discount = rand(0, 1) ? rand(5, 15) : 0;
+
+                        ReturnSaleItem::create([
+                            'return_sale_id' => $returnSale->id,
+                            'product_id' => $detail->product_id,
+                            'product_name' => $detail->product_name,
+                            'quantity' => $quantity,
+                            'price' => $price,
+                            'discount' => $discount,
+                            'subtotal' => $subtotal - ($subtotal * $discount / 100),
+                        ]);
+                    }
+                }
+                $created++;
             }
         }
+
+        $this->command->info("Return sales seeded: {$created} retur penjualan.");
+    }
+
+    private function getDateRange(): array
+    {
+        $dates = [];
+        $startDate = strtotime('2025-02-20');
+        $endDate = strtotime('2025-02-28');
+
+        for ($ts = $startDate; $ts <= $endDate; $ts += 86400) {
+            $dates[] = date('Y-m-d', $ts);
+        }
+
+        return $dates;
     }
 
     private function getReason(): string
     {
         $reasons = [
-            'Barang rusak saat pengiriman',
-            'Salah kirim barang',
-            'Tidak sesuai pesanan',
-            'Kualitas tidak memuaskan',
-            'Barang kadaluarsa',
+            'rusak',
+            'kadaluarsa',
+            'tidak_sesuai',
+            'kelebihan',
         ];
         return $reasons[array_rand($reasons)];
     }
 
     private function getStatus(): string
     {
-        $statuses = ['completed', 'completed', 'completed', 'cancelled'];
+        $statuses = ['processed', 'processed', 'processed', 'draft', 'cancelled'];
         return $statuses[array_rand($statuses)];
     }
 
@@ -75,29 +113,9 @@ class ReturnSaleSeeder extends Seeder
             'Retur harian',
             'Komplain pelanggan',
             'Quality control issue',
+            'Dokumen lengkap',
             null,
         ];
-        $randomIndex = array_rand($notes);
-        return $notes[$randomIndex];
-    }
-
-    private function getProductName(): string
-    {
-        $names = [
-            'Beras Premium 5kg',
-            'Minyak Goreng 2L',
-            'Gula Pasir 1kg',
-            'Roti Tawar',
-        ];
-        return $names[array_rand($names)];
-    }
-
-    private function getItemDiscount(): int
-    {
-        $discounts = [0, 5, 10];
-        return $discounts[array_rand($discounts)];
-    }
-
-        $this->command->info('Return sales seeded: ' . $returnCount . ' retur penjualan.');
+        return $notes[array_rand($notes)];
     }
 }

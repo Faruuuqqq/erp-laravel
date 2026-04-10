@@ -27,7 +27,7 @@ const SaldoPiutang = () => {
   const { toast } = useToast();
 
   const { data, isLoading } = useSaldoPiutang();
-  const customers = (data?.data ?? []) as PiutangItem[];
+  const customers = Array.isArray(data?.data) ? (data.data as PiutangItem[]) : [];
 
   const withDebt = customers.filter(c => c.balance > 0);
   const total = customers.reduce((s, c) => s + (c.balance || 0), 0);

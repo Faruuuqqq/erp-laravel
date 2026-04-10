@@ -2,10 +2,13 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import apiClient from '@/lib/api-client';
 
+const STALE_TIME = 5 * 60 * 1000;
+
 export const useDeliveryNotes = (params?: { page?: number; per_page?: number }) => {
   return useQuery({
     queryKey: ['delivery-notes', params],
     queryFn: () => api.get('/delivery-notes', params),
+    staleTime: STALE_TIME,
   });
 };
 
@@ -14,6 +17,7 @@ export const useDeliveryNote = (id: string) => {
     queryKey: ['delivery-notes', id],
     queryFn: () => api.get(`/delivery-notes/${id}`),
     enabled: !!id,
+    staleTime: STALE_TIME,
   });
 };
 

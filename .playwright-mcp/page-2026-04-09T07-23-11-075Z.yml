@@ -1,0 +1,187 @@
+- generic [ref=e2]:
+  - region "Notifications (F8)":
+    - list
+  - region "Notifications alt+T"
+  - generic [ref=e42]:
+    - complementary [ref=e43]:
+      - generic [ref=e44]:
+        - generic [ref=e45]:
+          - img [ref=e47] [cursor=pointer]
+          - generic [ref=e49]:
+            - paragraph [ref=e50]: StoreMate Genie
+            - paragraph [ref=e51]: ERP v2.0
+        - navigation [ref=e52]:
+          - button "Dashboard" [ref=e53] [cursor=pointer]:
+            - img [ref=e54]
+            - generic [ref=e59]: Dashboard
+          - button "Data Utama" [ref=e61] [cursor=pointer]:
+            - img [ref=e62]
+            - generic [ref=e67]: Data Utama
+            - img [ref=e68]
+          - button "Transaksi" [ref=e71] [cursor=pointer]:
+            - img [ref=e72]
+            - generic [ref=e76]: Transaksi
+            - img [ref=e77]
+          - button "Informasi" [ref=e80] [cursor=pointer]:
+            - img [ref=e81]
+            - generic [ref=e85]: Informasi
+            - img [ref=e86]
+          - generic [ref=e88]:
+            - button "Laporan" [active] [ref=e89] [cursor=pointer]:
+              - img [ref=e90]
+              - generic [ref=e92]: Laporan
+              - img [ref=e93]
+            - generic [ref=e244]:
+              - button "Saldo Piutang" [ref=e245] [cursor=pointer]:
+                - img [ref=e246]
+                - generic [ref=e249]: Saldo Piutang
+              - button "Saldo Utang" [ref=e250] [cursor=pointer]:
+                - img [ref=e251]
+                - generic [ref=e254]: Saldo Utang
+              - button "Kartu Stok" [ref=e255] [cursor=pointer]:
+                - img [ref=e256]
+                - generic [ref=e259]: Kartu Stok
+              - button "Laporan Harian" [ref=e260] [cursor=pointer]:
+                - img [ref=e261]
+                - generic [ref=e263]: Laporan Harian
+          - button "Pengaturan" [ref=e95] [cursor=pointer]:
+            - img [ref=e96]
+            - generic [ref=e99]: Pengaturan
+      - generic [ref=e100]:
+        - generic [ref=e101]:
+          - generic [ref=e102]: U
+          - generic [ref=e103]:
+            - paragraph [ref=e104]: User
+            - paragraph [ref=e105]: Admin
+        - button "Keluar" [ref=e106] [cursor=pointer]:
+          - img [ref=e107]
+          - generic [ref=e110]: Keluar
+    - generic [ref=e111]:
+      - banner [ref=e112]:
+        - generic [ref=e113]:
+          - heading "Dashboard" [level=1] [ref=e114]
+          - paragraph [ref=e115]: Selamat datang kembali, undefined · Kamis, 9 April 2026
+        - generic [ref=e116]:
+          - generic [ref=e117]:
+            - img [ref=e118]
+            - textbox "Cari..." [ref=e121]
+          - 'button "Toggle theme. Current: system" [ref=e122] [cursor=pointer]':
+            - 'button "Toggle theme. Current: system" [ref=e123]':
+              - img
+          - button [ref=e124] [cursor=pointer]:
+            - img
+          - generic [ref=e126]:
+            - generic [ref=e127]: U
+            - generic [ref=e128]:
+              - paragraph [ref=e129]: User
+              - paragraph
+      - main [ref=e130]:
+        - generic [ref=e131]:
+          - generic [ref=e264] [cursor=pointer]:
+            - generic [ref=e265]:
+              - img [ref=e268]
+              - generic [ref=e271]:
+                - img [ref=e272]
+                - text: +318.2%
+            - generic [ref=e275]:
+              - paragraph [ref=e276]: Rp 5.203.000
+              - paragraph [ref=e277]: Penjualan Hari Ini
+              - paragraph [ref=e278]: 9 transaksi
+          - generic [ref=e279] [cursor=pointer]:
+            - generic [ref=e280]:
+              - img [ref=e283]
+              - generic [ref=e287]:
+                - img [ref=e288]
+                - text: "-51.2%"
+            - generic [ref=e291]:
+              - paragraph [ref=e292]: Rp 857.000
+              - paragraph [ref=e293]: Pembelian Hari Ini
+          - generic [ref=e294] [cursor=pointer]:
+            - img [ref=e298]
+            - generic [ref=e301]:
+              - paragraph [ref=e302]: "-Rp 380.000"
+              - paragraph [ref=e303]: Total Piutang
+              - paragraph [ref=e304]: Dari customer aktif
+          - generic [ref=e305] [cursor=pointer]:
+            - img [ref=e309]
+            - generic [ref=e312]:
+              - paragraph [ref=e313]: "-Rp 4.250.000"
+              - paragraph [ref=e314]: Total Utang
+              - paragraph [ref=e315]: Ke supplier
+        - generic [ref=e156]:
+          - generic [ref=e157]:
+            - heading "Stok Menipis" [level=3] [ref=e159]:
+              - img [ref=e160]
+              - text: Stok Menipis
+            - generic [ref=e316]:
+              - generic [ref=e317]:
+                - paragraph [ref=e318]: Mie Instan Goreng
+                - paragraph [ref=e319]: "Min: 10 pcs"
+              - generic [ref=e320]: 4 pcs
+          - generic [ref=e171]:
+            - generic [ref=e172]:
+              - heading "Transaksi Terbaru" [level=3] [ref=e173]:
+                - img [ref=e174]
+                - text: Transaksi Terbaru
+              - button "Lihat Semua" [ref=e177] [cursor=pointer]:
+                - text: Lihat Semua
+                - img
+            - table [ref=e321]:
+              - rowgroup [ref=e322]:
+                - row "No. Faktur Nama Tipe Total Status" [ref=e323]:
+                  - columnheader "No. Faktur" [ref=e324]
+                  - columnheader "Nama" [ref=e325]
+                  - columnheader "Tipe" [ref=e326]
+                  - columnheader "Total" [ref=e327]
+                  - columnheader "Status" [ref=e328]
+              - rowgroup [ref=e329]:
+                - row "- Penjualan Tunai Rp 540.000 Sebagian" [ref=e330]:
+                  - cell [ref=e331]
+                  - cell "-" [ref=e332]
+                  - cell "Penjualan Tunai" [ref=e333]
+                  - cell "Rp 540.000" [ref=e334]
+                  - cell "Sebagian" [ref=e335]:
+                    - generic [ref=e336]: Sebagian
+                - row "- Penjualan Kredit Rp 800.000 Sebagian" [ref=e337]:
+                  - cell [ref=e338]
+                  - cell "-" [ref=e339]
+                  - cell "Penjualan Kredit" [ref=e340]
+                  - cell "Rp 800.000" [ref=e341]
+                  - cell "Sebagian" [ref=e342]:
+                    - generic [ref=e343]: Sebagian
+                - row "- Pembelian Rp 168.000 Sebagian" [ref=e344]:
+                  - cell [ref=e345]
+                  - cell "-" [ref=e346]
+                  - cell "Pembelian" [ref=e347]
+                  - cell "Rp 168.000" [ref=e348]
+                  - cell "Sebagian" [ref=e349]:
+                    - generic [ref=e350]: Sebagian
+                - row "- Pembelian Rp 1.165.000 Sebagian" [ref=e351]:
+                  - cell [ref=e352]
+                  - cell "-" [ref=e353]
+                  - cell "Pembelian" [ref=e354]
+                  - cell "Rp 1.165.000" [ref=e355]
+                  - cell "Sebagian" [ref=e356]:
+                    - generic [ref=e357]: Sebagian
+                - row "- Pembelian Rp 156.000 Sebagian" [ref=e358]:
+                  - cell [ref=e359]
+                  - cell "-" [ref=e360]
+                  - cell "Pembelian" [ref=e361]
+                  - cell "Rp 156.000" [ref=e362]
+                  - cell "Sebagian" [ref=e363]:
+                    - generic [ref=e364]: Sebagian
+        - generic [ref=e211]:
+          - heading "Aksi Cepat" [level=3] [ref=e213]
+          - generic [ref=e215]:
+            - button "Penjualan Tunai" [ref=e216] [cursor=pointer]:
+              - img [ref=e218]
+              - generic [ref=e222]: Penjualan Tunai
+              - img [ref=e223]
+            - button "Penjualan Kredit" [ref=e225] [cursor=pointer]:
+              - img [ref=e227]
+              - generic [ref=e232]: Penjualan Kredit
+              - img [ref=e233]
+            - button "Surat Jalan" [ref=e235] [cursor=pointer]:
+              - img [ref=e237]
+              - generic [ref=e241]: Surat Jalan
+              - img [ref=e242]

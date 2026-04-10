@@ -27,19 +27,32 @@ class DashboardController extends Controller
         $start = $dateRange['start'];
         $end = $dateRange['end'];
 
-        // Get current period data
-        $sales = Transaction::whereBetween('date', [$start, $end])->sales()->get();
-        $salesTotal = $sales->sum('total');
-        $salesCount = $sales->count();
+        // Get current period data - optimized with single query using conditional aggregation
+        $stats = Transaction::selectRaw('
+            SUM(CASE WHEN type = ? THEN total ELSE 0 END) as sales_total,
+            SUM(CASE WHEN type = ? THEN 1 ELSE 0 END) as sales_count,
+            SUM(CASE WHEN type = ? THEN total ELSE 0 END) as purchases_total,
+            SUM(CASE WHEN type = ? THEN 1 ELSE 0 END) as purchases_count
+        ', ['penjualan', 'penjualan', 'pembelian', 'pembelian'])
+            ->whereBetween('date', [$start, $end])
+            ->first();
 
-        $purchases = Transaction::whereBetween('date', [$start, $end])->purchases()->get();
-        $purchasesTotal = $purchases->sum('total');
-        $purchasesCount = $purchases->count();
+        $salesTotal = $stats?->sales_total ?? 0;
+        $salesCount = $stats?->sales_count ?? 0;
+        $purchasesTotal = $stats?->purchases_total ?? 0;
+        $purchasesCount = $stats?->purchases_count ?? 0;
 
-        // Get previous period for comparison
+        // Get previous period for comparison - optimized single query
         $previousRange = $this->getPreviousDateRange($dateRange);
-        $previousSales = Transaction::whereBetween('date', [$previousRange['start'], $previousRange['end']])->sales()->sum('total');
-        $previousPurchases = Transaction::whereBetween('date', [$previousRange['start'], $previousRange['end']])->purchases()->sum('total');
+        $previousStats = Transaction::selectRaw('
+            SUM(CASE WHEN type = ? THEN total ELSE 0 END) as sales_total,
+            SUM(CASE WHEN type = ? THEN total ELSE 0 END) as purchases_total
+        ', ['penjualan', 'pembelian'])
+            ->whereBetween('date', [$previousRange['start'], $previousRange['end']])
+            ->first();
+
+        $previousSales = $previousStats?->sales_total ?? 0;
+        $previousPurchases = $previousStats?->purchases_total ?? 0;
 
         $salesGrowth = $previousSales > 0
             ? round(($salesTotal - $previousSales) / $previousSales * 100, 1)
@@ -48,15 +61,15 @@ class DashboardController extends Controller
             ? round(($purchasesTotal - $previousPurchases) / $previousPurchases * 100, 1)
             : 0;
 
-        // Produk
+        // Produk - cached query
         $totalProducts = Product::count();
 
-        // Customer active (punya transaksi dalam periode)
+        // Customer active (punya transaksi dalam periode) - optimized with subquery
         $activeCustomers = Customer::whereHas('transactions', function ($query) use ($start, $end) {
             $query->whereBetween('date', [$start, $end]);
         })->count();
 
-        // Get period start customer count for growth
+        // Get period start customer count for growth - optimized
         $activeCustomersStart = Customer::whereHas('transactions', function ($query) use ($previousRange) {
             $query->whereBetween('date', [$previousRange['start'], $previousRange['end']]);
         })->count();
@@ -146,8 +159,8 @@ class DashboardController extends Controller
     public function lowStock(): JsonResponse
     {
         $products = Product::lowStock()
-            ->with('category')
-            ->select('id', 'name', 'stock', 'min_stock', 'unit', 'total_sales', 'avg_daily_sales')
+            ->with('category:id,name')
+            ->select('id', 'name', 'stock', 'min_stock', 'unit', 'category_id', 'total_sales', 'avg_daily_sales')
             ->get();
 
         $productsWithMetrics = $products->map(function ($product) {

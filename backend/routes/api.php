@@ -22,6 +22,7 @@ use App\Http\Controllers\Api\TransactionController;
 use App\Http\Controllers\Api\WarehouseController;
 use App\Http\Controllers\Api\ExportController;
 use App\Http\Controllers\Api\BatchController;
+use App\Http\Controllers\Api\BackupController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -67,6 +68,7 @@ Route::middleware(['auth:sanctum', 'throttle:60,1'])->group(function () {
     Route::patch('transactions/{transaction}/payment', [TransactionController::class, 'updatePayment']);
     Route::get('transactions/{transaction}/print/invoice', [TransactionController::class, 'printInvoice']);
     Route::get('transactions/{transaction}/print/receipt', [TransactionController::class, 'printReceipt']);
+    Route::get('transactions/{transaction}/print/purchase', [TransactionController::class, 'printPurchase']);
 
     // ── Kontra Bon (Admin & Owner) ───────────────────────────────────────────
     Route::apiResource('kontra-bon', KontraBonController::class)->only(['index']);
@@ -158,6 +160,14 @@ Route::middleware(['auth:sanctum', 'throttle:60,1'])->group(function () {
             Route::put('/{preset}', [PermissionPresetController::class, 'update']);
             Route::delete('/{preset}', [PermissionPresetController::class, 'destroy']);
             Route::post('/{preset}/duplicate', [PermissionPresetController::class, 'duplicate']);
+        });
+
+        // ── Database Backups (Owner Only) ────────────────────────────
+        Route::prefix('backup')->group(function () {
+            Route::get('/', [BackupController::class, 'index']);
+            Route::post('/', [BackupController::class, 'create']);
+            Route::get('/{filename}/download', [BackupController::class, 'download']);
+            Route::delete('/{filename}', [BackupController::class, 'delete']);
         });
     });
 

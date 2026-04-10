@@ -51,12 +51,17 @@ class InfoController extends Controller
     /**
      * GET /api/info/saldo-piutang
      * Semua customer beserta saldo piutangnya.
+     * Optimized with filtering, pagination, and year-scoped transaction count.
      */
     public function saldoPiutang(): JsonResponse
     {
-        $customers = Customer::withCount('transactions')
+        $customers = Customer::where('balance', '>', 0)
+            ->withCount(['transactions' => fn($q) => 
+                $q->whereYear('date', now()->year)->where('type', 'penjualan_kredit')
+            ])
             ->orderByDesc('balance')
-            ->get(['id', 'name', 'phone', 'email', 'address', 'balance']);
+            ->select('id', 'name', 'phone', 'email', 'address', 'balance', 'credit_limit')
+            ->paginate(50);
 
         return response()->json([
             'data' => $customers->map(fn($c) => [
@@ -66,20 +71,32 @@ class InfoController extends Controller
                 'email'             => $c->email ?? '',
                 'address'           => $c->address ?? '',
                 'balance'           => (float) $c->balance,
+                'creditLimit'       => (float) $c->credit_limit,
                 'totalTransactions' => $c->transactions_count,
             ]),
+            'meta' => [
+                'current_page' => $customers->currentPage(),
+                'last_page' => $customers->lastPage(),
+                'per_page' => $customers->perPage(),
+                'total' => $customers->total(),
+            ],
         ]);
     }
 
     /**
      * GET /api/info/saldo-utang
      * Semua supplier beserta saldo utangnya.
+     * Optimized with filtering, pagination, and year-scoped transaction count.
      */
     public function saldoUtang(): JsonResponse
     {
-        $suppliers = Supplier::withCount('transactions')
+        $suppliers = Supplier::where('balance', '>', 0)
+            ->withCount(['transactions' => fn($q) => 
+                $q->whereYear('date', now()->year)->where('type', 'pembelian')
+            ])
             ->orderByDesc('balance')
-            ->get(['id', 'name', 'phone', 'email', 'address', 'balance']);
+            ->select('id', 'name', 'phone', 'email', 'address', 'balance')
+            ->paginate(50);
 
         return response()->json([
             'data' => $suppliers->map(fn($s) => [
@@ -91,6 +108,12 @@ class InfoController extends Controller
                 'balance'           => (float) $s->balance,
                 'totalTransactions' => $s->transactions_count,
             ]),
+            'meta' => [
+                'current_page' => $suppliers->currentPage(),
+                'last_page' => $suppliers->lastPage(),
+                'per_page' => $suppliers->perPage(),
+                'total' => $suppliers->total(),
+            ],
         ]);
     }
 

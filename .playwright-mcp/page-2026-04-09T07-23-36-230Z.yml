@@ -1,0 +1,125 @@
+- generic [ref=e2]:
+  - region "Notifications (F8)":
+    - list
+  - region "Notifications alt+T"
+  - generic [ref=e365]:
+    - complementary [ref=e366]:
+      - generic [ref=e367]:
+        - generic [ref=e368]:
+          - img [ref=e370] [cursor=pointer]
+          - generic [ref=e372]:
+            - paragraph [ref=e373]: StoreMate Genie
+            - paragraph [ref=e374]: ERP v2.0
+        - navigation [ref=e375]:
+          - button "Dashboard" [ref=e376] [cursor=pointer]:
+            - img [ref=e377]
+            - generic [ref=e382]: Dashboard
+          - button "Data Utama" [ref=e384] [cursor=pointer]:
+            - img [ref=e385]
+            - generic [ref=e390]: Data Utama
+            - img [ref=e391]
+          - button "Transaksi" [ref=e394] [cursor=pointer]:
+            - img [ref=e395]
+            - generic [ref=e399]: Transaksi
+            - img [ref=e400]
+          - button "Informasi" [ref=e403] [cursor=pointer]:
+            - img [ref=e404]
+            - generic [ref=e408]: Informasi
+            - img [ref=e409]
+          - generic [ref=e411]:
+            - button "Laporan" [ref=e412] [cursor=pointer]:
+              - img [ref=e413]
+              - generic [ref=e415]: Laporan
+              - img [ref=e416]
+            - generic [ref=e418]:
+              - button "Saldo Piutang" [ref=e419] [cursor=pointer]:
+                - img [ref=e420]
+                - generic [ref=e423]: Saldo Piutang
+              - button "Saldo Utang" [ref=e424] [cursor=pointer]:
+                - img [ref=e425]
+                - generic [ref=e428]: Saldo Utang
+              - button "Kartu Stok" [ref=e429] [cursor=pointer]:
+                - img [ref=e430]
+                - generic [ref=e433]: Kartu Stok
+              - button "Laporan Harian" [ref=e434] [cursor=pointer]:
+                - img [ref=e435]
+                - generic [ref=e437]: Laporan Harian
+          - button "Pengaturan" [ref=e438] [cursor=pointer]:
+            - img [ref=e439]
+            - generic [ref=e442]: Pengaturan
+      - generic [ref=e443]:
+        - generic [ref=e444]:
+          - generic [ref=e445]: U
+          - generic [ref=e446]:
+            - paragraph [ref=e447]: User
+            - paragraph [ref=e448]: Admin
+        - button "Keluar" [ref=e449] [cursor=pointer]:
+          - img [ref=e450]
+          - generic [ref=e453]: Keluar
+    - generic [ref=e454]:
+      - banner [ref=e455]:
+        - generic [ref=e456]:
+          - heading "Saldo Piutang" [level=1] [ref=e457]
+          - paragraph [ref=e458]: Daftar piutang dari customer
+        - generic [ref=e459]:
+          - generic [ref=e460]:
+            - img [ref=e461]
+            - textbox "Cari..." [ref=e464]
+          - 'button "Toggle theme. Current: system" [ref=e465] [cursor=pointer]':
+            - 'button "Toggle theme. Current: system" [ref=e466]':
+              - img
+          - button [ref=e467] [cursor=pointer]:
+            - img
+          - generic [ref=e469]:
+            - generic [ref=e470]: U
+            - generic [ref=e471]:
+              - paragraph [ref=e472]: User
+              - paragraph
+      - main [ref=e473]:
+        - generic [ref=e474]:
+          - generic [ref=e475]:
+            - heading "Saldo Piutang" [level=2] [ref=e476]
+            - paragraph [ref=e477]: Ringkasan outstanding piutang per customer
+          - generic [ref=e478]:
+            - button "Cetak" [ref=e479] [cursor=pointer]:
+              - img
+              - text: Cetak
+            - button "Export CSV" [ref=e480] [cursor=pointer]:
+              - img
+              - text: Export CSV
+        - generic [ref=e481]:
+          - generic [ref=e482]:
+            - img [ref=e486]
+            - generic [ref=e489]:
+              - paragraph [ref=e490]: Rp 0
+              - paragraph [ref=e491]: Total Piutang
+          - generic [ref=e492]:
+            - img [ref=e496]
+            - generic [ref=e499]:
+              - paragraph [ref=e500]: 0 Customer
+              - paragraph [ref=e501]: Customer Berpiutang
+          - generic [ref=e502]:
+            - img [ref=e506]
+            - generic [ref=e509]:
+              - paragraph [ref=e510]: 0 Customer
+              - paragraph [ref=e511]: Total Customer
+        - generic [ref=e512]:
+          - generic [ref=e513]:
+            - img [ref=e514]
+            - textbox "Cari customer..." [ref=e517]
+          - combobox [ref=e518] [cursor=pointer]:
+            - generic: Semua Customer
+            - img [ref=e519]
+          - generic [ref=e521]: 0 data
+        - table [ref=e524]:
+          - rowgroup [ref=e525]:
+            - row "Kode Nama Customer Telepon Email Total Piutang Status" [ref=e526]:
+              - columnheader "Kode" [ref=e527]
+              - columnheader "Nama Customer" [ref=e528]
+              - columnheader "Telepon" [ref=e529]
+              - columnheader "Email" [ref=e530]
+              - columnheader "Total Piutang" [ref=e531]
+              - columnheader "Status" [ref=e532]
+          - rowgroup [ref=e533]:
+            - row "Tidak ada data yang sesuai." [ref=e534]:
+              - cell "Tidak ada data yang sesuai." [ref=e535]

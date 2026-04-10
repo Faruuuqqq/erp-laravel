@@ -2,10 +2,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import type { Product, PaginatedResponse } from '@/types';
 
+const STALE_TIME = 5 * 60 * 1000;
+
 export const useProducts = (params?: any) => {
   return useQuery({
     queryKey: ['products', params],
     queryFn: () => api.get<PaginatedResponse<Product>>('/products', params),
+    staleTime: STALE_TIME,
   });
 };
 
@@ -14,6 +17,7 @@ export const useProduct = (id: string) => {
     queryKey: ['products', id],
     queryFn: () => api.get<Product>(`/products/${id}`),
     enabled: !!id,
+    staleTime: STALE_TIME,
   });
 };
 

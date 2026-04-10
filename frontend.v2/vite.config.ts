@@ -19,23 +19,34 @@ export default defineConfig(({ mode }) => ({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
-          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-          'vendor-ui': [
-            '@radix-ui/react-dialog',
-            '@radix-ui/react-dropdown-menu',
-            '@radix-ui/react-select',
-            '@radix-ui/react-tabs',
-            '@radix-ui/react-checkbox',
-            '@radix-ui/react-label',
-            '@radix-ui/react-slot',
-            '@radix-ui/react-toast',
-            '@radix-ui/react-tooltip',
-          ],
-          'vendor-utils': ['clsx', 'tailwind-merge', 'date-fns', 'lucide-react'],
-          'vendor-charts': ['recharts'],
+        manualChunks: (id) => {
+          // Vendor libraries - always loaded
+          if (id.includes('node_modules/react')) return 'vendor-react';
+          if (id.includes('node_modules/@radix-ui')) return 'vendor-ui';
+          if (id.includes('node_modules/clsx') || 
+              id.includes('node_modules/tailwind-merge') ||
+              id.includes('node_modules/date-fns') ||
+              id.includes('node_modules/lucide-react')) return 'vendor-utils';
+          
+          // Charts - lazy load only on dashboard
+          if (id.includes('node_modules/recharts')) return 'vendor-charts';
+          
+          // Route-specific chunks
+          if (id.includes('/pages/Dashboard')) return 'chunk-dashboard';
+          if (id.includes('/pages/transaksi/')) return 'chunk-transaksi';
+          if (id.includes('/pages/Pengaturan') || id.includes('/pages/pengaturan/')) return 'chunk-settings';
+          if (id.includes('/pages/laporan/')) return 'chunk-reports';
+          if (id.includes('/pages/master/')) return 'chunk-master';
+          if (id.includes('/pages/informasi/')) return 'chunk-informasi';
+          
+          // Core app code
+          if (id.includes('/components/') || id.includes('/hooks/') || id.includes('/contexts/')) {
+            return 'main-core';
+          }
         },
       },
     },
+    chunkSizeWarningLimit: 1024,
+    target: 'esnext',
   },
 }));

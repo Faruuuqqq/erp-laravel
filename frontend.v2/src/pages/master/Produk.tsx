@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -18,21 +18,22 @@ import { Plus, Search, Pencil, Trash2, Package, AlertTriangle, Download } from '
 import { Badge } from '@/components/ui/badge';
 import { StatCard } from '@/components/ui/StatCard';
 import { Progress } from '@/components/ui/progress';
-import { Skeleton } from '@/components/ui/SkeletonLoader';
+import { DataTable, ColumnDef } from '@/components/ui/DataTable';
 import { useToast } from '@/hooks/use-toast';
+import { useDebouncedValue } from '@/hooks/useDebounce';
 import { useProducts, useCreateProduct, useUpdateProduct, useDeleteProduct } from '@/hooks/api/useProducts';
 import { useCategories } from '@/hooks/api/useCategories';
 import { useWarehouses } from '@/hooks/api/useWarehouses';
+import { formatCurrency } from '@/lib/utils';
 import type { Product } from '@/types';
-
-const formatRupiah = (value: number) =>
-  new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(value);
 
 const Produk = () => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch] = useDebouncedValue(searchTerm, 300);
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [isAddOpen, setIsAddOpen] = useState(false);
+  const [page, setPage] = useState(1);
+  const [dialogOpen, setDialogOpen] = useState(false);
   const [editItem, setEditItem] = useState<Product | null>(null);
   const [form, setForm] = useState({
     name: '', categoryId: '', buyPrice: '', sellPrice: '',
@@ -40,7 +41,19 @@ const Produk = () => {
   });
   const { toast } = useToast();
 
-  const { data, isLoading, refetch } = useProducts({ per_page: 200, search: searchTerm });
+  const { data, isLoading, refetch } = useProducts({ 
+    per_page: 20, 
+    search: debouncedSearch,
+    page,
+  });
+  
+  // Reset to page 1 when search changes
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch]);
+
+  const isAddOpen = dialogOpen && !editItem;
+
   const { data: categoriesData } = useCategories();
   const { data: warehousesData } = useWarehouses();
   const createMutation = useCreateProduct();
@@ -48,13 +61,124 @@ const Produk = () => {
   const deleteMutation = useDeleteProduct();
 
   const products = (data?.data?.data ?? []) as Product[];
+  const pagination = data?.data?.meta ? {
+    page: data.data.meta.current_page,
+    totalPages: data.data.meta.last_page,
+    total: data.data.meta.total,
+  } : null;
   const categories = (categoriesData?.data ?? []) as { id: string; name: string }[] || [];
   const warehouses = (warehousesData?.data?.data ?? []) as { id: string; name: string; status: string }[];
 
-  const totalNilai = products.reduce((s, p) => s + (p.buyPrice || 0) * (p.stock || 0), 0);
-  const lowStock = products.filter(p => (p.stock || 0) <= (p.minStock || 0)).length;
+  const stats = useMemo(() => ({
+    totalNilai: products.reduce((s, p) => s + (p.buyPrice || 0) * (p.stock || 0), 0),
+    lowStock: products.filter(p => (p.stock || 0) <= (p.minStock || 0)).length,
+  }), [products]);
 
-  const openEdit = (p: Product) => {
+  const columns: ColumnDef<Product>[] = useMemo(() => [
+    {
+      key: 'code',
+      header: 'Kode',
+      sortable: true,
+      className: 'w-20',
+      render: (row) => <span className="font-mono text-xs text-primary">{row.code}</span>,
+    },
+    {
+      key: 'name',
+      header: 'Nama Produk',
+      sortable: true,
+      className: 'min-w-40',
+      render: (row) => (
+        <div className="flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded bg-muted shrink-0">
+            <Package className="h-4 w-4 text-muted-foreground" />
+          </div>
+          <div>
+            <div className="font-medium text-sm">{row.name}</div>
+            <div className="text-xs text-muted-foreground">{row.unit}</div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'category',
+      header: 'Kategori',
+      sortable: true,
+      className: 'w-28',
+      render: (row) => <Badge variant="secondary" className="text-xs">{row.category || '-'}</Badge>,
+    },
+    {
+      key: 'buyPrice',
+      header: 'Harga Beli',
+      sortable: true,
+      className: 'w-24 text-right',
+      render: (row) => <span className="tabular-nums text-muted-foreground">{formatCurrency(row.buyPrice)}</span>,
+    },
+    {
+      key: 'sellPrice',
+      header: 'Harga Jual',
+      sortable: true,
+      className: 'w-24 text-right',
+      render: (row) => <span className="font-medium tabular-nums">{formatCurrency(row.sellPrice)}</span>,
+    },
+    {
+      key: 'stock',
+      header: 'Stok / Level',
+      sortable: true,
+      className: 'w-28',
+      render: (row) => {
+        const isLow = (row.stock || 0) <= (row.minStock || 0);
+        const pct = Math.min(100, Math.round(((row.stock || 0) / ((row.minStock || 1) * 3)) * 100));
+        return (
+          <div className="min-w-28">
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className={`font-bold text-sm tabular-nums ${isLow ? 'text-destructive' : ''}`}>{row.stock}</span>
+              <span className="text-xs text-muted-foreground">/ min {row.minStock}</span>
+            </div>
+            <Progress value={pct} className={`h-1 ${isLow ? '[&>div]:bg-destructive' : '[&>div]:bg-success'}`} />
+          </div>
+        );
+      },
+    },
+    {
+      key: 'warehouse',
+      header: 'Gudang',
+      sortable: false,
+      className: 'w-24',
+      render: (row) => <span className="text-xs text-muted-foreground">{row.warehouse || '-'}</span>,
+    },
+    {
+      key: 'actions',
+      header: 'Aksi',
+      sortable: false,
+      className: 'w-20 text-center',
+      render: (row) => (
+        <div className="flex justify-center gap-1">
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); openEdit(row); }}>
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={(e) => e.stopPropagation()}>
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Hapus Produk</AlertDialogTitle>
+                <AlertDialogDescription>Hapus <strong>{row.name}</strong>?</AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Batal</AlertDialogCancel>
+                <AlertDialogAction className="bg-destructive hover:bg-destructive/90" onClick={() => handleDelete(row.id, row.name)}>Hapus</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+      ),
+    },
+  ], []);
+
+  const openEdit = useCallback((p: Product) => {
     setEditItem(p);
     setForm({
       name: p.name, categoryId: p.categoryId || '',
@@ -62,9 +186,9 @@ const Produk = () => {
       stock: String(p.stock), minStock: String(p.minStock),
       unit: p.unit, warehouseId: p.warehouseId || '',
     });
-  };
+  }, []);
 
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
     if (!form.name.trim()) return;
     try {
       const cat = categories.find(c => c.id === form.categoryId);
@@ -82,11 +206,11 @@ const Produk = () => {
       if (editItem) {
         await updateMutation.mutateAsync({ id: editItem.id, data: payload });
         toast({ title: 'Produk diperbarui', description: `${form.name} berhasil diperbarui.` });
-        setEditItem(null);
+        setDialogOpen(false);
       } else {
         await createMutation.mutateAsync(payload);
         toast({ title: 'Produk ditambahkan', description: `${form.name} berhasil ditambahkan.` });
-        setIsAddOpen(false);
+        setDialogOpen(false);
       }
       setForm({ name: '', categoryId: '', buyPrice: '', sellPrice: '', stock: '', minStock: '', unit: '', warehouseId: '' });
       refetch();
@@ -94,9 +218,9 @@ const Produk = () => {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Gagal menyimpan produk';
       toast({ title: 'Error', description: msg, variant: 'destructive' });
     }
-  };
+  }, [form, editItem, categories, createMutation, updateMutation, refetch, toast]);
 
-  const handleDelete = async (id: string, name: string) => {
+  const handleDelete = useCallback(async (id: string, name: string) => {
     try {
       await deleteMutation.mutateAsync(id);
       toast({ title: 'Produk dihapus', description: `${name} telah dihapus.`, variant: 'destructive' });
@@ -104,17 +228,17 @@ const Produk = () => {
     } catch {
       toast({ title: 'Error', description: 'Gagal menghapus produk', variant: 'destructive' });
     }
-  };
+  }, [deleteMutation, refetch, toast]);
 
-  const handleExport = () => {
+  const handleExport = useCallback(() => {
     const rows = [['Kode', 'Nama', 'Kategori', 'Harga Beli', 'Harga Jual', 'Stok', 'Satuan', 'Min Stok'],
-    ...products.map(p => [p.code, p.name, p.category, formatRupiah(p.buyPrice), formatRupiah(p.sellPrice), p.stock, p.unit, p.minStock])];
+    ...products.map(p => [p.code, p.name, p.category, formatCurrency(p.buyPrice), formatCurrency(p.sellPrice), p.stock, p.unit, p.minStock])];
     const csv = rows.map(r => r.join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = 'produk.csv'; a.click();
     URL.revokeObjectURL(url);
-  };
+  }, [products]);
 
   const ProdukForm = ({ open, onOpenChange, title }: { open: boolean; onOpenChange: (v: boolean) => void; title: string }) => (
     <Dialog open={open} onOpenChange={v => { onOpenChange(v); if (!v) setEditItem(null); }}>
@@ -165,8 +289,8 @@ const Produk = () => {
       <div className="mb-5 grid gap-4 sm:grid-cols-4">
         <StatCard title="Total Produk" value={`${products.length} Produk`} icon={<Package className="h-5 w-5" />} color="primary" />
         <StatCard title="Total Kategori" value={`${categories.length} Kategori`} icon={<Package className="h-5 w-5" />} color="info" />
-        <StatCard title="Nilai Persediaan" value={totalNilai} icon={<Package className="h-5 w-5" />} color="success" />
-        <StatCard title="Stok Rendah" value={`${lowStock} Produk`} icon={<AlertTriangle className="h-5 w-5" />} color={lowStock > 0 ? 'warning' : 'success'} />
+        <StatCard title="Nilai Persediaan" value={stats.totalNilai} icon={<Package className="h-5 w-5" />} color="success" />
+        <StatCard title="Stok Rendah" value={`${stats.lowStock} Produk`} icon={<AlertTriangle className="h-5 w-5" />} color={stats.lowStock > 0 ? 'warning' : 'success'} />
       </div>
 
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -193,124 +317,31 @@ const Produk = () => {
         </div>
         <div className="flex gap-2 shrink-0">
           <Button variant="outline" size="sm" onClick={handleExport}><Download className="mr-1.5 h-4 w-4" />Export CSV</Button>
-          <Button size="sm" onClick={() => { setForm({ name: '', categoryId: '', buyPrice: '', sellPrice: '', stock: '', minStock: '', unit: '', warehouseId: '' }); setIsAddOpen(true); }}>
+          <Button size="sm" onClick={() => { setForm({ name: '', categoryId: '', buyPrice: '', sellPrice: '', stock: '', minStock: '', unit: '', warehouseId: '' }); setDialogOpen(true); }}>
             <Plus className="mr-1.5 h-4 w-4" />Tambah Produk
           </Button>
         </div>
       </div>
 
-      {isLoading ? (
-        <Card>
-          <CardContent className="p-0">
-            <div className="space-y-2 p-4">
-              {[...Array(5)].map((_, i) => (
-                <div key={i} className="flex gap-4">
-                  <Skeleton className="h-10 w-20" />
-                  <Skeleton className="h-10 flex-1" />
-                  <Skeleton className="h-10 w-24" />
-                  <Skeleton className="h-10 w-24" />
-                  <Skeleton className="h-10 w-20" />
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-muted/40 text-xs text-muted-foreground">
-                    <th className="px-4 py-3 text-left font-semibold">Kode</th>
-                    <th className="px-4 py-3 text-left font-semibold">Nama Produk</th>
-                    <th className="px-4 py-3 text-left font-semibold">Kategori</th>
-                    <th className="px-4 py-3 text-right font-semibold">Harga Beli</th>
-                    <th className="px-4 py-3 text-right font-semibold">Harga Jual</th>
-                    <th className="px-4 py-3 text-left font-semibold">Stok / Level</th>
-                    <th className="px-4 py-3 text-left font-semibold">Gudang</th>
-                    <th className="px-4 py-3 text-center font-semibold">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {products.filter(p => {
-                    const matchCat = categoryFilter === 'all' || p.category === categoryFilter;
-                    const matchStatus = statusFilter === 'all' ||
-                      (statusFilter === 'rendah' && (p.stock || 0) <= (p.minStock || 0)) ||
-                      (statusFilter === 'aman' && (p.stock || 0) > (p.minStock || 0));
-                    return matchCat && matchStatus;
-                  }).length === 0 ? (
-                    <tr><td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">Tidak ada produk yang sesuai.</td></tr>
-                  ) : (
-                    products.filter(p => {
-                      const matchCat = categoryFilter === 'all' || p.category === categoryFilter;
-                      const matchStatus = statusFilter === 'all' ||
-                        (statusFilter === 'rendah' && (p.stock || 0) <= (p.minStock || 0)) ||
-                        (statusFilter === 'aman' && (p.stock || 0) > (p.minStock || 0));
-                      return matchCat && matchStatus;
-                    }).map(p => {
-                      const isLow = (p.stock || 0) <= (p.minStock || 0);
-                      const pct = Math.min(100, Math.round(((p.stock || 0) / ((p.minStock || 1) * 3)) * 100));
-                      return (
-                        <tr key={p.id} className={`border-b transition-colors hover:bg-muted/20 ${isLow ? 'bg-warning/5' : ''}`}>
-                          <td className="px-4 py-3 font-mono text-xs text-primary">{p.code}</td>
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-2">
-                              <div className="flex h-8 w-8 items-center justify-center rounded bg-muted shrink-0">
-                                <Package className="h-4 w-4 text-muted-foreground" />
-                              </div>
-                              <div>
-                                <div className="font-medium text-sm">{p.name}</div>
-                                <div className="text-xs text-muted-foreground">{p.unit}</div>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3"><Badge variant="secondary" className="text-xs">{p.category || '-'}</Badge></td>
-                          <td className="px-4 py-3 text-right tabular-nums">{formatRupiah(p.buyPrice)}</td>
-                          <td className="px-4 py-3 text-right font-medium tabular-nums">{formatRupiah(p.sellPrice)}</td>
-                          <td className="px-4 py-3">
-                            <div className="min-w-28">
-                              <div className="flex items-center gap-1.5 mb-1">
-                                <span className={`font-bold text-sm tabular-nums ${isLow ? 'text-destructive' : ''}`}>{p.stock}</span>
-                                <span className="text-xs text-muted-foreground">/ min {p.minStock}</span>
-                              </div>
-                              <Progress value={pct} className={`h-1 ${isLow ? '[&>div]:bg-destructive' : '[&>div]:bg-success'}`} />
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-xs text-muted-foreground">{p.warehouse || '-'}</td>
-                          <td className="px-4 py-3">
-                            <div className="flex justify-center gap-1">
-                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(p)}><Pencil className="h-3.5 w-3.5" /></Button>
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>Hapus Produk</AlertDialogTitle>
-                                    <AlertDialogDescription>Hapus <strong>{p.name}</strong>?</AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>Batal</AlertDialogCancel>
-                                    <AlertDialogAction className="bg-destructive hover:bg-destructive/90" onClick={() => handleDelete(p.id, p.name)}>Hapus</AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      <Card>
+        <CardContent className="p-0">
+          <DataTable
+            data={products}
+            columns={columns}
+            keyField="id"
+            isLoading={isLoading}
+            emptyMessage="Tidak ada produk yang sesuai."
+            serverSide
+            pagination={pagination ? {
+              page: pagination.page,
+              totalPages: pagination.totalPages,
+              onPageChange: setPage,
+            } : undefined}
+          />
+        </CardContent>
+      </Card>
 
-      <ProdukForm open={isAddOpen} onOpenChange={setIsAddOpen} title="Tambah Produk Baru" />
-      <ProdukForm open={!!editItem} onOpenChange={v => { if (!v) setEditItem(null); }} title="Edit Produk" />
+      <ProdukForm open={dialogOpen} onOpenChange={v => { setDialogOpen(v); if (!v) { setEditItem(null); setForm({ name: '', categoryId: '', buyPrice: '', sellPrice: '', stock: '', minStock: '', unit: '', warehouseId: '' }); } }} title={editItem ? `Edit Produk: ${editItem.name}` : 'Tambah Produk Baru'} />
     </MainLayout>
   );
 };

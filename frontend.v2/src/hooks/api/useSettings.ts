@@ -2,6 +2,8 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import type { StoreSettings } from '@/types';
 
+const STALE_TIME = 5 * 60 * 1000;
+
 interface UpdateProfileRequest {
   name: string;
   email: string;
@@ -22,6 +24,7 @@ export const useSettings = () => {
   return useQuery({
     queryKey: ['settings'],
     queryFn: () => api.get('/settings'),
+    staleTime: STALE_TIME,
   });
 };
 

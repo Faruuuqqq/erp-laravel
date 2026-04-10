@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -15,20 +15,18 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Plus, Search, Pencil, Trash2, Phone, MapPin, AlertCircle, Download, Users, Building2, CreditCard, Banknote } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { StatCard } from '@/components/ui/StatCard';
-import { Skeleton } from '@/components/ui/SkeletonLoader';
+import { DataTable, ColumnDef } from '@/components/ui/DataTable';
 import { useToast } from '@/hooks/use-toast';
+import { useDebouncedValue } from '@/hooks/useDebounce';
 import { useCustomers, useCreateCustomer, useUpdateCustomer, useDeleteCustomer } from '@/hooks/api/useCustomers';
 import { useWarehouses } from '@/hooks/api/useWarehouses';
+import { formatCurrency } from '@/lib/utils';
 import type { Customer, Warehouse } from '@/types';
 import { exportToCSV } from '@/lib/export';
-
-const formatRupiah = (value: number) =>
-  new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(value);
 
 interface CustomerForm {
   customer_id: string;
@@ -78,13 +76,21 @@ const INITIAL_FORM: CustomerForm = {
 
 const CustomerPage = () => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeTab, setActiveTab] = useState('all');
-  const [isAddOpen, setIsAddOpen] = useState(false);
+  const [debouncedSearch] = useDebouncedValue(searchTerm, 300);
+  const [page, setPage] = useState(1);
+  const [dialogOpen, setDialogOpen] = useState(false);
   const [editItem, setEditItem] = useState<Customer | null>(null);
   const [form, setForm] = useState<CustomerForm>(INITIAL_FORM);
   const { toast } = useToast();
 
-  const { data, isLoading, refetch } = useCustomers({ per_page: 100, search: searchTerm });
+  // Reset to page 1 when search changes
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch]);
+
+  const isAddOpen = dialogOpen && !editItem;
+
+  const { data, isLoading, refetch } = useCustomers({ per_page: 20, search: debouncedSearch, page });
   const { data: warehousesData } = useWarehouses();
   const createMutation = useCreateCustomer();
   const updateMutation = useUpdateCustomer();
@@ -93,11 +99,110 @@ const CustomerPage = () => {
   const customers = (data?.data?.data ?? []) as Customer[];
   const warehouses = (warehousesData?.data?.data ?? []) as Warehouse[];
 
-  const totalPiutang = customers.reduce((s, c) => s + (c.balance || 0), 0);
-  const overLimit = customers.filter(c => (c.creditLimit || 0) > 0 && (c.balance || 0) > (c.creditLimit || 0)).length;
-  const verified = customers.filter(c => c.isVerified).length;
+  const pagination = data?.data?.meta ? {
+    page: data.data.meta.current_page,
+    totalPages: data.data.meta.last_page,
+    total: data.data.meta.total,
+  } : null;
 
-  const openEdit = (c: Customer) => {
+  const stats = useMemo(() => ({
+    totalPiutang: customers.reduce((s, c) => s + (c.balance || 0), 0),
+    overLimit: customers.filter(c => (c.creditLimit || 0) > 0 && (c.balance || 0) > (c.creditLimit || 0)).length,
+    verified: customers.filter(c => c.isVerified).length,
+  }), [customers]);
+
+  const columns: ColumnDef<Customer>[] = useMemo(() => [
+    {
+      key: 'customerId',
+      header: 'ID Customer',
+      sortable: true,
+      className: 'w-24',
+      render: (row) => <span className="font-mono text-xs">{row.customerId || '-'}</span>,
+    },
+    {
+      key: 'name',
+      header: 'Nama',
+      sortable: true,
+      className: 'w-40',
+      render: (row) => <span className="font-medium">{row.name}</span>,
+    },
+    {
+      key: 'city',
+      header: 'Kota',
+      sortable: true,
+      className: 'w-28',
+      render: (row) => <span className="text-muted-foreground">{row.city || '-'}</span>,
+    },
+    {
+      key: 'phone',
+      header: 'Telepon',
+      sortable: false,
+      className: 'w-32',
+      render: (row) => <span className="text-muted-foreground">{row.phone || '-'}</span>,
+    },
+    {
+      key: 'email',
+      header: 'Email',
+      sortable: true,
+      className: 'w-40',
+      render: (row) => <span className="text-muted-foreground text-xs truncate">{row.email || '-'}</span>,
+    },
+    {
+      key: 'creditLimit',
+      header: 'Limit Kredit',
+      sortable: true,
+      className: 'w-28 text-right',
+      render: (row) => <span className="tabular-nums">{formatCurrency(row.creditLimit || 0)}</span>,
+    },
+    {
+      key: 'warehouse',
+      header: 'Warehouse',
+      sortable: false,
+      className: 'w-28',
+      render: (row) => <span className="text-muted-foreground">{row.warehouse?.name || '-'}</span>,
+    },
+    {
+      key: 'isVerified',
+      header: 'Status',
+      sortable: true,
+      className: 'w-24 text-center',
+      render: (row) => row.isVerified 
+        ? <Badge className="bg-green-100 text-green-800 text-xs">Verified</Badge> 
+        : <Badge variant="outline" className="text-xs">Unverified</Badge>,
+    },
+    {
+      key: 'actions',
+      header: 'Aksi',
+      sortable: false,
+      className: 'w-20 text-center',
+      render: (row) => (
+        <div className="flex justify-center gap-1">
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); openEdit(row); }}>
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={(e) => e.stopPropagation()}>
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Hapus Customer</AlertDialogTitle>
+                <AlertDialogDescription>Hapus <strong>{row.name}</strong>?</AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Batal</AlertDialogCancel>
+                <AlertDialogAction className="bg-destructive hover:bg-destructive/90" onClick={() => handleDelete(row.id, row.name)}>Hapus</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+      ),
+    },
+  ], []);
+
+  const openEdit = useCallback((c: Customer) => {
     setEditItem(c);
     setForm({
       customer_id: c.customerId || '',
@@ -121,9 +226,9 @@ const CustomerPage = () => {
       notes: c.notes || '',
       is_verified: c.isVerified || false,
     });
-  };
+  }, []);
 
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
     if (!form.name.trim() || !form.customer_id.trim()) {
       toast({ title: 'Validasi', description: 'ID Customer dan Nama wajib diisi.', variant: 'destructive' });
       return;
@@ -154,16 +259,13 @@ const CustomerPage = () => {
       };
 
       if (editItem) {
-        await updateMutation.mutateAsync({
-          id: editItem.id,
-          data: payload,
-        });
+        await updateMutation.mutateAsync({ id: editItem.id, data: payload });
         toast({ title: 'Berhasil', description: `${form.name} berhasil diperbarui.` });
-        setEditItem(null);
+        setDialogOpen(false);
       } else {
         await createMutation.mutateAsync(payload);
         toast({ title: 'Berhasil', description: `${form.name} berhasil ditambahkan.` });
-        setIsAddOpen(false);
+        setDialogOpen(false);
       }
       setForm(INITIAL_FORM);
       refetch();
@@ -171,9 +273,9 @@ const CustomerPage = () => {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Gagal menyimpan customer';
       toast({ title: 'Error', description: msg, variant: 'destructive' });
     }
-  };
+  }, [form, editItem, createMutation, updateMutation, refetch, toast]);
 
-  const handleDelete = async (id: string, name: string) => {
+  const handleDelete = useCallback(async (id: string, name: string) => {
     try {
       await deleteMutation.mutateAsync(id);
       toast({ title: 'Berhasil', description: `${name} telah dihapus.`, variant: 'destructive' });
@@ -181,9 +283,9 @@ const CustomerPage = () => {
     } catch {
       toast({ title: 'Error', description: 'Gagal menghapus customer', variant: 'destructive' });
     }
-  };
+  }, [deleteMutation, refetch, toast]);
 
-  const handleExport = () => {
+  const handleExport = useCallback(() => {
     const headers = [
       'ID Customer', 'Nama', 'Telepon', 'Telepon 2', 'Email', 'Alamat', 'Kota', 'NPWP',
       'Contact Person', 'Bank Name', 'Rekening', 'Pemilik Rekening', 'Warehouse',
@@ -204,24 +306,23 @@ const CustomerPage = () => {
       c.bankAccount || '',
       c.accountHolder || '',
       c.warehouse?.name || '',
-      formatRupiah(c.balance || 0),
-      formatRupiah(c.creditLimit || 0),
+      formatCurrency(c.balance || 0),
+      formatCurrency(c.creditLimit || 0),
       c.discountPercentage || 0,
-      formatRupiah(c.discountAmount || 0),
+      formatCurrency(c.discountAmount || 0),
       c.operationalHours || '',
       c.notes || '',
       c.isVerified ? 'Ya' : 'Tidak',
     ]);
 
     exportToCSV(headers, rows, 'customer.csv');
-  };
+  }, [customers]);
 
   const FormDialog = ({ open, onOpenChange, title }: { open: boolean; onOpenChange: (v: boolean) => void; title: string }) => (
     <Dialog open={open} onOpenChange={v => { onOpenChange(v); if (!v) setEditItem(null); }}>
       <DialogContent className="max-h-[90vh] overflow-y-auto max-w-2xl">
         <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
         <div className="space-y-6 pt-4">
-          {/* Section 1: Informasi Dasar */}
           <div className="space-y-4 border-b pb-4">
             <h3 className="font-semibold text-sm flex items-center gap-2"><Users size={16} /> Informasi Dasar</h3>
             <div className="grid grid-cols-2 gap-4">
@@ -246,7 +347,6 @@ const CustomerPage = () => {
             </div>
           </div>
 
-          {/* Section 2: Kontak */}
           <div className="space-y-4 border-b pb-4">
             <h3 className="font-semibold text-sm flex items-center gap-2"><Phone size={16} /> Kontak</h3>
             <div className="grid grid-cols-2 gap-4">
@@ -269,7 +369,6 @@ const CustomerPage = () => {
             </div>
           </div>
 
-          {/* Section 3: Data Bisnis */}
           <div className="space-y-4 border-b pb-4">
             <h3 className="font-semibold text-sm flex items-center gap-2"><Building2 size={16} /> Data Bisnis</h3>
             <div className="grid grid-cols-2 gap-4">
@@ -298,7 +397,6 @@ const CustomerPage = () => {
             </div>
           </div>
 
-          {/* Section 4: Kredit & Diskon */}
           <div className="space-y-4 border-b pb-4">
             <h3 className="font-semibold text-sm flex items-center gap-2"><CreditCard size={16} /> Kredit & Diskon</h3>
             <div className="grid grid-cols-2 gap-4">
@@ -321,7 +419,6 @@ const CustomerPage = () => {
             </div>
           </div>
 
-          {/* Section 5: Informasi Bank */}
           <div className="space-y-4 border-b pb-4">
             <h3 className="font-semibold text-sm flex items-center gap-2"><Banknote size={16} /> Informasi Bank</h3>
             <div className="grid grid-cols-2 gap-4">
@@ -340,7 +437,6 @@ const CustomerPage = () => {
             </div>
           </div>
 
-          {/* Section 6: Alamat & Catatan */}
           <div className="space-y-4">
             <h3 className="font-semibold text-sm flex items-center gap-2"><MapPin size={16} /> Alamat & Catatan</h3>
             <div className="space-y-1.5">
@@ -374,9 +470,9 @@ const CustomerPage = () => {
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <StatCard title="Total Customer" value={customers.length} icon={<Users size={20} />} />
-          <StatCard title="Total Piutang" value={formatRupiah(totalPiutang)} icon={<AlertCircle size={20} />} />
-          <StatCard title="Overdue" value={overLimit} icon={<AlertCircle size={20} className="text-destructive" />} />
-          <StatCard title="Terverifikasi" value={verified} icon={<Badge>✓</Badge>} />
+          <StatCard title="Total Piutang" value={formatCurrency(stats.totalPiutang)} icon={<AlertCircle size={20} />} />
+          <StatCard title="Overdue" value={stats.overLimit} icon={<AlertCircle size={20} className="text-destructive" />} />
+          <StatCard title="Terverifikasi" value={stats.verified} icon={<Badge>✓</Badge>} />
         </div>
 
         <Card>
@@ -386,7 +482,7 @@ const CustomerPage = () => {
               <Button variant="outline" size="sm" onClick={handleExport} disabled={customers.length === 0}>
                 <Download size={16} className="mr-1" /> Export CSV
               </Button>
-              <Button size="sm" onClick={() => { setForm(INITIAL_FORM); setEditItem(null); setIsAddOpen(true); }}>
+              <Button size="sm" onClick={() => { setForm(INITIAL_FORM); setEditItem(null); setDialogOpen(true); }}>
                 <Plus size={16} className="mr-1" /> Tambah Customer
               </Button>
             </div>
@@ -401,75 +497,29 @@ const CustomerPage = () => {
                 </div>
               </div>
 
-              {isLoading ? (
-                <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => (<Skeleton key={i} className="h-12 w-full" />))}</div>
-              ) : customers.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">Tidak ada data customer</div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b bg-muted/50">
-                        <th className="text-left py-2 px-4 font-semibold">ID Customer</th>
-                        <th className="text-left py-2 px-4 font-semibold">Nama</th>
-                        <th className="text-left py-2 px-4 font-semibold">Kota</th>
-                        <th className="text-left py-2 px-4 font-semibold">Telepon</th>
-                        <th className="text-left py-2 px-4 font-semibold">Email</th>
-                        <th className="text-right py-2 px-4 font-semibold">Limit Kredit</th>
-                        <th className="text-left py-2 px-4 font-semibold">Warehouse</th>
-                        <th className="text-center py-2 px-4 font-semibold">Status</th>
-                        <th className="text-center py-2 px-4 font-semibold">Aksi</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {customers.map(c => (
-                        <tr key={c.id} className="border-b hover:bg-muted/50">
-                          <td className="py-2 px-4 font-mono text-xs">{c.customerId || '-'}</td>
-                          <td className="py-2 px-4 font-medium">{c.name}</td>
-                          <td className="py-2 px-4">{c.city || '-'}</td>
-                          <td className="py-2 px-4">{c.phone || '-'}</td>
-                          <td className="py-2 px-4 text-xs">{c.email || '-'}</td>
-                          <td className="py-2 px-4 text-right">{formatRupiah(c.creditLimit || 0)}</td>
-                          <td className="py-2 px-4">{c.warehouse?.name || '-'}</td>
-                          <td className="py-2 px-4 text-center">
-                            {c.isVerified ? <Badge className="bg-green-100 text-green-800">Verified</Badge> : <Badge variant="outline">Unverified</Badge>}
-                          </td>
-                          <td className="py-2 px-4 text-center">
-                            <div className="flex justify-center gap-2">
-                              <Button variant="ghost" size="sm" onClick={() => openEdit(c)}>
-                                <Pencil size={16} />
-                              </Button>
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
-                                    <Trash2 size={16} />
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>Hapus Customer?</AlertDialogTitle>
-                                    <AlertDialogDescription>Apakah Anda yakin ingin menghapus {c.name}?</AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>Batal</AlertDialogCancel>
-                                    <AlertDialogAction onClick={() => handleDelete(c.id, c.name)} className="bg-destructive hover:bg-destructive/90">Hapus</AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+              <Card>
+                <CardContent className="p-0">
+                  <DataTable
+                    data={customers}
+                    columns={columns}
+                    keyField="id"
+                    isLoading={isLoading}
+                    emptyMessage="Tidak ada data customer."
+                    serverSide
+                    pagination={pagination ? {
+                      page: pagination.page,
+                      totalPages: pagination.totalPages,
+                      onPageChange: setPage,
+                    } : undefined}
+                  />
+                </CardContent>
+              </Card>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      <FormDialog open={isAddOpen || Boolean(editItem)} onOpenChange={v => { if (!v) { setIsAddOpen(false); setEditItem(null); } else setIsAddOpen(true); }} title={editItem ? `Edit Customer: ${editItem.name}` : 'Tambah Customer Baru'} />
+      <FormDialog open={dialogOpen} onOpenChange={v => { setDialogOpen(v); if (!v) { setEditItem(null); setForm(INITIAL_FORM); } }} title={editItem ? `Edit Customer: ${editItem.name}` : 'Tambah Customer Baru'} />
     </MainLayout>
   );
 };

@@ -117,15 +117,8 @@ class DeliveryNoteController extends Controller
     {
         $prefix = 'SJ';
         $date = now()->format('Ymd');
-        $lastDelivery = DeliveryNote::whereDate('date', '>=', now()->startOfDay())
-            ->orderBy('id', 'desc')
-            ->first();
-
-        if ($lastDelivery && str_starts_with($lastDelivery->delivery_number, "{$prefix}-{$date}")) {
-            $number = (int) substr($lastDelivery->delivery_number, -4) + 1;
-            return sprintf("%s-%s-%03d", $prefix, $date, $number);
-        }
-
-        return sprintf("%s-%s-001", $prefix, $date);
+        $timestamp = now()->format('His');
+        
+        return sprintf("%s-%s-%s", $prefix, $date, $timestamp);
     }
 }

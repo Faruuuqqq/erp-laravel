@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 
+const STALE_TIME = 5 * 60 * 1000;
+
 interface Admin {
   id: string;
   name: string;
@@ -29,6 +31,7 @@ export const useAdmins = (params?: { search?: string; active?: boolean; per_page
   return useQuery({
     queryKey: ['admins', params],
     queryFn: () => api.get<{ data: { data: Admin[] }; meta: any }>('/admins', params),
+    staleTime: STALE_TIME,
   });
 };
 
@@ -37,6 +40,7 @@ export const useAdmin = (id: string) => {
     queryKey: ['admins', id],
     queryFn: () => api.get<{ data: Admin }>(`/admins/${id}`),
     enabled: !!id,
+    staleTime: STALE_TIME,
   });
 };
 

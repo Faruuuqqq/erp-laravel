@@ -2,6 +2,8 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import type { Customer, PaginatedResponse } from '@/types';
 
+const STALE_TIME = 5 * 60 * 1000;
+
 interface CustomerQueryParams {
   page?: number;
   per_page?: number;
@@ -30,6 +32,7 @@ export const useCustomers = (params?: CustomerQueryParams) => {
   return useQuery({
     queryKey: ['customers', params],
     queryFn: () => api.get<PaginatedResponse<Customer>>('/customers', params),
+    staleTime: STALE_TIME,
   });
 };
 
@@ -38,6 +41,7 @@ export const useCustomer = (id: string) => {
     queryKey: ['customers', id],
     queryFn: () => api.get<Customer>(`/customers/${id}`),
     enabled: !!id,
+    staleTime: STALE_TIME,
   });
 };
 

@@ -8,15 +8,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
-import { Plus, Trash2, CreditCard, Calculator, Printer, FileDown, CheckCircle2, AlertCircle, Search } from 'lucide-react';
+import { Plus, Trash2, CreditCard, Calculator, CheckCircle2, AlertCircle, Search } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useValidateQty } from '@/hooks/useValidateQty';
 import { useProducts } from '@/hooks/api/useProducts';
 import { useCustomers } from '@/hooks/api/useCustomers';
 import { useSalesReps } from '@/hooks/api/useSalesReps';
 import { useWarehouses } from '@/hooks/api/useWarehouses';
-import { useCreateTransaction, printInvoice, printReceipt } from '@/hooks/api/useTransactions';
+import { useCreateTransaction } from '@/hooks/api/useTransactions';
+import { PrintPreviewDialog } from '@/components/dialogs/PrintPreviewDialog';
 import type { Product, Customer, SalesRep, Warehouse } from '@/types';
+import type { TransactionPrintData } from '@/types/print';
 
 const formatRupiah = (value: number) =>
   new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(value);
@@ -43,12 +45,14 @@ const PenjualanKredit = () => {
   const [selectedGudang, setSelectedGudang] = useState('');
   const [dp, setDp] = useState('0');
   const [catatan, setCatatan] = useState('');
-  const [diskonTotal, setDiskonTotal] = useState('0');
-  const [searchProduct, setSearchProduct] = useState('');
-  const [tanggal, setTanggal] = useState(new Date().toISOString().split('T')[0]);
-  const [dueDate, setDueDate] = useState('');
-  const [saved, setSaved] = useState(false);
-  const [lastInvoice, setLastInvoice] = useState('');
+   const [diskonTotal, setDiskonTotal] = useState('0');
+   const [searchProduct, setSearchProduct] = useState('');
+   const [tanggal, setTanggal] = useState(new Date().toISOString().split('T')[0]);
+   const [dueDate, setDueDate] = useState('');
+   const [saved, setSaved] = useState(false);
+   const [lastInvoice, setLastInvoice] = useState('');
+   const [lastInvoiceId, setLastInvoiceId] = useState<number>(0);
+   const [previewOpen, setPreviewOpen] = useState(false);
 
   const { data: productsData } = useProducts({ per_page: 200 });
   const { data: customersData } = useCustomers({ per_page: 100 });
@@ -141,46 +145,75 @@ const PenjualanKredit = () => {
           price: item.harga,
           discount: item.diskon,
         })),
-      };
+       };
 
-      await createMutation.mutateAsync(payload);
-      const invoiceNumber = response.data?.data?.invoiceNumber || response.data?.invoiceNumber || '生成中';
-      setLastInvoice(invoiceNumber);
-      setSaved(true);
-      toast({ title: 'Penjualan kredit berhasil disimpan', description: `No. Faktur: ${invoiceNumber}` });
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Gagal menyimpan transaksi';
-      toast({ title: 'Error', description: msg, variant: 'destructive' });
-    }
-  };
+const response = await createMutation.mutateAsync(payload);
+        const invoiceNumber = response.data?.data?.invoiceNumber || response.data?.invoiceNumber || '生成中';
+        const invoiceId = response.data?.data?.id || response.data?.id || 0;
+        setLastInvoice(invoiceNumber);
+        setLastInvoiceId(invoiceId);
+        setSaved(true);
+       toast({ title: 'Penjualan kredit berhasil disimpan', description: `No. Faktur: ${invoiceNumber}` });
+     } catch (err: unknown) {
+       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Gagal menyimpan transaksi';
+       toast({ title: 'Error', description: msg, variant: 'destructive' });
+     }
+   };
 
-  const handlePrintInvoice = () => printInvoice(lastInvoice);
-  const handlePrintReceipt = () => printReceipt(lastInvoice);
+   // Build print data from current form state
+   const getPrintData = (): TransactionPrintData => ({
+     documentType: 'penjualan_kredit',
+     documentNumber: saved ? lastInvoice : undefined,
+     savedDocumentId: saved ? lastInvoiceId : undefined,
+     date: tanggal,
+     isSaved: saved,
+     customer: customer ? { name: customer.name, address: customer.address, phone: customer.phone } : undefined,
+     items: cart.map((item, idx) => ({
+       no: idx + 1,
+       nama: item.nama,
+       qty: item.qty,
+       satuan: item.satuan,
+       harga: item.harga,
+       subtotal: item.subtotal,
+     })),
+     totalQty: cart.reduce((s, i) => s + i.qty, 0),
+     totalItems: cart.length,
+     subtotal,
+     discount: diskonTotalNum,
+     grandTotal,
+     notes: catatan,
+   });
 
-  if (saved) {
-    return (
-      <MainLayout title="Penjualan Kredit" subtitle="Transaksi berhasil disimpan">
-        <div className="flex flex-col items-center justify-center py-16 gap-6">
-          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-success/10">
-            <CheckCircle2 className="h-10 w-10 text-success" />
-          </div>
-          <div className="text-center">
-            <h2 className="text-2xl font-bold">Penjualan Kredit Berhasil</h2>
-            <p className="text-muted-foreground mt-1">No. Faktur: <span className="font-mono font-semibold text-primary">{lastInvoice}</span></p>
-            <p className="text-3xl font-bold text-warning mt-3">{formatRupiah(sisaPiutang)}</p>
-            <p className="text-sm text-muted-foreground">Total Piutang Ditambahkan</p>
-          </div>
-          <div className="flex gap-3">
-            <Button variant="outline" onClick={handlePrintInvoice}><Printer className="mr-2 h-4 w-4" />Cetak Faktur</Button>
-            <Button variant="outline" onClick={handlePrintInvoice}><FileDown className="mr-2 h-4 w-4" />Export PDF</Button>
-            <Button onClick={() => { setCart([]); setSaved(false); setDp('0'); setDiskonTotal('0'); setSelectedCustomer(''); setSelectedSales(''); }}>
-              Transaksi Baru
-            </Button>
-          </div>
-        </div>
-      </MainLayout>
-    );
-  }
+   if (saved) {
+     return (
+       <MainLayout title="Penjualan Kredit" subtitle="Transaksi berhasil disimpan">
+         <div className="flex flex-col items-center justify-center py-16 gap-6">
+           <div className="flex h-20 w-20 items-center justify-center rounded-full bg-success/10">
+             <CheckCircle2 className="h-10 w-10 text-success" />
+           </div>
+           <div className="text-center">
+             <h2 className="text-2xl font-bold">Penjualan Kredit Berhasil</h2>
+             <p className="text-muted-foreground mt-1">No. Faktur: <span className="font-mono font-semibold text-primary">{lastInvoice}</span></p>
+             <p className="text-3xl font-bold text-warning mt-3">{formatRupiah(sisaPiutang)}</p>
+             <p className="text-sm text-muted-foreground">Total Piutang Ditambahkan</p>
+           </div>
+           <div className="flex gap-3">
+             <Button variant="outline" onClick={() => setPreviewOpen(true)}>Preview & Lebih Lanjut</Button>
+             <Button onClick={() => { setCart([]); setSaved(false); setDp('0'); setDiskonTotal('0'); setSelectedCustomer(''); setSelectedSales(''); }}>
+               Transaksi Baru
+             </Button>
+           </div>
+         </div>
+
+         <PrintPreviewDialog
+           isOpen={previewOpen}
+           onOpenChange={setPreviewOpen}
+           data={getPrintData()}
+           documentType="penjualan_kredit"
+         />
+       </MainLayout>
+     );
+   }
 
   return (
     <MainLayout title="Penjualan Kredit" subtitle="Buat transaksi penjualan dengan pembayaran kredit">
@@ -378,20 +411,26 @@ const PenjualanKredit = () => {
                 <Input value={catatan} onChange={e => setCatatan(e.target.value)} placeholder="Catatan tambahan..." className="text-xs h-8" />
               </div>
 
-              <div className="flex gap-2 pt-1">
-                <Button variant="outline" className="flex-1 h-9 text-sm" onClick={() => { setCart([]); setDp('0'); setDiskonTotal('0'); setSelectedCustomer(''); }}>Reset</Button>
-                <Button className="flex-1 h-9 text-sm" onClick={handleSave} disabled={cart.length === 0 || createMutation.isPending}>Simpan</Button>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <Button variant="outline" className="h-8 text-xs" onClick={() => window.print()}><Printer className="mr-1.5 h-3.5 w-3.5" />Cetak</Button>
-                <Button variant="outline" className="h-8 text-xs"><FileDown className="mr-1.5 h-3.5 w-3.5" />PDF</Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    </MainLayout>
-  );
-};
+               <div className="flex gap-2 pt-1">
+                 <Button variant="outline" className="flex-1 h-9 text-sm" onClick={() => { setCart([]); setDp('0'); setDiskonTotal('0'); setSelectedCustomer(''); }}>Reset</Button>
+                 <Button className="flex-1 h-9 text-sm" onClick={handleSave} disabled={cart.length === 0 || createMutation.isPending}>Simpan</Button>
+               </div>
+               <Button variant="outline" className="w-full h-9 text-sm" onClick={() => setPreviewOpen(true)}>
+                 Preview & Lebih Lanjut
+               </Button>
+             </CardContent>
+           </Card>
+         </div>
+       </div>
 
-export default PenjualanKredit;
+       <PrintPreviewDialog
+         isOpen={previewOpen}
+         onOpenChange={setPreviewOpen}
+         data={getPrintData()}
+         documentType="penjualan_kredit"
+       />
+     </MainLayout>
+   );
+ };
+
+ export default PenjualanKredit;

@@ -2,6 +2,8 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import type { Expense, PaginatedResponse } from '@/types';
 
+const STALE_TIME = 5 * 60 * 1000;
+
 interface ExpenseQueryParams {
   page?: number;
   per_page?: number;
@@ -32,6 +34,7 @@ export const useExpenses = (params?: ExpenseQueryParams) => {
   return useQuery({
     queryKey: ['expenses', params],
     queryFn: () => api.get<PaginatedResponse<Expense>>('/expenses', params),
+    staleTime: STALE_TIME,
   });
 };
 
@@ -39,6 +42,7 @@ export const useExpenseCategories = () => {
   return useQuery({
     queryKey: ['expenses', 'categories'],
     queryFn: () => api.get<{ data: string[] }>('/expenses/categories'),
+    staleTime: STALE_TIME,
   });
 };
 
@@ -47,6 +51,7 @@ export const useExpense = (id: string) => {
     queryKey: ['expenses', id],
     queryFn: () => api.get<Expense>(`/expenses/${id}`),
     enabled: !!id,
+    staleTime: STALE_TIME,
   });
 };
 

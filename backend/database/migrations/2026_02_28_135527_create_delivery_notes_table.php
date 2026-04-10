@@ -12,7 +12,7 @@ return new class extends Migration
             $table->id();
             $table->string('delivery_number')->unique();
             $table->date('date');
-            $table->unsignedBigInteger('transaction_id');
+            $table->unsignedBigInteger('transaction_id')->nullable();
             $table->unsignedBigInteger('customer_id')->nullable();
             $table->string('driver')->nullable();
             $table->string('vehicle_plate')->nullable();

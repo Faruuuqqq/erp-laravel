@@ -7,14 +7,16 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Plus, Trash2, Banknote, Calculator, Printer, FileDown, CheckCircle2, Search, Loader2 } from 'lucide-react';
+import { Plus, Trash2, Banknote, Calculator, CheckCircle2, Search } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useValidateQty } from '@/hooks/useValidateQty';
 import { useProducts } from '@/hooks/api/useProducts';
 import { useCustomers } from '@/hooks/api/useCustomers';
 import { useSalesReps } from '@/hooks/api/useSalesReps';
-import { useCreateTransaction, printInvoice, printReceipt } from '@/hooks/api/useTransactions';
+import { useCreateTransaction } from '@/hooks/api/useTransactions';
+import { PrintPreviewDialog } from '@/components/dialogs/PrintPreviewDialog';
 import type { Product, Customer, SalesRep } from '@/types';
+import type { TransactionPrintData } from '@/types/print';
 
 const formatRupiah = (value: number) =>
   new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(value);
@@ -43,10 +45,12 @@ const PenjualanTunai = () => {
   const [selectedCustomer, setSelectedCustomer] = useState('');
   const [selectedSales, setSelectedSales] = useState('');
   const [bayar, setBayar] = useState('');
-  const [diskonTotal, setDiskonTotal] = useState('0');
-  const [searchProduct, setSearchProduct] = useState('');
-  const [saved, setSaved] = useState(false);
-  const [lastInvoice, setLastInvoice] = useState('');
+   const [diskonTotal, setDiskonTotal] = useState('0');
+   const [searchProduct, setSearchProduct] = useState('');
+   const [saved, setSaved] = useState(false);
+   const [lastInvoice, setLastInvoice] = useState('');
+   const [lastInvoiceId, setLastInvoiceId] = useState<number>(0);
+   const [previewOpen, setPreviewOpen] = useState(false);
 
   const { data: productsData } = useProducts({ per_page: 200 });
   const { data: customersData } = useCustomers({ per_page: 100 });
@@ -137,42 +141,70 @@ const PenjualanTunai = () => {
 
       const response = await createMutation.mutateAsync(payload);
       const invoiceNumber = response.data?.data?.invoiceNumber || response.data?.invoiceNumber || '生成中';
+      const invoiceId = response.data?.data?.id || response.data?.id || 0;
       setLastInvoice(invoiceNumber);
+      setLastInvoiceId(invoiceId);
       setSaved(true);
       toast({ title: 'Transaksi berhasil disimpan', description: `No. Faktur: ${invoiceNumber}` });
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Gagal menyimpan transaksi';
       toast({ title: 'Error', description: msg, variant: 'destructive' });
-    }
-  };
+     }
+   };
 
-  const handlePrintReceipt = () => printReceipt(lastInvoice);
-  const handlePrintInvoice = () => printInvoice(lastInvoice);
+   // Build print data from current form state
+   const getPrintData = (): TransactionPrintData => ({
+     documentType: 'penjualan_tunai',
+     documentNumber: saved ? lastInvoice : undefined,
+     savedDocumentId: saved ? lastInvoiceId : undefined,
+     date: new Date().toISOString().split('T')[0],
+     isSaved: saved,
+     customer: selectedCustomer && selectedCustomer !== 'walk-in' ? customers.find(c => c.id === selectedCustomer) : { name: 'Walk-in Customer' },
+     items: cart.map((item, idx) => ({
+       no: idx + 1,
+       nama: item.nama,
+       qty: item.qty,
+       satuan: item.satuan,
+       harga: item.harga,
+       subtotal: item.subtotal,
+     })),
+     totalQty: cart.reduce((s, i) => s + i.qty, 0),
+     totalItems: cart.length,
+     subtotal,
+     discount: diskonTotalNum,
+     grandTotal,
+   });
 
-  if (saved) {
-    return (
-      <MainLayout title="Penjualan Tunai" subtitle="Transaksi berhasil disimpan">
-        <div className="flex flex-col items-center justify-center py-16 gap-6">
-          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-success/10">
-            <CheckCircle2 className="h-10 w-10 text-success" />
-          </div>
-          <div className="text-center">
-            <h2 className="text-2xl font-bold">Transaksi Berhasil</h2>
-            <p className="text-muted-foreground mt-1">No. Faktur: <span className="font-mono font-semibold text-primary">{lastInvoice}</span></p>
-            <p className="text-3xl font-bold text-success mt-3">{formatRupiah(grandTotal)}</p>
-            {kembalian > 0 && <p className="text-muted-foreground mt-1">Kembalian: <span className="font-semibold text-success">{formatRupiah(kembalian)}</span></p>}
-          </div>
-          <div className="flex gap-3">
-            <Button variant="outline" onClick={handlePrintReceipt}><Printer className="mr-2 h-4 w-4" />Cetak Struk</Button>
-            <Button variant="outline" onClick={handlePrintInvoice}><FileDown className="mr-2 h-4 w-4" />Export PDF</Button>
-            <Button onClick={() => { setCart([]); setSaved(false); setBayar(''); setDiskonTotal('0'); setSelectedCustomer(''); setSelectedSales(''); }}>
-              Transaksi Baru
-            </Button>
-          </div>
-        </div>
-      </MainLayout>
-    );
-  }
+   if (saved) {
+     return (
+       <MainLayout title="Penjualan Tunai" subtitle="Transaksi berhasil disimpan">
+         <div className="flex flex-col items-center justify-center py-16 gap-6">
+           <div className="flex h-20 w-20 items-center justify-center rounded-full bg-success/10">
+             <CheckCircle2 className="h-10 w-10 text-success" />
+           </div>
+           <div className="text-center">
+             <h2 className="text-2xl font-bold">Transaksi Berhasil</h2>
+             <p className="text-muted-foreground mt-1">No. Faktur: <span className="font-mono font-semibold text-primary">{lastInvoice}</span></p>
+             <p className="text-3xl font-bold text-success mt-3">{formatRupiah(grandTotal)}</p>
+             {kembalian > 0 && <p className="text-muted-foreground mt-1">Kembalian: <span className="font-semibold text-success">{formatRupiah(kembalian)}</span></p>}
+           </div>
+           <div className="flex gap-3">
+             <Button variant="outline" onClick={() => setPreviewOpen(true)}>Preview & Lebih Lanjut</Button>
+             <Button onClick={() => { setCart([]); setSaved(false); setBayar(''); setDiskonTotal('0'); setSelectedCustomer(''); setSelectedSales(''); }}>
+               Transaksi Baru
+             </Button>
+           </div>
+         </div>
+
+         <PrintPreviewDialog
+           isOpen={previewOpen}
+           onOpenChange={setPreviewOpen}
+           data={getPrintData()}
+           documentType="penjualan_tunai"
+         />
+       </MainLayout>
+     );
+   }
 
   return (
     <MainLayout title="Penjualan Tunai" subtitle="Buat transaksi penjualan tunai">
@@ -337,25 +369,27 @@ const PenjualanTunai = () => {
                 </div>
               )}
 
-              <div className="flex gap-2 pt-2">
-                <Button variant="outline" className="flex-1 h-9 text-sm" onClick={() => { setCart([]); setBayar(''); setDiskonTotal('0'); }}>Reset</Button>
-                <Button className="flex-1 h-9 text-sm" onClick={handleSave} disabled={cart.length === 0 || createMutation.isPending}>Simpan</Button>
-              </div>
+               <div className="flex gap-2 pt-2">
+                 <Button variant="outline" className="flex-1 h-9 text-sm" onClick={() => { setCart([]); setBayar(''); setDiskonTotal('0'); }}>Reset</Button>
+                 <Button className="flex-1 h-9 text-sm" onClick={handleSave} disabled={cart.length === 0 || createMutation.isPending}>Simpan</Button>
+               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <Button variant="outline" className="w-full h-8 text-xs" onClick={() => window.print()} disabled={cart.length === 0}>
-                  <Printer className="mr-1.5 h-3.5 w-3.5" />Cetak Struk
-                </Button>
-                <Button variant="outline" className="w-full h-8 text-xs" onClick={() => window.print()} disabled={cart.length === 0}>
-                  <FileDown className="mr-1.5 h-3.5 w-3.5" />Export PDF
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    </MainLayout>
-  );
-};
+               <Button variant="outline" className="w-full h-9 text-sm" onClick={() => setPreviewOpen(true)}>
+                 Preview & Lebih Lanjut
+               </Button>
+             </CardContent>
+           </Card>
+         </div>
 
-export default PenjualanTunai;
+         <PrintPreviewDialog
+           isOpen={previewOpen}
+           onOpenChange={setPreviewOpen}
+           data={getPrintData()}
+           documentType="penjualan_tunai"
+         />
+       </div>
+     </MainLayout>
+   );
+ };
+
+ export default PenjualanTunai;

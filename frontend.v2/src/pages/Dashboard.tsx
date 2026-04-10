@@ -1,9 +1,11 @@
+import { useMemo, memo, useState } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { StatCard } from '@/components/ui/StatCard';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   TrendingUp, TrendingDown, Package, Users, ShoppingCart,
   Wallet, AlertTriangle, BarChart3, ArrowRight, Clock,
+  PieChart as PieChartIcon, Percent, DollarSign, TrendingUp as TrendingUpIcon,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -20,16 +22,105 @@ import {
   useSalesTrend,
 } from '@/hooks/api/useDashboard';
 
+// Constants
+const STALE_TIME = 5 * 60 * 1000;
+const GC_TIME = 30 * 60 * 1000;
+
+const DASHBOARD_CONSTANTS = {
+  LOW_STOCK_PREVIEW: 2,
+  LOW_STOCK_FULL: 5,
+  RECENT_TRANSACTIONS: 5,
+} as const;
+
 const formatRupiah = (value: number) =>
   new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(value);
 
-const TIPE_LABEL: Record<string, string> = {
+const TRANSACTION_TYPE_LABELS: Record<string, string> = {
   pembelian: 'Pembelian',
   penjualan_tunai: 'Penjualan Tunai',
   penjualan_kredit: 'Penjualan Kredit',
+} as const;
+
+// Skeleton Components
+const StatCardSkeleton = ({ count = 4 }: { count?: number }) => (
+  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    {[...Array(count)].map((_, i) => (
+      <Card key={i}>
+        <CardContent className="p-4">
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-28" />
+            <Skeleton className="h-7 w-32" />
+            <Skeleton className="h-3 w-24" />
+          </div>
+        </CardContent>
+      </Card>
+    ))}
+  </div>
+);
+
+const ChartSkeleton = () => (
+  <div className="h-[200px] space-y-2">
+    <Skeleton className="h-4 w-full" />
+    <Skeleton className="h-4 w-full" />
+    <Skeleton className="h-4 w-3/4" />
+    <div className="h-[140px] bg-muted rounded mt-4" />
+  </div>
+);
+
+const ListSkeleton = ({ count = 5 }: { count?: number }) => (
+  <div className="space-y-2">
+    {[...Array(count)].map((_, i) => (
+      <Skeleton key={i} className="h-12 w-full" />
+    ))}
+  </div>
+);
+
+const RecentTransactionsSkeleton = () => (
+  <div className="space-y-2">
+    {[...Array(5)].map((_, i) => (
+      <div key={i} className="flex gap-4 py-2 border-b">
+        <Skeleton className="h-6 w-20" />
+        <Skeleton className="h-6 w-32" />
+        <Skeleton className="h-6 w-24" />
+        <Skeleton className="h-6 w-20" />
+        <Skeleton className="h-6 w-16" />
+      </div>
+    ))}
+  </div>
+);
+
+// Metric Calculation Functions
+const calculateMetrics = (stats: any, financial: any, recentTx: any) => {
+  const totalSales = stats.totalSalesToday ?? 0;
+  const totalPurchases = stats.totalPurchasesToday ?? 0;
+  
+  // Gross Margin % = (Sales - Purchases) / Sales × 100
+  const grossMargin = totalSales > 0 ? ((totalSales - totalPurchases) / totalSales) * 100 : 0;
+  
+  // Average Transaction Value = Total Sales / Transaction Count
+  const transactionCount = stats.totalTransactionsToday ?? 1;
+  const aov = totalSales / transactionCount;
+  
+  // Cash vs Credit Split % - need to count cash vs credit transactions
+  const cashTransactions = recentTx.filter((tx: any) => tx.type === 'penjualan_tunai').length;
+  const creditTransactions = recentTx.filter((tx: any) => tx.type === 'penjualan_kredit').length;
+  const totalTransactions = recentTx.length || 1;
+  const cashPercentage = (cashTransactions / totalTransactions) * 100;
+  
+  // Return Rate % - simplified: we can check if there are return transactions
+  const returnTransactions = recentTx.filter((tx: any) => tx.type === 'retur_penjualan').length;
+  const returnRate = totalTransactions > 0 ? (returnTransactions / totalTransactions) * 100 : 0;
+  
+  return {
+    grossMargin: Math.max(0, grossMargin),
+    aov,
+    cashPercentage,
+    returnRate,
+  };
 };
 
-const Dashboard = () => {
+// Dashboard Component
+const DashboardContent = () => {
   const { user, isOwner } = useAuth();
   const navigate = useNavigate();
 
@@ -45,11 +136,24 @@ const Dashboard = () => {
   const financial = financialData?.data?.data ?? {};
   const trendDataFormatted = trendData?.data?.data ?? [];
 
-  const chartData = trendDataFormatted.map((d: any) => ({
-    hari: d.name,
-    masuk: d.sales || 0,
-    keluar: d.purchases || 0,
-  }));
+  // Memoized chart data
+  const chartData = useMemo(() => 
+    trendDataFormatted.map((d: any) => ({
+      hari: d.name,
+      masuk: d.sales || 0,
+      keluar: d.purchases || 0,
+    })),
+    [trendDataFormatted]
+  );
+
+  // Memoized metrics
+  const metrics = useMemo(() => 
+    calculateMetrics(stats, financial, recentTx),
+    [stats, financial, recentTx]
+  );
+
+  const isDataLoading = statsLoading || financialLoading;
+  const isChartLoading = trendLoading;
 
   return (
     <MainLayout
@@ -64,7 +168,7 @@ const Dashboard = () => {
               <AlertTriangle className="h-4 w-4 text-warning shrink-0" />
               <p className="text-sm text-warning">
                 <strong>{lowStock.length} produk</strong> stok di bawah minimum:{' '}
-                {lowStock.slice(0, 2).map((p: any) => p.name).join(', ')}{lowStock.length > 2 ? '...' : ''}
+                {lowStock.slice(0, DASHBOARD_CONSTANTS.LOW_STOCK_PREVIEW).map((p: any) => p.name).join(', ')}{lowStock.length > DASHBOARD_CONSTANTS.LOW_STOCK_PREVIEW ? '...' : ''}
               </p>
               <Button size="sm" variant="outline" className="ml-auto shrink-0 h-7 border-warning text-warning hover:bg-warning/10" onClick={() => navigate('/produk')}>
                 Lihat
@@ -85,21 +189,9 @@ const Dashboard = () => {
         </div>
       )}
 
-      {/* Stat Cards */}
-      {statsLoading || financialLoading ? (
-        <div className="mb-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {[1, 2, 3, 4].map(i => (
-            <Card key={i}>
-              <CardContent className="p-4">
-                <div className="space-y-2">
-                  <Skeleton className="h-4 w-28" />
-                  <Skeleton className="h-7 w-32" />
-                  <Skeleton className="h-3 w-24" />
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+      {/* Main Stat Cards */}
+      {isDataLoading ? (
+        <StatCardSkeleton count={4} />
       ) : (
         <div className="mb-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
@@ -140,23 +232,11 @@ const Dashboard = () => {
         </div>
       )}
 
-      {/* Owner-only extra stats */}
-      {isOwner && (statsLoading || lowStockLoading ? (
-        <div className="mb-5 grid gap-4 sm:grid-cols-3">
-          {[1, 2, 3].map(i => (
-            <Card key={i}>
-              <CardContent className="p-4">
-                <div className="space-y-2">
-                  <Skeleton className="h-4 w-28" />
-                  <Skeleton className="h-7 w-32" />
-                  <Skeleton className="h-3 w-24" />
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+      {/* Owner-only Extra Stats */}
+      {isOwner && (isDataLoading || lowStockLoading ? (
+        <StatCardSkeleton count={6} />
       ) : (
-        <div className="mb-5 grid gap-4 sm:grid-cols-3">
+        <div className="mb-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
           <StatCard
             title="Nilai Stok"
             value={stats.stockValue ?? 0}
@@ -174,10 +254,31 @@ const Dashboard = () => {
           <StatCard
             title="Customer Aktif"
             value={`${stats.activeCustomers ?? 0}`}
-            subValue={`${stats.customersGrowth >= 0 ? '+' : ''}${stats.customersGrowth ?? 0}% dari periode lalu`}
+            subValue={`${stats.customersGrowth >= 0 ? '+' : ''}${stats.customersGrowth ?? 0}%`}
             icon={<Users className="h-5 w-5" />}
             color="info"
             onClick={() => navigate('/customer')}
+          />
+          <StatCard
+            title="Gross Margin"
+            value={`${metrics.grossMargin.toFixed(1)}%`}
+            subValue={`Profit margin hari ini`}
+            icon={<Percent className="h-5 w-5" />}
+            color="success"
+          />
+          <StatCard
+            title="Nilai Transaksi"
+            value={metrics.aov}
+            subValue="Rata-rata per transaksi"
+            icon={<DollarSign className="h-5 w-5" />}
+            color="primary"
+          />
+          <StatCard
+            title="Tunai vs Kredit"
+            value={`${metrics.cashPercentage.toFixed(0)}%`}
+            subValue="Penjualan tunai"
+            icon={<Wallet className="h-5 w-5" />}
+            color={metrics.cashPercentage > 60 ? 'success' : 'warning'}
           />
         </div>
       ))}
@@ -193,13 +294,8 @@ const Dashboard = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {trendLoading ? (
-                <div className="h-[200px] space-y-2">
-                  <Skeleton className="h-4 w-full" />
-                  <Skeleton className="h-4 w-full" />
-                  <Skeleton className="h-4 w-3/4" />
-                  <div className="h-[140px] bg-muted rounded mt-4" />
-                </div>
+              {isChartLoading ? (
+                <ChartSkeleton />
               ) : chartData.length === 0 ? (
                 <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm">Belum ada data</div>
               ) : (
@@ -237,15 +333,11 @@ const Dashboard = () => {
           </CardHeader>
           <CardContent className="space-y-2">
             {lowStockLoading ? (
-              <div className="space-y-2">
-                {[1, 2, 3, 4, 5].map(i => (
-                  <Skeleton key={i} className="h-12 w-full" />
-                ))}
-              </div>
+              <ListSkeleton count={5} />
             ) : lowStock.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-4">Semua stok aman ✓</p>
             ) : (
-              lowStock.slice(0, 5).map((p: any) => (
+              lowStock.slice(0, DASHBOARD_CONSTANTS.LOW_STOCK_FULL).map((p: any) => (
                 <div key={p.id} className="flex items-center justify-between py-1.5 border-b border-border last:border-0">
                   <div>
                     <p className="text-sm font-medium truncate max-w-[140px]">{p.name}</p>
@@ -272,17 +364,7 @@ const Dashboard = () => {
           <CardContent>
             <div className="overflow-x-auto">
               {recentLoading ? (
-                <div className="space-y-2">
-                  {[1, 2, 3, 4, 5].map(i => (
-                    <div key={i} className="flex gap-4 py-2 border-b">
-                      <Skeleton className="h-6 w-20" />
-                      <Skeleton className="h-6 w-32" />
-                      <Skeleton className="h-6 w-24" />
-                      <Skeleton className="h-6 w-20" />
-                      <Skeleton className="h-6 w-16" />
-                    </div>
-                  ))}
-                </div>
+                <RecentTransactionsSkeleton />
               ) : (
                 <table className="w-full text-sm">
                   <thead>
@@ -298,12 +380,12 @@ const Dashboard = () => {
                     {recentTx.length === 0 ? (
                       <tr><td colSpan={5} className="py-8 text-center text-muted-foreground">Belum ada transaksi</td></tr>
                     ) : (
-                      recentTx.slice(0, 5).map((tx: any) => (
+                      recentTx.slice(0, DASHBOARD_CONSTANTS.RECENT_TRANSACTIONS).map((tx: any) => (
                         <tr key={tx.id} className="border-b last:border-0 hover:bg-muted/30">
                           <td className="py-2.5 font-mono text-xs text-primary">{tx.invoice_number}</td>
                           <td className="py-2.5 truncate max-w-[150px]">{tx.customer?.name || tx.supplier?.name || '-'}</td>
                           <td className="py-2.5">
-                            <span className="text-xs text-muted-foreground">{TIPE_LABEL[tx.type] || tx.type}</span>
+                            <span className="text-xs text-muted-foreground">{TRANSACTION_TYPE_LABELS[tx.type] || tx.type}</span>
                           </td>
                           <td className="py-2.5 text-right">
                             <CurrencyCell value={tx.total} />
@@ -358,4 +440,4 @@ const Dashboard = () => {
   );
 };
 
-export default Dashboard;
+export default memo(DashboardContent);

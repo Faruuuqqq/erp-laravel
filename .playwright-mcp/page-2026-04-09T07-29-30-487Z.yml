@@ -1,0 +1,419 @@
+- generic [ref=e2]:
+  - region "Notifications (F8)":
+    - list
+  - region "Notifications alt+T"
+  - generic [ref=e600]:
+    - complementary [ref=e601]:
+      - generic [ref=e602]:
+        - generic [ref=e603]:
+          - img [ref=e605] [cursor=pointer]
+          - generic [ref=e607]:
+            - paragraph [ref=e608]: StoreMate Genie
+            - paragraph [ref=e609]: ERP v2.0
+        - navigation [ref=e610]:
+          - button "Dashboard" [ref=e611] [cursor=pointer]:
+            - img [ref=e612]
+            - generic [ref=e617]: Dashboard
+          - generic [ref=e618]:
+            - button "Data Utama" [ref=e619] [cursor=pointer]:
+              - img [ref=e620]
+              - generic [ref=e625]: Data Utama
+              - img [ref=e626]
+            - generic [ref=e628]:
+              - button "Supplier" [ref=e629] [cursor=pointer]:
+                - img [ref=e630]
+                - generic [ref=e634]: Supplier
+              - button "Customer" [ref=e635] [cursor=pointer]:
+                - img [ref=e636]
+                - generic [ref=e640]: Customer
+              - button "Produk" [ref=e641] [cursor=pointer]:
+                - img [ref=e642]
+                - generic [ref=e646]: Produk
+              - button "Gudang" [ref=e647] [cursor=pointer]:
+                - img [ref=e648]
+                - generic [ref=e651]: Gudang
+              - button "Sales" [ref=e652] [cursor=pointer]:
+                - img [ref=e653]
+                - generic [ref=e656]: Sales
+          - button "Transaksi" [ref=e658] [cursor=pointer]:
+            - img [ref=e659]
+            - generic [ref=e663]: Transaksi
+            - img [ref=e664]
+          - button "Informasi" [ref=e667] [cursor=pointer]:
+            - img [ref=e668]
+            - generic [ref=e672]: Informasi
+            - img [ref=e673]
+          - button "Laporan" [ref=e676] [cursor=pointer]:
+            - img [ref=e677]
+            - generic [ref=e679]: Laporan
+            - img [ref=e680]
+          - button "Pengaturan" [ref=e682] [cursor=pointer]:
+            - img [ref=e683]
+            - generic [ref=e686]: Pengaturan
+      - generic [ref=e687]:
+        - generic [ref=e688]:
+          - generic [ref=e689]: U
+          - generic [ref=e690]:
+            - paragraph [ref=e691]: User
+            - paragraph [ref=e692]: Admin
+        - button "Keluar" [ref=e693] [cursor=pointer]:
+          - img [ref=e694]
+          - generic [ref=e697]: Keluar
+    - generic [ref=e698]:
+      - banner [ref=e699]:
+        - generic:
+          - heading [level=1]
+        - generic [ref=e700]:
+          - generic [ref=e701]:
+            - img [ref=e702]
+            - textbox "Cari..." [ref=e705]
+          - 'button "Toggle theme. Current: system" [ref=e706] [cursor=pointer]':
+            - img [ref=e707]
+          - button [ref=e709] [cursor=pointer]:
+            - img
+          - generic [ref=e711]:
+            - generic [ref=e712]: U
+            - generic [ref=e713]:
+              - paragraph [ref=e714]: User
+              - paragraph
+      - main [ref=e715]:
+        - generic [ref=e716]:
+          - generic [ref=e717]:
+            - heading "Master Customer" [level=1] [ref=e718]
+            - paragraph [ref=e719]: Kelola data pelanggan bisnis Anda
+          - generic [ref=e720]:
+            - generic [ref=e721]:
+              - img [ref=e725]
+              - generic [ref=e730]:
+                - paragraph [ref=e731]: Rp 18
+                - paragraph [ref=e732]: Total Customer
+            - generic [ref=e733]:
+              - img [ref=e737]
+              - generic [ref=e739]:
+                - paragraph [ref=e740]: "-Rp 380.000"
+                - paragraph [ref=e741]: Total Piutang
+            - generic [ref=e742]:
+              - img [ref=e746]
+              - generic [ref=e748]:
+                - paragraph [ref=e749]: Rp 0
+                - paragraph [ref=e750]: Overdue
+            - generic [ref=e751]:
+              - generic [ref=e755]: ✓
+              - generic [ref=e756]:
+                - paragraph [ref=e757]: Rp 0
+                - paragraph [ref=e758]: Terverifikasi
+          - generic [ref=e759]:
+            - generic [ref=e760]:
+              - heading "Data Customer" [level=3] [ref=e761]
+              - generic [ref=e762]:
+                - button "Export CSV" [ref=e763] [cursor=pointer]:
+                  - img
+                  - text: Export CSV
+                - button "Tambah Customer" [ref=e764] [cursor=pointer]:
+                  - img
+                  - text: Tambah Customer
+            - generic [ref=e766]:
+              - generic [ref=e768]:
+                - img [ref=e769]
+                - textbox "Cari berdasarkan nama, nomor, atau kota..." [ref=e772]
+              - table [ref=e774]:
+                - rowgroup [ref=e775]:
+                  - row "ID Customer Nama Kota Telepon Email Limit Kredit Warehouse Status Aksi" [ref=e776]:
+                    - columnheader "ID Customer" [ref=e777]
+                    - columnheader "Nama" [ref=e778]
+                    - columnheader "Kota" [ref=e779]
+                    - columnheader "Telepon" [ref=e780]
+                    - columnheader "Email" [ref=e781]
+                    - columnheader "Limit Kredit" [ref=e782]
+                    - columnheader "Warehouse" [ref=e783]
+                    - columnheader "Status" [ref=e784]
+                    - columnheader "Aksi" [ref=e785]
+                - rowgroup [ref=e786]:
+                  - row "- Toko Makmur Jaya - 08123456789 makmurbintar@gmail.com Rp 0 - Unverified" [ref=e787]:
+                    - cell "-" [ref=e788]
+                    - cell "Toko Makmur Jaya" [ref=e789]
+                    - cell "-" [ref=e790]
+                    - cell "08123456789" [ref=e791]
+                    - cell "makmurbintar@gmail.com" [ref=e792]
+                    - cell "Rp 0" [ref=e793]
+                    - cell "-" [ref=e794]
+                    - cell "Unverified" [ref=e795]:
+                      - generic [ref=e796]: Unverified
+                    - cell [ref=e797]:
+                      - generic [ref=e798]:
+                        - button [ref=e799] [cursor=pointer]:
+                          - img
+                        - button [ref=e800] [cursor=pointer]:
+                          - img
+                  - row "- CV. Berkah Abadi - 08234567890 berkahabadi@yahoo.com Rp 0 - Unverified" [ref=e801]:
+                    - cell "-" [ref=e802]
+                    - cell "CV. Berkah Abadi" [ref=e803]
+                    - cell "-" [ref=e804]
+                    - cell "08234567890" [ref=e805]
+                    - cell "berkahabadi@yahoo.com" [ref=e806]
+                    - cell "Rp 0" [ref=e807]
+                    - cell "-" [ref=e808]
+                    - cell "Unverified" [ref=e809]:
+                      - generic [ref=e810]: Unverified
+                    - cell [ref=e811]:
+                      - generic [ref=e812]:
+                        - button [ref=e813] [cursor=pointer]:
+                          - img
+                        - button [ref=e814] [cursor=pointer]:
+                          - img
+                  - row "- Warung Bu Siti - 0856789012 warungbutsiti@gmail.com Rp 0 - Unverified" [ref=e815]:
+                    - cell "-" [ref=e816]
+                    - cell "Warung Bu Siti" [ref=e817]
+                    - cell "-" [ref=e818]
+                    - cell "0856789012" [ref=e819]
+                    - cell "warungbutsiti@gmail.com" [ref=e820]
+                    - cell "Rp 0" [ref=e821]
+                    - cell "-" [ref=e822]
+                    - cell "Unverified" [ref=e823]:
+                      - generic [ref=e824]: Unverified
+                    - cell [ref=e825]:
+                      - generic [ref=e826]:
+                        - button [ref=e827] [cursor=pointer]:
+                          - img
+                        - button [ref=e828] [cursor=pointer]:
+                          - img
+                  - row "- Pasar Gede Indah - 08789012345 info@pasargede.com Rp 0 - Unverified" [ref=e829]:
+                    - cell "-" [ref=e830]
+                    - cell "Pasar Gede Indah" [ref=e831]
+                    - cell "-" [ref=e832]
+                    - cell "08789012345" [ref=e833]
+                    - cell "info@pasargede.com" [ref=e834]
+                    - cell "Rp 0" [ref=e835]
+                    - cell "-" [ref=e836]
+                    - cell "Unverified" [ref=e837]:
+                      - generic [ref=e838]: Unverified
+                    - cell [ref=e839]:
+                      - generic [ref=e840]:
+                        - button [ref=e841] [cursor=pointer]:
+                          - img
+                        - button [ref=e842] [cursor=pointer]:
+                          - img
+                  - row "- Toko Serba Ada - 08901234567 serbaada@yahoo.com Rp 0 - Unverified" [ref=e843]:
+                    - cell "-" [ref=e844]
+                    - cell "Toko Serba Ada" [ref=e845]
+                    - cell "-" [ref=e846]
+                    - cell "08901234567" [ref=e847]
+                    - cell "serbaada@yahoo.com" [ref=e848]
+                    - cell "Rp 0" [ref=e849]
+                    - cell "-" [ref=e850]
+                    - cell "Unverified" [ref=e851]:
+                      - generic [ref=e852]: Unverified
+                    - cell [ref=e853]:
+                      - generic [ref=e854]:
+                        - button [ref=e855] [cursor=pointer]:
+                          - img
+                        - button [ref=e856] [cursor=pointer]:
+                          - img
+                  - row "- Minimarket Sentosa - 08129876543 minimarket@gmail.com Rp 0 - Unverified" [ref=e857]:
+                    - cell "-" [ref=e858]
+                    - cell "Minimarket Sentosa" [ref=e859]
+                    - cell "-" [ref=e860]
+                    - cell "08129876543" [ref=e861]
+                    - cell "minimarket@gmail.com" [ref=e862]
+                    - cell "Rp 0" [ref=e863]
+                    - cell "-" [ref=e864]
+                    - cell "Unverified" [ref=e865]:
+                      - generic [ref=e866]: Unverified
+                    - cell [ref=e867]:
+                      - generic [ref=e868]:
+                        - button [ref=e869] [cursor=pointer]:
+                          - img
+                        - button [ref=e870] [cursor=pointer]:
+                          - img
+                  - row "- UD. Maju Bersama - 08219876543 majubersama@gmail.com Rp 0 - Unverified" [ref=e871]:
+                    - cell "-" [ref=e872]
+                    - cell "UD. Maju Bersama" [ref=e873]
+                    - cell "-" [ref=e874]
+                    - cell "08219876543" [ref=e875]
+                    - cell "majubersama@gmail.com" [ref=e876]
+                    - cell "Rp 0" [ref=e877]
+                    - cell "-" [ref=e878]
+                    - cell "Unverified" [ref=e879]:
+                      - generic [ref=e880]: Unverified
+                    - cell [ref=e881]:
+                      - generic [ref=e882]:
+                        - button [ref=e883] [cursor=pointer]:
+                          - img
+                        - button [ref=e884] [cursor=pointer]:
+                          - img
+                  - row "- CV. Harapan Baru - 08561234567 harapanbaru@yahoo.com Rp 0 - Unverified" [ref=e885]:
+                    - cell "-" [ref=e886]
+                    - cell "CV. Harapan Baru" [ref=e887]
+                    - cell "-" [ref=e888]
+                    - cell "08561234567" [ref=e889]
+                    - cell "harapanbaru@yahoo.com" [ref=e890]
+                    - cell "Rp 0" [ref=e891]
+                    - cell "-" [ref=e892]
+                    - cell "Unverified" [ref=e893]:
+                      - generic [ref=e894]: Unverified
+                    - cell [ref=e895]:
+                      - generic [ref=e896]:
+                        - button [ref=e897] [cursor=pointer]:
+                          - img
+                        - button [ref=e898] [cursor=pointer]:
+                          - img
+                  - row "- Pasar Tradisional Sejahtera - 08761234567 pasartadi@gmail.com Rp 0 - Unverified" [ref=e899]:
+                    - cell "-" [ref=e900]
+                    - cell "Pasar Tradisional Sejahtera" [ref=e901]
+                    - cell "-" [ref=e902]
+                    - cell "08761234567" [ref=e903]
+                    - cell "pasartadi@gmail.com" [ref=e904]
+                    - cell "Rp 0" [ref=e905]
+                    - cell "-" [ref=e906]
+                    - cell "Unverified" [ref=e907]:
+                      - generic [ref=e908]: Unverified
+                    - cell [ref=e909]:
+                      - generic [ref=e910]:
+                        - button [ref=e911] [cursor=pointer]:
+                          - img
+                        - button [ref=e912] [cursor=pointer]:
+                          - img
+                  - row "- Toko Berkah Raya - 08919876543 berkahraya@yahoo.com Rp 0 - Unverified" [ref=e913]:
+                    - cell "-" [ref=e914]
+                    - cell "Toko Berkah Raya" [ref=e915]
+                    - cell "-" [ref=e916]
+                    - cell "08919876543" [ref=e917]
+                    - cell "berkahraya@yahoo.com" [ref=e918]
+                    - cell "Rp 0" [ref=e919]
+                    - cell "-" [ref=e920]
+                    - cell "Unverified" [ref=e921]:
+                      - generic [ref=e922]: Unverified
+                    - cell [ref=e923]:
+                      - generic [ref=e924]:
+                        - button [ref=e925] [cursor=pointer]:
+                          - img
+                        - button [ref=e926] [cursor=pointer]:
+                          - img
+                  - row "- Indomaret Pusat - 08134567890 indomaret@gmail.com Rp 0 - Unverified" [ref=e927]:
+                    - cell "-" [ref=e928]
+                    - cell "Indomaret Pusat" [ref=e929]
+                    - cell "-" [ref=e930]
+                    - cell "08134567890" [ref=e931]
+                    - cell "indomaret@gmail.com" [ref=e932]
+                    - cell "Rp 0" [ref=e933]
+                    - cell "-" [ref=e934]
+                    - cell "Unverified" [ref=e935]:
+                      - generic [ref=e936]: Unverified
+                    - cell [ref=e937]:
+                      - generic [ref=e938]:
+                        - button [ref=e939] [cursor=pointer]:
+                          - img
+                        - button [ref=e940] [cursor=pointer]:
+                          - img
+                  - row "- Alfamart Cabang - 08229876543 alfamart@gmail.com Rp 0 - Unverified" [ref=e941]:
+                    - cell "-" [ref=e942]
+                    - cell "Alfamart Cabang" [ref=e943]
+                    - cell "-" [ref=e944]
+                    - cell "08229876543" [ref=e945]
+                    - cell "alfamart@gmail.com" [ref=e946]
+                    - cell "Rp 0" [ref=e947]
+                    - cell "-" [ref=e948]
+                    - cell "Unverified" [ref=e949]:
+                      - generic [ref=e950]: Unverified
+                    - cell [ref=e951]:
+                      - generic [ref=e952]:
+                        - button [ref=e953] [cursor=pointer]:
+                          - img
+                        - button [ref=e954] [cursor=pointer]:
+                          - img
+                  - row "- Warung Makan Jaya - 08562345678 warungmakanjaya@gmail.com Rp 0 - Unverified" [ref=e955]:
+                    - cell "-" [ref=e956]
+                    - cell "Warung Makan Jaya" [ref=e957]
+                    - cell "-" [ref=e958]
+                    - cell "08562345678" [ref=e959]
+                    - cell "warungmakanjaya@gmail.com" [ref=e960]
+                    - cell "Rp 0" [ref=e961]
+                    - cell "-" [ref=e962]
+                    - cell "Unverified" [ref=e963]:
+                      - generic [ref=e964]: Unverified
+                    - cell [ref=e965]:
+                      - generic [ref=e966]:
+                        - button [ref=e967] [cursor=pointer]:
+                          - img
+                        - button [ref=e968] [cursor=pointer]:
+                          - img
+                  - row "- Pasar Swalayan Makmur - 08762345678 swalayanmakmur@yahoo.com Rp 0 - Unverified" [ref=e969]:
+                    - cell "-" [ref=e970]
+                    - cell "Pasar Swalayan Makmur" [ref=e971]
+                    - cell "-" [ref=e972]
+                    - cell "08762345678" [ref=e973]
+                    - cell "swalayanmakmur@yahoo.com" [ref=e974]
+                    - cell "Rp 0" [ref=e975]
+                    - cell "-" [ref=e976]
+                    - cell "Unverified" [ref=e977]:
+                      - generic [ref=e978]: Unverified
+                    - cell [ref=e979]:
+                      - generic [ref=e980]:
+                        - button [ref=e981] [cursor=pointer]:
+                          - img
+                        - button [ref=e982] [cursor=pointer]:
+                          - img
+                  - row "- Toko Grosir Nusantara - 08962345678 grosirnusantara@gmail.com Rp 0 - Unverified" [ref=e983]:
+                    - cell "-" [ref=e984]
+                    - cell "Toko Grosir Nusantara" [ref=e985]
+                    - cell "-" [ref=e986]
+                    - cell "08962345678" [ref=e987]
+                    - cell "grosirnusantara@gmail.com" [ref=e988]
+                    - cell "Rp 0" [ref=e989]
+                    - cell "-" [ref=e990]
+                    - cell "Unverified" [ref=e991]:
+                      - generic [ref=e992]: Unverified
+                    - cell [ref=e993]:
+                      - generic [ref=e994]:
+                        - button [ref=e995] [cursor=pointer]:
+                          - img
+                        - button [ref=e996] [cursor=pointer]:
+                          - img
+                  - row "- CV. Pangan Sejahtera - 08172345678 pangansejahtera@yahoo.com Rp 0 - Unverified" [ref=e997]:
+                    - cell "-" [ref=e998]
+                    - cell "CV. Pangan Sejahtera" [ref=e999]
+                    - cell "-" [ref=e1000]
+                    - cell "08172345678" [ref=e1001]
+                    - cell "pangansejahtera@yahoo.com" [ref=e1002]
+                    - cell "Rp 0" [ref=e1003]
+                    - cell "-" [ref=e1004]
+                    - cell "Unverified" [ref=e1005]:
+                      - generic [ref=e1006]: Unverified
+                    - cell [ref=e1007]:
+                      - generic [ref=e1008]:
+                        - button [ref=e1009] [cursor=pointer]:
+                          - img
+                        - button [ref=e1010] [cursor=pointer]:
+                          - img
+                  - row "- Toko Makmur Sentosa - 08272345678 makmursentosa@gmail.com Rp 0 - Unverified" [ref=e1011]:
+                    - cell "-" [ref=e1012]
+                    - cell "Toko Makmur Sentosa" [ref=e1013]
+                    - cell "-" [ref=e1014]
+                    - cell "08272345678" [ref=e1015]
+                    - cell "makmursentosa@gmail.com" [ref=e1016]
+                    - cell "Rp 0" [ref=e1017]
+                    - cell "-" [ref=e1018]
+                    - cell "Unverified" [ref=e1019]:
+                      - generic [ref=e1020]: Unverified
+                    - cell [ref=e1021]:
+                      - generic [ref=e1022]:
+                        - button [ref=e1023] [cursor=pointer]:
+                          - img
+                        - button [ref=e1024] [cursor=pointer]:
+                          - img
+                  - row "- Warung Sederhana - 08572345678 warungsederhana@gmail.com Rp 0 - Unverified" [ref=e1025]:
+                    - cell "-" [ref=e1026]
+                    - cell "Warung Sederhana" [ref=e1027]
+                    - cell "-" [ref=e1028]
+                    - cell "08572345678" [ref=e1029]
+                    - cell "warungsederhana@gmail.com" [ref=e1030]
+                    - cell "Rp 0" [ref=e1031]
+                    - cell "-" [ref=e1032]
+                    - cell "Unverified" [ref=e1033]:
+                      - generic [ref=e1034]: Unverified
+                    - cell [ref=e1035]:
+                      - generic [ref=e1036]:
+                        - button [ref=e1037] [cursor=pointer]:
+                          - img
+                        - button [ref=e1038] [cursor=pointer]:
+                          - img

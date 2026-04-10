@@ -2,10 +2,13 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import type { Warehouse, PaginatedResponse } from '@/types';
 
+const STALE_TIME = 5 * 60 * 1000;
+
 export const useWarehouses = (params?: any) => {
   return useQuery({
     queryKey: ['warehouses', params],
     queryFn: () => api.get<PaginatedResponse<Warehouse>>('/warehouses', params),
+    staleTime: STALE_TIME,
   });
 };
 
@@ -14,6 +17,7 @@ export const useWarehouse = (id: string) => {
     queryKey: ['warehouses', id],
     queryFn: () => api.get<Warehouse>(`/warehouses/${id}`),
     enabled: !!id,
+    staleTime: STALE_TIME,
   });
 };
 

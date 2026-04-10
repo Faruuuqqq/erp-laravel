@@ -17,7 +17,7 @@ export function ThemeToggle() {
   return (
     <button
       onClick={handleToggle}
-      className="inline-flex items-center justify-center rounded-lg p-2 text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-700 dark:hover:text-white transition-colors"
+      className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-700 dark:hover:text-white transition-colors"
       title={`Current theme: ${theme}`}
       aria-label={`Toggle theme. Current: ${theme}`}
     >

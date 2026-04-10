@@ -3,10 +3,13 @@ import { api } from '@/lib/api';
 import apiClient from '@/lib/api-client';
 import type { Transaction, PaginatedResponse } from '@/types';
 
+const STALE_TIME = 5 * 60 * 1000;
+
 export const useTransactions = (params?: any) => {
   return useQuery({
     queryKey: ['transactions', params],
     queryFn: () => api.get<PaginatedResponse<Transaction>>('/transactions', params),
+    staleTime: STALE_TIME,
   });
 };
 
@@ -15,6 +18,7 @@ export const useTransaction = (id: string) => {
     queryKey: ['transactions', id],
     queryFn: () => api.get<Transaction>(`/transactions/${id}`),
     enabled: !!id,
+    staleTime: STALE_TIME,
   });
 };
 

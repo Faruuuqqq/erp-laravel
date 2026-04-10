@@ -28,7 +28,7 @@ const SaldoUtang = () => {
   const { toast } = useToast();
 
   const { data, isLoading } = useSaldoUtang();
-  const suppliers = (data?.data ?? []) as UtangItem[];
+  const suppliers = Array.isArray(data?.data) ? (data.data as UtangItem[]) : [];
 
   const withDebt = suppliers.filter(s => s.balance > 0);
   const total = suppliers.reduce((s, sup) => s + (sup.balance || 0), 0);

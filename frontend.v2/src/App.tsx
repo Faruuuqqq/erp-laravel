@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { NetworkStatus } from "./components/NetworkStatus";
 import { Loader2 } from "lucide-react";
 
 const Login = lazy(() => import("./pages/Login"));
@@ -128,6 +129,7 @@ const App = () => (
         <BrowserRouter>
           <AuthProvider>
             <ErrorBoundary>
+              <NetworkStatus />
               <AppRoutes />
             </ErrorBoundary>
           </AuthProvider>

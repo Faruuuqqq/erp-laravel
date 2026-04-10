@@ -2,10 +2,13 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import apiClient from '@/lib/api-client';
 
+const STALE_TIME = 5 * 60 * 1000;
+
 export const useDailyReport = (date?: string) => {
   return useQuery({
     queryKey: ['reports', 'daily', date],
     queryFn: () => api.get('/reports/daily', { date }),
+    staleTime: STALE_TIME,
   });
 };
 
@@ -15,6 +18,7 @@ export const useStockReport = () => {
   return useQuery({
     queryKey: ['reports', 'stock'],
     queryFn: () => api.get<{ data: { items: any[]; totalValue: number } }>('/reports/stock'),
+    staleTime: STALE_TIME,
   });
 };
 
@@ -22,6 +26,7 @@ export const useBalanceReport = (params?: { from?: string; to?: string }) => {
   return useQuery({
     queryKey: ['reports', 'balance', params],
     queryFn: () => api.get('/reports/balance', params),
+    staleTime: STALE_TIME,
   });
 };
 
@@ -44,6 +49,7 @@ export const useHistoryPembelian = (params?: { from?: string; to?: string; page?
   return useQuery({
     queryKey: ['reports', 'history', 'pembelian', params],
     queryFn: () => api.get<{ data: any; meta: any }>('/reports/history/pembelian', params),
+    staleTime: STALE_TIME,
   });
 };
 
@@ -51,6 +57,7 @@ export const useHistoryPenjualan = (params?: { from?: string; to?: string; page?
   return useQuery({
     queryKey: ['reports', 'history', 'penjualan', params],
     queryFn: () => api.get<{ data: any; meta: any }>('/reports/history/penjualan', params),
+    staleTime: STALE_TIME,
   });
 };
 
@@ -58,6 +65,7 @@ export const useHistoryReturPenjualan = (params?: { from?: string; to?: string; 
   return useQuery({
     queryKey: ['reports', 'history', 'retur-penjualan', params],
     queryFn: () => api.get<{ data: any; meta: any }>('/reports/history/retur-penjualan', params),
+    staleTime: STALE_TIME,
   });
 };
 
@@ -65,6 +73,7 @@ export const useHistoryReturPembelian = (params?: { from?: string; to?: string; 
   return useQuery({
     queryKey: ['reports', 'history', 'retur-pembelian', params],
     queryFn: () => api.get<{ data: any; meta: any }>('/reports/history/retur-pembelian', params),
+    staleTime: STALE_TIME,
   });
 };
 
@@ -72,6 +81,7 @@ export const useHistoryPembayaranPiutang = (params?: { from?: string; to?: strin
   return useQuery({
     queryKey: ['reports', 'history', 'pembayaran-piutang', params],
     queryFn: () => api.get<{ data: any; meta: any }>('/reports/history/pembayaran-piutang', params),
+    staleTime: STALE_TIME,
   });
 };
 
@@ -79,6 +89,7 @@ export const useHistoryPembayaranUtang = (params?: { from?: string; to?: string;
   return useQuery({
     queryKey: ['reports', 'history', 'pembayaran-utang', params],
     queryFn: () => api.get<{ data: any; meta: any }>('/reports/history/pembayaran-utang', params),
+    staleTime: STALE_TIME,
   });
 };
 

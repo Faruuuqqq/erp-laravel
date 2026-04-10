@@ -6,16 +6,17 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Plus, Trash2, FileText, Printer, Truck, FileDown, Eye } from 'lucide-react';
+import { Plus, Trash2, FileText, Truck } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useProducts } from '@/hooks/api/useProducts';
 import { useCustomers } from '@/hooks/api/useCustomers';
 import { useSalesReps } from '@/hooks/api/useSalesReps';
 import { useWarehouses } from '@/hooks/api/useWarehouses';
-import { useCreateDeliveryNote, printDeliveryNote } from '@/hooks/api/useDeliveryNotes';
+import { useCreateDeliveryNote } from '@/hooks/api/useDeliveryNotes';
 import { Skeleton } from '@/components/ui/SkeletonLoader';
+import { PrintPreviewDialog } from '@/components/dialogs/PrintPreviewDialog';
 import type { Product, Customer, SalesRep, Warehouse } from '@/types';
+import type { TransactionPrintData } from '@/types/print';
 
 interface SJItem {
   productId: string;
@@ -40,6 +41,7 @@ const SuratJalan = () => {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [saved, setSaved] = useState(false);
   const [lastSJ, setLastSJ] = useState('');
+  const [lastSJId, setLastSJId] = useState<number>(0);
   const [isPrinting, setIsPrinting] = useState(false);
 
   const { data: productsData, isLoading: productsLoading } = useProducts({ per_page: 200 });
@@ -92,7 +94,9 @@ const SuratJalan = () => {
         })),
       });
       const deliveryNumber = response.data?.data?.delivery_number || response.data?.delivery_number || '生成中';
+      const deliveryId = response.data?.data?.id || response.data?.id || 0;
       setLastSJ(deliveryNumber);
+      setLastSJId(deliveryId);
       setSaved(true);
       toast({ title: 'Surat Jalan disimpan', description: deliveryNumber });
     } catch (err: unknown) {
@@ -101,39 +105,29 @@ const SuratJalan = () => {
     }
   };
 
-  const handlePrint = async () => {
-    if (lastSJ) {
-      try {
-        const url = await printDeliveryNote(lastSJ);
-        window.open(url, '_blank');
-      } catch (err) {
-        setTimeout(() => window.print(), 200);
-      }
-    } else {
-      setTimeout(() => window.print(), 200);
-    }
-  };
-
-  const handleExportPdf = async () => {
-    try {
-      setIsPrinting(true);
-      const lastDelivery = createMutation.data?.data;
-      if (lastDelivery?.id) {
-        const url = await printDeliveryNote(lastDelivery.id);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `surat-jalan-${noSJ}.pdf`;
-        link.click();
-        toast({ title: 'PDF berhasil diunduh' });
-      } else {
-        toast({ title: 'Simpan surat jalan terlebih dahulu', variant: 'destructive' });
-      }
-    } catch {
-      toast({ title: 'Error', description: 'Gagal mengunduh PDF', variant: 'destructive' });
-    } finally {
-      setIsPrinting(false);
-    }
-  };
+  // Build print data from current form state
+  const getPrintData = (): TransactionPrintData => ({
+    documentType: 'sj',
+    documentNumber: saved ? lastSJ : undefined,
+    savedDocumentId: saved ? lastSJId : undefined,
+    date: new Date().toISOString().split('T')[0],
+    isSaved: saved,
+    customer: customer ? { name: customer.name, address: alamatKirim || customer.address } : undefined,
+    items: items.map((item, idx) => ({
+      no: idx + 1,
+      nama: item.nama,
+      qty: item.qty,
+      satuan: item.satuan,
+      keterangan: item.keterangan,
+    })),
+    totalQty,
+    totalItems: items.length,
+    notes: catatan,
+    warehouse: gudang ? { name: gudang.name, address: gudang.address } : undefined,
+    salesRep: salesRep ? { name: salesRep.name } : undefined,
+    driver: pengirim,
+    destination: alamatKirim,
+  });
 
   if (saved) {
     return (
@@ -148,76 +142,17 @@ const SuratJalan = () => {
             <p className="text-sm text-muted-foreground mt-1">{items.length} produk, {totalQty} qty total</p>
           </div>
           <div className="flex gap-3">
-            <Button variant="outline" onClick={() => setPreviewOpen(true)}><Eye className="mr-2 h-4 w-4" />Preview</Button>
-            <Button variant="outline" onClick={handlePrint}><Printer className="mr-2 h-4 w-4" />Cetak</Button>
+            <Button variant="outline" onClick={() => setPreviewOpen(true)}>Preview & Lebih Lanjut</Button>
             <Button onClick={() => { setItems([]); setSaved(false); setSelectedCustomer(''); setSelectedGudang(''); setAlamatKirim(''); setPengirim(''); setCatatan(''); }}>Surat Jalan Baru</Button>
           </div>
         </div>
 
-        <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader><DialogTitle>Preview Surat Jalan</DialogTitle></DialogHeader>
-            <div className="border rounded-lg p-6 bg-white text-black" id="surat-jalan-print">
-              <div className="text-center border-b-2 border-black pb-4 mb-4">
-                <h1 className="text-2xl font-bold">SURAT JALAN</h1>
-                <p className="text-sm">TokoSync ERP - Sistem Manajemen Toko</p>
-              </div>
-              <div className="grid grid-cols-2 gap-4 mb-4 text-sm">
-                <div>
-                  <p><strong>No. Surat Jalan:</strong> {lastSJ}</p>
-                  <p><strong>Tanggal:</strong> {today}</p>
-                  <p><strong>Sales:</strong> {salesRep?.name || '-'}</p>
-                </div>
-                <div>
-                  <p><strong>Kepada:</strong> {customer?.name || '-'}</p>
-                  <p><strong>Alamat:</strong> {alamatKirim || customer?.address || '-'}</p>
-                  <p><strong>Gudang:</strong> {gudang?.name || '-'}</p>
-                </div>
-              </div>
-              {pengirim && <p className="text-sm mb-4"><strong>Pengirim/Driver:</strong> {pengirim}</p>}
-              <table className="w-full border-collapse border border-black text-sm mb-4">
-                <thead>
-                  <tr className="bg-gray-100">
-                    <th className="border border-black px-2 py-1 text-left">No</th>
-                    <th className="border border-black px-2 py-1 text-left">Nama Barang</th>
-                    <th className="border border-black px-2 py-1 text-right">Qty</th>
-                    <th className="border border-black px-2 py-1 text-left">Satuan</th>
-                    <th className="border border-black px-2 py-1 text-left">Keterangan</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((item, idx) => (
-                    <tr key={idx}>
-                      <td className="border border-black px-2 py-1">{idx + 1}</td>
-                      <td className="border border-black px-2 py-1">{item.nama}</td>
-                      <td className="border border-black px-2 py-1 text-right">{item.qty}</td>
-                      <td className="border border-black px-2 py-1">{item.satuan}</td>
-                      <td className="border border-black px-2 py-1">{item.keterangan || '-'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr>
-                    <td colSpan={2} className="border border-black px-2 py-1 font-bold text-right">Total</td>
-                    <td className="border border-black px-2 py-1 text-right font-bold">{totalQty}</td>
-                    <td colSpan={2} className="border border-black px-2 py-1"></td>
-                  </tr>
-                </tfoot>
-              </table>
-              {catatan && <p className="text-sm mb-4 italic">Catatan: {catatan}</p>}
-              <div className="grid grid-cols-3 gap-4 mt-8 text-sm text-center">
-                <div><p className="mb-16">Pengirim</p><p>(_____________)</p><p>{pengirim || '...'}</p></div>
-                <div><p className="mb-16">Penerima</p><p>(_____________)</p><p>{customer?.name || '...'}</p></div>
-                <div><p className="mb-16">Diketahui Oleh</p><p>(_____________)</p><p>Admin / Owner</p></div>
-              </div>
-            </div>
-            <div className="flex justify-end gap-2 mt-2">
-              <Button variant="outline" onClick={() => setPreviewOpen(false)}>Tutup</Button>
-              <Button variant="outline" onClick={handleExportPdf}><FileDown className="mr-1.5 h-4 w-4" />Export PDF</Button>
-              <Button onClick={handlePrint}><Printer className="mr-1.5 h-4 w-4" />Cetak</Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+        <PrintPreviewDialog
+          isOpen={previewOpen}
+          onOpenChange={setPreviewOpen}
+          data={getPrintData()}
+          documentType="sj"
+        />
       </MainLayout>
     );
   }
@@ -471,85 +406,22 @@ const SuratJalan = () => {
                 <Button className="flex-1 h-9 text-sm" onClick={handleSave} disabled={items.length === 0 || createMutation.isPending}>Simpan</Button>
               </div>
 
-              <div className="grid grid-cols-1 gap-2">
-                <Button variant="outline" className="h-9 text-sm" onClick={() => setPreviewOpen(true)}>
-                  <Eye className="mr-1.5 h-3.5 w-3.5" />Preview & Cetak
-                </Button>
-                <Button variant="outline" className="h-8 text-xs" onClick={handleExportPdf} disabled={!saved || isPrinting}>
-                  <FileDown className="mr-1.5 h-3.5 w-3.5" />Export PDF
-                </Button>
-              </div>
+              <Button variant="outline" className="w-full h-9 text-sm" onClick={() => setPreviewOpen(true)}>
+                Preview & Lebih Lanjut
+              </Button>
             </CardContent>
           </Card>
         </div>
-      </div>
 
-      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Preview Surat Jalan</DialogTitle></DialogHeader>
-          <div className="border rounded-lg p-6 bg-white text-black" id="surat-jalan-print">
-            <div className="text-center border-b-2 border-black pb-4 mb-4">
-              <h1 className="text-2xl font-bold">SURAT JALAN</h1>
-              <p className="text-sm">TokoSync ERP - Sistem Manajemen Toko</p>
-            </div>
-            <div className="grid grid-cols-2 gap-4 mb-4 text-sm">
-              <div>
-                <p><strong>No. Surat Jalan:</strong> {noSJ}</p>
-                <p><strong>Tanggal:</strong> {today}</p>
-                <p><strong>Sales:</strong> {salesRep?.name || '-'}</p>
-              </div>
-              <div>
-                <p><strong>Kepada:</strong> {customer?.name || '-'}</p>
-                <p><strong>Alamat:</strong> {alamatKirim || customer?.address || '-'}</p>
-                <p><strong>Gudang:</strong> {gudang?.name || '-'}</p>
-              </div>
-            </div>
-            {pengirim && <p className="text-sm mb-4"><strong>Pengirim/Driver:</strong> {pengirim}</p>}
-            <table className="w-full border-collapse border border-black text-sm mb-4">
-              <thead>
-                <tr className="bg-gray-100">
-                  <th className="border border-black px-2 py-1 text-left">No</th>
-                  <th className="border border-black px-2 py-1 text-left">Nama Barang</th>
-                  <th className="border border-black px-2 py-1 text-right">Qty</th>
-                  <th className="border border-black px-2 py-1 text-left">Satuan</th>
-                  <th className="border border-black px-2 py-1 text-left">Keterangan</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((item, idx) => (
-                  <tr key={idx}>
-                    <td className="border border-black px-2 py-1">{idx + 1}</td>
-                    <td className="border border-black px-2 py-1">{item.nama}</td>
-                    <td className="border border-black px-2 py-1 text-right">{item.qty}</td>
-                    <td className="border border-black px-2 py-1">{item.satuan}</td>
-                    <td className="border border-black px-2 py-1">{item.keterangan || '-'}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr>
-                  <td colSpan={2} className="border border-black px-2 py-1 font-bold text-right">Total</td>
-                  <td className="border border-black px-2 py-1 text-right font-bold">{totalQty}</td>
-                  <td colSpan={2} className="border border-black px-2 py-1"></td>
-                </tr>
-              </tfoot>
-            </table>
-            {catatan && <p className="text-sm mb-4 italic">Catatan: {catatan}</p>}
-            <div className="grid grid-cols-3 gap-4 mt-8 text-sm text-center">
-              <div><p className="mb-16">Pengirim</p><p>(_____________)</p><p>{pengirim || '...'}</p></div>
-              <div><p className="mb-16">Penerima</p><p>(_____________)</p><p>{customer?.name || '...'}</p></div>
-              <div><p className="mb-16">Diketahui Oleh</p><p>(_____________)</p><p>Admin / Owner</p></div>
-            </div>
-          </div>
-          <div className="flex justify-end gap-2 mt-2">
-            <Button variant="outline" onClick={() => setPreviewOpen(false)}>Tutup</Button>
-            <Button variant="outline" onClick={handleExportPdf} disabled={isPrinting}><FileDown className="mr-1.5 h-4 w-4" />Export PDF</Button>
-            <Button onClick={handlePrint} disabled={isPrinting}><Printer className="mr-1.5 h-4 w-4" />Cetak</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </MainLayout>
-  );
-};
+        <PrintPreviewDialog
+          isOpen={previewOpen}
+          onOpenChange={setPreviewOpen}
+          data={getPrintData()}
+           documentType="sj"
+         />
+       </div>
+     </MainLayout>
+   );
+ };
 
-export default SuratJalan;
+ export default SuratJalan;

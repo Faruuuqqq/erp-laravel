@@ -264,8 +264,41 @@ class TransactionController extends Controller
         $filename = "receipt-{$transaction->invoice_number}.pdf";
         Storage::disk('public')->put("receipts/{$filename}", $pdf->output());
 
-        return response()->json([
+return response()->json([
             'url' => asset("storage/receipts/{$filename}"),
+            'filename' => $filename,
+        ]);
+    }
+
+    // ─── Print Purchase Order PDF (GET /transactions/{id}/print/purchase) ────────────
+    public function printPurchase(Transaction $transaction): JsonResponse
+    {
+        // Ensure this is a purchase transaction
+        if ($transaction->type !== 'pembelian') {
+            return response()->json(['message' => 'Transaksi这不是 pembelian.'], 400);
+        }
+
+        $transaction->load(['details', 'supplier', 'warehouse']);
+        
+        // Get store settings
+        $storeSettings = [
+            'name' => Setting::get('store_name') ?? 'Toko Sejahtera',
+            'phone' => Setting::get('phone') ?? '',
+            'address' => Setting::get('address') ?? '',
+            'npwp' => Setting::get('npwp') ?? '',
+            'siup' => Setting::get('siup') ?? '',
+        ];
+
+        $pdf = PDF::loadView('pdf.purchase-order', compact([
+            'transaction',
+            'storeSettings',
+        ]))->setPaper('a4')->setOption('isHtml5ParserEnabled', true);
+
+        $filename = "purchase-order-{$transaction->invoice_number}.pdf";
+        Storage::disk('public')->put("purchases/{$filename}", $pdf->output());
+
+        return response()->json([
+            'url' => asset("storage/purchases/{$filename}"),
             'filename' => $filename,
         ]);
     }

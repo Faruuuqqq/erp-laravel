@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 
+const STALE_TIME = 5 * 60 * 1000;
+
 // ========== Return Purchase (Retur Pembelian) ==========
 
 export interface ReturnPurchaseItem {
@@ -24,6 +26,7 @@ export const useReturnPurchases = (params?: any) => {
   return useQuery({
     queryKey: ['return-purchases', params],
     queryFn: () => api.get('/return-purchases', params),
+    staleTime: STALE_TIME,
   });
 };
 
@@ -32,6 +35,7 @@ export const useReturnPurchase = (id: string) => {
     queryKey: ['return-purchases', id],
     queryFn: () => api.get(`/return-purchases/${id}`),
     enabled: !!id,
+    staleTime: STALE_TIME,
   });
 };
 
@@ -92,6 +96,7 @@ export const useReturnSales = (params?: any) => {
   return useQuery({
     queryKey: ['return-sales', params],
     queryFn: () => api.get('/return-sales', params),
+    staleTime: STALE_TIME,
   });
 };
 
@@ -100,6 +105,7 @@ export const useReturnSale = (id: string) => {
     queryKey: ['return-sales', id],
     queryFn: () => api.get(`/return-sales/${id}`),
     enabled: !!id,
+    staleTime: STALE_TIME,
   });
 };
 

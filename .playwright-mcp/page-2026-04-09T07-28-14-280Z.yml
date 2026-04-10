@@ -1,0 +1,171 @@
+- generic [ref=e2]:
+  - region "Notifications (F8)":
+    - list
+  - region "Notifications alt+T"
+  - generic [ref=e358]:
+    - complementary [ref=e359]:
+      - generic [ref=e360]:
+        - generic [ref=e361]:
+          - img [ref=e363] [cursor=pointer]
+          - generic [ref=e365]:
+            - paragraph [ref=e366]: StoreMate Genie
+            - paragraph [ref=e367]: ERP v2.0
+        - navigation [ref=e368]:
+          - button "Dashboard" [ref=e369] [cursor=pointer]:
+            - img [ref=e370]
+            - generic [ref=e375]: Dashboard
+          - button "Data Utama" [ref=e377] [cursor=pointer]:
+            - img [ref=e378]
+            - generic [ref=e383]: Data Utama
+            - img [ref=e384]
+          - generic [ref=e386]:
+            - button "Transaksi" [ref=e387] [cursor=pointer]:
+              - img [ref=e388]
+              - generic [ref=e392]: Transaksi
+              - img [ref=e393]
+            - generic [ref=e395]:
+              - button "Pembelian" [ref=e396] [cursor=pointer]:
+                - img [ref=e397]
+                - generic [ref=e401]: Pembelian
+              - button "Penjualan Tunai" [ref=e402] [cursor=pointer]:
+                - img [ref=e403]
+                - generic [ref=e406]: Penjualan Tunai
+              - button "Penjualan Kredit" [ref=e407] [cursor=pointer]:
+                - img [ref=e408]
+                - generic [ref=e410]: Penjualan Kredit
+              - button "Pembayaran Utang" [ref=e411] [cursor=pointer]:
+                - img [ref=e412]
+                - generic [ref=e415]: Pembayaran Utang
+              - button "Pembayaran Piutang" [ref=e416] [cursor=pointer]:
+                - img [ref=e417]
+                - generic [ref=e420]: Pembayaran Piutang
+              - button "Retur Pembelian" [ref=e421] [cursor=pointer]:
+                - img [ref=e422]
+                - generic [ref=e425]: Retur Pembelian
+              - button "Retur Penjualan" [ref=e426] [cursor=pointer]:
+                - img [ref=e427]
+                - generic [ref=e430]: Retur Penjualan
+              - button "Surat Jalan" [ref=e431] [cursor=pointer]:
+                - img [ref=e432]
+                - generic [ref=e435]: Surat Jalan
+              - button "Kontra Bon" [ref=e436] [cursor=pointer]:
+                - img [ref=e437]
+                - generic [ref=e440]: Kontra Bon
+          - button "Informasi" [ref=e442] [cursor=pointer]:
+            - img [ref=e443]
+            - generic [ref=e447]: Informasi
+            - img [ref=e448]
+          - button "Laporan" [ref=e451] [cursor=pointer]:
+            - img [ref=e452]
+            - generic [ref=e454]: Laporan
+            - img [ref=e455]
+          - button "Pengaturan" [ref=e457] [cursor=pointer]:
+            - img [ref=e458]
+            - generic [ref=e461]: Pengaturan
+      - generic [ref=e462]:
+        - generic [ref=e463]:
+          - generic [ref=e464]: U
+          - generic [ref=e465]:
+            - paragraph [ref=e466]: User
+            - paragraph [ref=e467]: Admin
+        - button "Keluar" [ref=e468] [cursor=pointer]:
+          - img [ref=e469]
+          - generic [ref=e472]: Keluar
+    - generic [ref=e473]:
+      - banner [ref=e474]:
+        - generic [ref=e475]:
+          - heading "Transaksi Pembelian" [level=1] [ref=e476]
+          - paragraph [ref=e477]: Buat transaksi pembelian barang dari supplier
+        - generic [ref=e478]:
+          - generic [ref=e479]:
+            - img [ref=e480]
+            - textbox "Cari..." [ref=e483]
+          - 'button "Toggle theme. Current: system" [ref=e484] [cursor=pointer]':
+            - img [ref=e485]
+          - button [ref=e487] [cursor=pointer]:
+            - img
+          - generic [ref=e489]:
+            - generic [ref=e490]: U
+            - generic [ref=e491]:
+              - paragraph [ref=e492]: User
+              - paragraph
+      - main [ref=e493]:
+        - generic [ref=e494]:
+          - generic [ref=e496]:
+            - heading "Form Pembelian" [level=3] [ref=e498]:
+              - img [ref=e499]
+              - text: Form Pembelian
+            - generic [ref=e503]:
+              - generic [ref=e504]:
+                - generic [ref=e505]:
+                  - text: No. Faktur
+                  - textbox [disabled] [ref=e506]: Akan dibuat setelah disimpan
+                - generic [ref=e507]:
+                  - text: Tanggal
+                  - textbox [ref=e508]: 2026-04-09
+                - generic [ref=e509]:
+                  - text: Supplier *
+                  - combobox [ref=e510] [cursor=pointer]:
+                    - generic: Pilih supplier
+                    - img [ref=e511]
+              - generic [ref=e513]:
+                - text: Gudang Tujuan
+                - combobox [ref=e514] [cursor=pointer]:
+                  - generic: Pilih gudang
+                  - img [ref=e515]
+              - generic [ref=e517]:
+                - paragraph [ref=e518]: Tambah Produk
+                - generic [ref=e519]:
+                  - generic [ref=e520]:
+                    - generic [ref=e521]:
+                      - img [ref=e522]
+                      - textbox "Cari produk..." [ref=e525]
+                    - combobox [ref=e526] [cursor=pointer]:
+                      - generic: Pilih produk
+                      - img [ref=e527]
+                  - generic [ref=e529]:
+                    - text: Qty
+                    - spinbutton [ref=e530]: "1"
+                  - generic [ref=e531]:
+                    - text: Harga Beli
+                    - spinbutton [ref=e532]
+                  - button "Tambah" [ref=e534] [cursor=pointer]:
+                    - img
+                    - text: Tambah
+              - table [ref=e536]:
+                - rowgroup [ref=e537]:
+                  - row "No Produk Qty Harga Beli Subtotal" [ref=e538]:
+                    - columnheader "No" [ref=e539]
+                    - columnheader "Produk" [ref=e540]
+                    - columnheader "Qty" [ref=e541]
+                    - columnheader "Harga Beli" [ref=e542]
+                    - columnheader "Subtotal" [ref=e543]
+                    - columnheader [ref=e544]
+                - rowgroup [ref=e545]:
+                  - row "Keranjang kosong" [ref=e546]:
+                    - cell "Keranjang kosong" [ref=e547]
+          - generic [ref=e549]:
+            - heading "Ringkasan" [level=3] [ref=e551]:
+              - img [ref=e552]
+              - text: Ringkasan
+            - generic [ref=e554]:
+              - generic [ref=e555]:
+                - generic [ref=e556]: Subtotal (0 item)
+                - generic [ref=e557]: Rp 0
+              - generic [ref=e558]:
+                - generic [ref=e559]: Diskon (Rp)
+                - spinbutton [ref=e560]: "0"
+              - generic [ref=e561]:
+                - generic [ref=e562]: Grand Total
+                - generic [ref=e563]: Rp 0
+              - generic [ref=e564]:
+                - text: Metode Pembayaran
+                - combobox [ref=e565] [cursor=pointer]:
+                  - generic: Pilih metode
+                  - img [ref=e566]
+              - generic [ref=e568]:
+                - button "Reset" [ref=e569] [cursor=pointer]
+                - button "Simpan" [disabled]
+              - button "Export PDF" [ref=e570] [cursor=pointer]:
+                - img
+                - text: Export PDF

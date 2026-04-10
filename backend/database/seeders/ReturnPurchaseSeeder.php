@@ -17,84 +17,103 @@ class ReturnPurchaseSeeder extends Seeder
         $suppliers = Supplier::all();
         $purchases = Transaction::where('type', 'pembelian')->get();
 
-        $returnCount = $this->faker->numberBetween(3, 5);
+        if ($purchases->isEmpty()) {
+            $this->command->warn('No purchases found. Skipping return purchase seeder.');
+            return;
+        }
+
+        $returnCount = rand(3, 5);
+        $created = 0;
+        $dateRange = $this->getDateRange();
 
         for ($i = 0; $i < $returnCount; $i++) {
             $purchase = $purchases->random();
-            $returnNumber = 'RET-P' . now()->format('Ymd') . '-' . str_pad($i + 1, 2, '0');
+            $returnNumber = 'RET-P' . date('Ymd') . '-' . str_pad($i + 1, 3, '0', STR_PAD_LEFT);
 
-            $returnPurchase = ReturnPurchase::create([
-                'return_number' => $returnNumber,
-                'transaction_id' => $purchase ? $purchase->id : null,
-                'supplier_id' => $suppliers->random()->id,
-                'reason' => $this->getReason(),
-                'total' => rand(300000, 3000000),
-                'status' => $this->getStatus(),
-                'notes' => $this->getNotes(),
-                'created_by' => $users->random()->id,
-            ]);
+            $reason = $this->getReason();
+            $status = $this->getStatus();
 
-            if ($purchase) {
-                ReturnPurchaseItem::create([
-                    'return_purchase_id' => $returnPurchase->id,
-                    'product_id' => rand(1, 28),
-                    'product_name' => $this->getProductName(),
-                    'quantity' => rand(1, 20),
-                    'price' => rand(5000, 50000),
-                    'discount' => $this->getItemDiscount(),
-                    'subtotal' => rand(300000, 3000000),
-                ]);
+            $returnPurchase = ReturnPurchase::firstOrCreate(
+                ['return_number' => $returnNumber],
+                [
+                    'date' => $dateRange[array_rand($dateRange)],
+                    'transaction_id' => $purchase ? $purchase->id : null,
+                    'supplier_id' => $purchase ? $purchase->supplier_id : $suppliers->random()->id,
+                    'reason' => $reason,
+                    'notes' => $this->getNotes(),
+                    'status' => $status,
+                    'created_by' => $users->random()->id,
+                ]
+            );
+
+            if ($returnPurchase->wasRecentlyCreated || ReturnPurchaseItem::where('return_purchase_id', $returnPurchase->id)->count() === 0) {
+                if ($purchase && $purchase->details->isNotEmpty()) {
+                    $numItems = min(rand(1, 2), $purchase->details->count());
+                    $selectedDetails = $purchase->details->random($numItems);
+
+                    foreach ($selectedDetails as $detail) {
+                        $quantity = rand(1, min($detail->quantity, 5));
+                        $price = $detail->price;
+                        $subtotal = $quantity * $price;
+                        $discount = rand(0, 1) ? rand(5, 10) : 0;
+
+                        ReturnPurchaseItem::create([
+                            'return_purchase_id' => $returnPurchase->id,
+                            'product_id' => $detail->product_id,
+                            'product_name' => $detail->product_name,
+                            'quantity' => $quantity,
+                            'price' => $price,
+                            'discount' => $discount,
+                            'subtotal' => $subtotal - ($subtotal * $discount / 100),
+                        ]);
+                    }
+                }
+                $created++;
             }
         }
+
+        $this->command->info("Return purchases seeded: {$created} retur pembelian.");
+    }
+
+    private function getDateRange(): array
+    {
+        $dates = [];
+        $startDate = strtotime('2025-02-20');
+        $endDate = strtotime('2025-02-28');
+
+        for ($ts = $startDate; $ts <= $endDate; $ts += 86400) {
+            $dates[] = date('Y-m-d', $ts);
+        }
+
+        return $dates;
     }
 
     private function getReason(): string
     {
         $reasons = [
-            'Barang rusak dari supplier',
-            'Salah kirim barang',
-            'Kualitas tidak sesuai',
-            'Barang kadaluarsa',
-            'Kemasan rusak',
+            'rusak',
+            'kadaluarsa',
+            'tidak_sesuai',
+            'kelebihan',
         ];
         return $reasons[array_rand($reasons)];
     }
 
     private function getStatus(): string
     {
-        $statuses = ['completed', 'completed', 'completed', 'cancelled'];
+        $statuses = ['processed', 'processed', 'processed', 'cancelled'];
         return $statuses[array_rand($statuses)];
     }
 
     private function getNotes(): ?string
     {
         $notes = [
-            'Retur mingguan',
-            'Klaim ke supplier',
-            'Quality check failed',
+            'Retur supplier',
+            'Barang rusak saat terima',
+            'Produk tidak sesuai specs',
+            'Expired date terlalu dekat',
             null,
         ];
-        $randomIndex = array_rand($notes);
-        return $notes[$randomIndex];
-    }
-
-    private function getProductName(): string
-    {
-        $names = [
-            'Beras Premium 5kg',
-            'Minyak Goreng 2L',
-            'Gula Pasir 1kg',
-            'Teh Kotak',
-        ];
-        return $names[array_rand($names)];
-    }
-
-    private function getItemDiscount(): int
-    {
-        $discounts = [0, 5, 10];
-        return $discounts[array_rand($discounts)];
-    }
-
-        $this->command->info('Return purchases seeded: ' . $returnCount . ' retur pembelian.');
+        return $notes[array_rand($notes)];
     }
 }

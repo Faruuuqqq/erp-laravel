@@ -13,4 +13,8 @@ Artisan::command('schedule:run', function () {
 
 use Illuminate\Support\Facades\Schedule;
 
+// Update product metrics daily at 01:00
 Schedule::command('app:update-product-metrics')->dailyAt('01:00');
+
+// Database backup: First day of month at 00:00
+Schedule::command('app:database-backup')->monthlyOn(1, '00:00');

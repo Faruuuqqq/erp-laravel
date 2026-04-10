@@ -52,12 +52,14 @@ class ReportController extends Controller
     /**
      * GET /api/reports/stock
      * Ringkasan nilai stok semua produk (untuk laporan Neraca Stok).
+     * Optimized with database-level stock value calculation.
      */
     public function stock(): JsonResponse
     {
         $products = Product::with('category:id,name')
-            ->select(['id', 'code', 'name', 'category_id', 'stock', 'unit', 'buy_price', 'sell_price'])
-            ->get();
+            ->selectRaw('id, code, name, category_id, stock, unit, buy_price, sell_price, (stock * buy_price) as stock_value')
+            ->orderByDesc('stock_value')
+            ->paginate(50);
 
         $data = $products->map(fn($p) => [
             'id'         => (string) $p->id,
@@ -68,13 +70,19 @@ class ReportController extends Controller
             'unit'       => $p->unit,
             'buyPrice'   => (float) $p->buy_price,
             'sellPrice'  => (float) $p->sell_price,
-            'stockValue' => round($p->stock * $p->buy_price, 2),
+            'stockValue' => round($p->stock_value, 2),
         ]);
 
         return response()->json([
             'data' => [
                 'items'      => $data,
                 'totalValue' => $data->sum('stockValue'),
+            ],
+            'meta' => [
+                'current_page' => $products->currentPage(),
+                'last_page' => $products->lastPage(),
+                'per_page' => $products->perPage(),
+                'total' => $products->total(),
             ],
         ]);
     }
@@ -100,13 +108,15 @@ class ReportController extends Controller
 
     /**
      * GET /api/reports/history/pembelian
+     * Optimized with explicit column selection for better performance.
      */
     public function historyPembelian(Request $request): JsonResponse
     {
-        $transactions = Transaction::with(['supplier'])
+        $transactions = Transaction::with(['supplier:id,name'])
             ->where('type', 'pembelian')
             ->when($request->from, fn($q) => $q->whereDate('date', '>=', $request->from))
             ->when($request->to, fn($q) => $q->whereDate('date', '<=', $request->to))
+            ->select('id', 'invoice_number', 'date', 'due_date', 'type', 'supplier_id', 'subtotal', 'discount', 'tax', 'total', 'paid', 'remaining', 'status', 'notes', 'created_at', 'updated_at')
             ->latest()
             ->paginate($request->perPage ?? 25);
 
@@ -117,13 +127,15 @@ class ReportController extends Controller
 
     /**
      * GET /api/reports/history/penjualan
+     * Optimized with explicit column selection for better performance.
      */
     public function historyPenjualan(Request $request): JsonResponse
     {
-        $transactions = Transaction::with(['customer'])
+        $transactions = Transaction::with(['customer:id,name'])
             ->whereIn('type', ['penjualan_tunai', 'penjualan_kredit'])
             ->when($request->from, fn($q) => $q->whereDate('date', '>=', $request->from))
             ->when($request->to, fn($q) => $q->whereDate('date', '<=', $request->to))
+            ->select('id', 'invoice_number', 'date', 'due_date', 'type', 'customer_id', 'sales_rep_id', 'subtotal', 'discount', 'tax', 'total', 'paid', 'remaining', 'status', 'notes', 'created_at', 'updated_at')
             ->latest()
             ->paginate($request->perPage ?? 25);
 
@@ -134,13 +146,15 @@ class ReportController extends Controller
 
     /**
      * GET /api/reports/history/retur-pembelian
+     * Optimized with explicit column selection.
      */
     public function historyReturPembelian(Request $request): JsonResponse
     {
-        $transactions = Transaction::with(['supplier'])
+        $transactions = Transaction::with(['supplier:id,name'])
             ->where('type', 'retur_pembelian')
             ->when($request->from, fn($q) => $q->whereDate('date', '>=', $request->from))
             ->when($request->to, fn($q) => $q->whereDate('date', '<=', $request->to))
+            ->select('id', 'invoice_number', 'date', 'due_date', 'type', 'supplier_id', 'subtotal', 'discount', 'tax', 'total', 'paid', 'remaining', 'status', 'notes', 'created_at', 'updated_at')
             ->latest()
             ->paginate($request->perPage ?? 25);
 
@@ -151,13 +165,15 @@ class ReportController extends Controller
 
     /**
      * GET /api/reports/history/retur-penjualan
+     * Optimized with explicit column selection.
      */
     public function historyReturPenjualan(Request $request): JsonResponse
     {
-        $transactions = Transaction::with(['customer'])
+        $transactions = Transaction::with(['customer:id,name'])
             ->where('type', 'retur_penjualan')
             ->when($request->from, fn($q) => $q->whereDate('date', '>=', $request->from))
             ->when($request->to, fn($q) => $q->whereDate('date', '<=', $request->to))
+            ->select('id', 'invoice_number', 'date', 'due_date', 'type', 'customer_id', 'sales_rep_id', 'subtotal', 'discount', 'tax', 'total', 'paid', 'remaining', 'status', 'notes', 'created_at', 'updated_at')
             ->latest()
             ->paginate($request->perPage ?? 25);
 
@@ -168,13 +184,15 @@ class ReportController extends Controller
 
     /**
      * GET /api/reports/history/pembayaran-utang
+     * Optimized with explicit column selection.
      */
     public function historyPembayaranUtang(Request $request): JsonResponse
     {
-        $transactions = Transaction::with(['supplier'])
+        $transactions = Transaction::with(['supplier:id,name'])
             ->where('type', 'pembayaran_utang')
             ->when($request->from, fn($q) => $q->whereDate('date', '>=', $request->from))
             ->when($request->to, fn($q) => $q->whereDate('date', '<=', $request->to))
+            ->select('id', 'invoice_number', 'date', 'due_date', 'type', 'supplier_id', 'subtotal', 'discount', 'tax', 'total', 'paid', 'remaining', 'status', 'notes', 'created_at', 'updated_at')
             ->latest()
             ->paginate($request->perPage ?? 25);
 
@@ -185,13 +203,15 @@ class ReportController extends Controller
 
     /**
      * GET /api/reports/history/pembayaran-piutang
+     * Optimized with explicit column selection.
      */
     public function historyPembayaranPiutang(Request $request): JsonResponse
     {
-        $transactions = Transaction::with(['customer'])
+        $transactions = Transaction::with(['customer:id,name'])
             ->where('type', 'pembayaran_piutang')
             ->when($request->from, fn($q) => $q->whereDate('date', '>=', $request->from))
             ->when($request->to, fn($q) => $q->whereDate('date', '<=', $request->to))
+            ->select('id', 'invoice_number', 'date', 'due_date', 'type', 'customer_id', 'sales_rep_id', 'subtotal', 'discount', 'tax', 'total', 'paid', 'remaining', 'status', 'notes', 'created_at', 'updated_at')
             ->latest()
             ->paginate($request->perPage ?? 25);
 

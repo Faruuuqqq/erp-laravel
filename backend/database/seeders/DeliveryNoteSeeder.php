@@ -16,24 +16,52 @@ class DeliveryNoteSeeder extends Seeder
         $customers = Customer::all();
         $creditSales = Transaction::where('type', 'penjualan_kredit')->get();
 
-        $deliveryCount = $this->faker->numberBetween(4, 6);
+        if ($creditSales->isEmpty()) {
+            $this->command->warn('No credit sales found. Skipping delivery note seeder.');
+            return;
+        }
+
+        $deliveryCount = rand(4, 6);
+        $created = 0;
+        $dateRange = $this->getDateRange();
 
         for ($i = 0; $i < $deliveryCount; $i++) {
             $creditSale = $creditSales->random();
-            $deliveryNumber = 'SJ-' . now()->format('Ymd') . '-' . str_pad($i + 1, 2, '0');
+            $deliveryNumber = 'SJ-' . date('Ymd') . '-' . str_pad($i + 1, 3, '0', STR_PAD_LEFT);
 
-            DeliveryNote::create([
-                'delivery_number' => $deliveryNumber,
-                'transaction_id' => $creditSale ? $creditSale->id : null,
-                'customer_id' => $customers->random()->id,
-                'driver_name' => $this->getDriverName(),
-                'vehicle_plate' => $this->getVehiclePlate(),
-                'address' => $this->getAddress(),
-                'notes' => $this->getNotes(),
-                'status' => $this->getStatus(),
-                'created_by' => $users->random()->id,
-            ]);
+            $deliveryNote = DeliveryNote::firstOrCreate(
+                ['delivery_number' => $deliveryNumber],
+                [
+                    'date' => $dateRange[array_rand($dateRange)],
+                    'transaction_id' => $creditSale ? $creditSale->id : null,
+                    'customer_id' => $creditSale ? $creditSale->customer_id : $customers->random()->id,
+                    'driver' => $this->getDriverName(),
+                    'vehicle_plate' => $this->getVehiclePlate(),
+                    'notes' => $this->getNotes(),
+                    'status' => $this->getStatus(),
+                    'created_by' => $users->random()->id,
+                ]
+            );
+
+            if ($deliveryNote->wasRecentlyCreated) {
+                $created++;
+            }
         }
+
+        $this->command->info("Delivery notes seeded: {$created} surat jalan.");
+    }
+
+    private function getDateRange(): array
+    {
+        $dates = [];
+        $startDate = strtotime('2025-02-20');
+        $endDate = strtotime('2025-02-28');
+
+        for ($ts = $startDate; $ts <= $endDate; $ts += 86400) {
+            $dates[] = date('Y-m-d', $ts);
+        }
+
+        return $dates;
     }
 
     private function getDriverName(): string
@@ -45,6 +73,8 @@ class DeliveryNoteSeeder extends Seeder
             'Joko Susilo',
             'Rudi Hartono',
             'Wawan Kurniawan',
+            'Heri Wijaya',
+            'Kurniawan',
         ];
         return $names[array_rand($names)];
     }
@@ -56,18 +86,11 @@ class DeliveryNoteSeeder extends Seeder
             'B 5678 XYZ',
             'B 9012 DEF',
             'B 3456 GHI',
+            'B 7890 JKL',
+            'D 2345 MNO',
+            'F 6789 PQR',
         ];
         return $plates[array_rand($plates)];
-    }
-
-    private function getAddress(): string
-    {
-        $addresses = [
-            'Jl. Sudirman No. 123, Jakarta',
-            'Jl. Gatot Subroto Kav. 5, Bandung',
-            'Jl. Basuki Rahmat No. 45, Surabaya',
-        ];
-        return $addresses[array_rand($addresses)];
     }
 
     private function getNotes(): ?string
@@ -76,18 +99,16 @@ class DeliveryNoteSeeder extends Seeder
             'Kirim harian',
             'Kirim segera',
             'Antar ke gudang pelanggan',
+            'Hubungi penerima sebelum kirim',
+            'Prioritas tinggi',
             null,
         ];
-        $randomIndex = array_rand($notes);
-        return $notes[$randomIndex];
+        return $notes[array_rand($notes)];
     }
 
     private function getStatus(): string
     {
-        $statuses = ['completed', 'completed', 'completed', 'cancelled'];
+        $statuses = ['delivered', 'delivered', 'delivered', 'pending', 'cancelled'];
         return $statuses[array_rand($statuses)];
-    }
-
-        $this->command->info('Delivery notes seeded: ' . $deliveryCount . ' surat jalan.');
     }
 }
