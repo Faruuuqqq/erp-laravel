@@ -39,19 +39,22 @@ export interface PaginatedResponse<T> {
 
 export interface Product {
   id: string;
-  code: string;
+  code?: string;
   name: string;
-  category: string;
-  categoryId: string;
-  buyPrice: number;
-  sellPrice: number;
-  stock: number;
-  minStock: number;
-  unit: string;
+  category?: string;
+  categoryId?: string;
+  categoryName?: string;
+  buyPrice?: number;
+  sellPrice?: number;
+  stock?: number;
+  minStock?: number;
+  minimumStock?: number;
+  unit?: string;
   warehouseId?: string;
+  warehouseName?: string;
   warehouse?: string;
-  createdAt: string;
-  updatedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Customer {
@@ -69,11 +72,15 @@ export interface Customer {
 
 export interface Supplier {
   id: string;
+  code?: string;
   name: string;
-  phone: string;
+  phone?: string;
   email?: string;
   address?: string;
-  balance: number;
+  balance?: number;
+  noRekening?: string;
+  totalTransactions?: number;
+  createdAt?: string;
 }
 
 export interface Warehouse {
@@ -87,13 +94,13 @@ export interface Warehouse {
 
 export interface SalesRep {
   id: string;
-  code: string;
+  code?: string;
   name: string;
-  phone: string;
-  email: string;
-  area: string;
-  status: 'aktif' | 'nonaktif';
-  totalSales: number;
+  phone?: string;
+  email?: string;
+  area?: string;
+  status?: 'aktif' | 'nonaktif';
+  totalSales?: number;
 }
 
 export interface Category {
