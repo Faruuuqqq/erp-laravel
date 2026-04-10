@@ -22,7 +22,7 @@ import { Badge } from '@/components/ui/badge';
 import { StatCard } from '@/components/ui/StatCard';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
-import { useAuth } from '@/contexts/AuthContext';
+import { usePermissions } from '@/hooks/usePermissions';
 import { formatCurrency } from '@/lib/utils';
 import { useProducts, useCreateProduct, useUpdateProduct, useDeleteProduct } from '@/hooks/api/useProducts';
 import { useCategories } from '@/hooks/api/useCategories';
@@ -32,7 +32,7 @@ import type { Product } from '@/types';
 const BLANK_FORM = { name: '', categoryId: '', buyPrice: '', sellPrice: '', stock: '', minimumStock: '', unit: '', warehouseId: '' };
 
 const Produk = () => {
-  const { isOwner } = useAuth();
+  const { canCreate, canEdit, canDelete } = usePermissions();
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -199,7 +199,7 @@ const Produk = () => {
         </div>
         <div className="flex gap-2 shrink-0">
           <Button variant="outline" size="sm" onClick={handleExport}><Download className="mr-1.5 h-4 w-4" />Export CSV</Button>
-          {isOwner && (
+          {canCreate('products') && (
             <Button size="sm" onClick={() => { setForm(BLANK_FORM); setIsAddOpen(true); }}>
               <Plus className="mr-1.5 h-4 w-4" />Tambah Produk
             </Button>
@@ -220,14 +220,14 @@ const Produk = () => {
                   <TableHead className="text-right">Harga Jual</TableHead>
                   <TableHead>Stok / Level</TableHead>
                   <TableHead>Gudang</TableHead>
-                  {isOwner && <TableHead className="text-center">Aksi</TableHead>}
+                  {canEdit('products') || canDelete('products') ? <TableHead className="text-center">Aksi</TableHead> : null}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  <TableRow><TableCell colSpan={isOwner ? 8 : 7} className="py-10 text-center text-muted-foreground">Memuat data...</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={(canEdit('products') || canDelete('products')) ? 8 : 7} className="py-10 text-center text-muted-foreground">Memuat data...</TableCell></TableRow>
                 ) : filtered.length === 0 ? (
-                  <TableRow><TableCell colSpan={isOwner ? 8 : 7} className="py-10 text-center text-muted-foreground">Tidak ada produk yang sesuai.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={(canEdit('products') || canDelete('products')) ? 8 : 7} className="py-10 text-center text-muted-foreground">Tidak ada produk yang sesuai.</TableCell></TableRow>
                 ) : filtered.map(p => {
                   const isLow = Number(p.stock) <= Number(p.minimumStock ?? 0);
                   const pct = Math.min(100, Math.round((Number(p.stock) / (Number(p.minimumStock ?? 1) * 3)) * 100));
@@ -258,25 +258,29 @@ const Produk = () => {
                         </div>
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">{p.warehouseName}</TableCell>
-                      {isOwner && (
+                      {(canEdit('products') || canDelete('products')) && (
                         <TableCell>
                           <div className="flex justify-center gap-1">
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(p)}><Pencil className="h-3.5 w-3.5" /></Button>
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>Hapus Produk</AlertDialogTitle>
-                                  <AlertDialogDescription>Hapus <strong>{p.name}</strong>? Tindakan ini tidak dapat dibatalkan.</AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Batal</AlertDialogCancel>
-                                  <AlertDialogAction className="bg-destructive hover:bg-destructive/90" onClick={() => handleDelete(p.id, p.name)}>Hapus</AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
+                            {canEdit('products') && (
+                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(p)}><Pencil className="h-3.5 w-3.5" /></Button>
+                            )}
+                            {canDelete('products') && (
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Hapus Produk</AlertDialogTitle>
+                                    <AlertDialogDescription>Hapus <strong>{p.name}</strong>? Tindakan ini tidak dapat dibatalkan.</AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Batal</AlertDialogCancel>
+                                    <AlertDialogAction className="bg-destructive hover:bg-destructive/90" onClick={() => handleDelete(p.id, p.name)}>Hapus</AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            )}
                           </div>
                         </TableCell>
                       )}

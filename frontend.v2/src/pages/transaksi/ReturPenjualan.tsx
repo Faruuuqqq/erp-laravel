@@ -15,6 +15,7 @@ import {
 import { Plus, Trash2, RotateCcw, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { usePermissions } from '@/hooks/usePermissions';
 import { useCustomers } from '@/hooks/api/useCustomers';
 import { useTransactions } from '@/hooks/api/useTransactions';
 import { useProducts } from '@/hooks/api/useProducts';
@@ -26,6 +27,7 @@ interface ReturItem { productId: string; nama: string; qty: number; harga: numbe
 
 const ReturPenjualan = () => {
   const { toast } = useToast();
+  const { canCreate } = usePermissions();
   const [items, setItems] = useState<ReturItem[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState('');
   const [selectedFaktur, setSelectedFaktur] = useState('');
@@ -239,7 +241,9 @@ const ReturPenjualan = () => {
               </div>
               <div className="flex gap-2 pt-1">
                 <Button variant="outline" className="flex-1 h-9 text-sm" onClick={() => { setItems([]); setSelectedFaktur(''); setAlasan(''); setMetodeKembalian(''); }}>Reset</Button>
-                <Button className="flex-1 h-9 text-sm" onClick={handleSave} disabled={items.length === 0}>Simpan</Button>
+                {canCreate('transactions.return_sale') && (
+                  <Button className="flex-1 h-9 text-sm" onClick={handleSave} disabled={items.length === 0}>Simpan</Button>
+                )}
               </div>
               <Button variant="outline" className="w-full h-8 text-xs" onClick={() => toast({ title: 'Mengekspor PDF...' })}>Export PDF</Button>
             </CardContent>

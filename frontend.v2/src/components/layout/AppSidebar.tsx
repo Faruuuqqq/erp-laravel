@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   Users,
@@ -20,7 +20,6 @@ import {
   Settings,
   ChevronDown,
   LogOut,
-  Menu,
   AlertTriangle,
   Bell,
   Zap,
@@ -28,68 +27,74 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePermissions, type PermissionModule } from '@/hooks/usePermissions';
 
 interface MenuItem {
   title: string;
   icon: React.ElementType;
   path?: string;
+  /** If set, this item is hidden when canView(module) returns false */
+  module?: PermissionModule;
   children?: MenuItem[];
 }
 
-const buildMenu = (isOwner: boolean): MenuItem[] => [
+/**
+ * Builds the full menu definition.
+ * Items with a `module` key are later filtered based on permissions.
+ */
+const FULL_MENU: MenuItem[] = [
   { title: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
   {
     title: 'Data Utama',
     icon: Users,
     children: [
-      { title: 'Supplier', icon: Package, path: '/supplier' },
-      { title: 'Customer', icon: UserCheck, path: '/customer' },
-      { title: 'Produk', icon: Package, path: '/produk' },
-      { title: 'Gudang', icon: Warehouse, path: '/gudang' },
-      { title: 'Sales', icon: BadgePercent, path: '/sales' },
+      { title: 'Supplier', icon: Package,      path: '/supplier',  module: 'suppliers' },
+      { title: 'Customer', icon: UserCheck,    path: '/customer',  module: 'customers' },
+      { title: 'Produk',   icon: Package,      path: '/produk',    module: 'products' },
+      { title: 'Gudang',   icon: Warehouse,    path: '/gudang',    module: 'warehouses' },
+      { title: 'Sales',    icon: BadgePercent, path: '/sales',     module: 'sales_reps' },
     ],
   },
   {
     title: 'Transaksi',
     icon: ShoppingCart,
     children: [
-      { title: 'Pembelian', icon: ShoppingCart, path: '/transaksi/pembelian' },
-      { title: 'Penjualan Tunai', icon: Banknote, path: '/transaksi/penjualan-tunai' },
-      { title: 'Penjualan Kredit', icon: CreditCard, path: '/transaksi/penjualan-kredit' },
-      { title: 'Pembayaran Utang', icon: Receipt, path: '/transaksi/pembayaran-utang' },
-      { title: 'Pembayaran Piutang', icon: Receipt, path: '/transaksi/pembayaran-piutang' },
-      { title: 'Retur Pembelian', icon: RotateCcw, path: '/transaksi/retur-pembelian' },
-      { title: 'Retur Penjualan', icon: RotateCcw, path: '/transaksi/retur-penjualan' },
-      { title: 'Surat Jalan', icon: FileText, path: '/transaksi/surat-jalan' },
-      { title: 'Kontra Bon', icon: ClipboardList, path: '/transaksi/kontra-bon' },
+      { title: 'Pembelian',         icon: ShoppingCart, path: '/transaksi/pembelian',         module: 'transactions.purchase' },
+      { title: 'Penjualan Tunai',   icon: Banknote,     path: '/transaksi/penjualan-tunai',   module: 'transactions.cash_sale' },
+      { title: 'Penjualan Kredit',  icon: CreditCard,   path: '/transaksi/penjualan-kredit',  module: 'transactions.credit_sale' },
+      { title: 'Pembayaran Utang',  icon: Receipt,      path: '/transaksi/pembayaran-utang',  module: 'transactions.payable' },
+      { title: 'Pembayaran Piutang',icon: Receipt,      path: '/transaksi/pembayaran-piutang',module: 'transactions.receivable' },
+      { title: 'Retur Pembelian',   icon: RotateCcw,    path: '/transaksi/retur-pembelian',   module: 'transactions.return_purchase' },
+      { title: 'Retur Penjualan',   icon: RotateCcw,    path: '/transaksi/retur-penjualan',   module: 'transactions.return_sale' },
+      { title: 'Surat Jalan',       icon: FileText,     path: '/transaksi/surat-jalan',       module: 'transactions.delivery_note' },
+      { title: 'Kontra Bon',        icon: ClipboardList,path: '/transaksi/kontra-bon',        module: 'transactions.kontra_bon' },
     ],
   },
   {
     title: 'Informasi',
     icon: History,
     children: [
-      { title: 'Histori Pembelian', icon: History, path: '/informasi/pembelian' },
-      { title: 'Histori Penjualan', icon: History, path: '/informasi/penjualan' },
-      { title: 'Histori Retur Pembelian', icon: History, path: '/informasi/retur-pembelian' },
-      { title: 'Histori Retur Penjualan', icon: History, path: '/informasi/retur-penjualan' },
-      { title: 'Biaya/Jasa', icon: Wallet, path: '/informasi/biaya-jasa' },
-      { title: 'Histori Pembayaran Utang', icon: History, path: '/informasi/pembayaran-utang' },
-      { title: 'Histori Pembayaran Piutang', icon: History, path: '/informasi/pembayaran-piutang' },
+      { title: 'Histori Pembelian',          icon: History, path: '/informasi/pembelian',          module: 'transactions.purchase' },
+      { title: 'Histori Penjualan',          icon: History, path: '/informasi/penjualan',          module: 'transactions.cash_sale' },
+      { title: 'Histori Retur Pembelian',    icon: History, path: '/informasi/retur-pembelian',    module: 'transactions.return_purchase' },
+      { title: 'Histori Retur Penjualan',    icon: History, path: '/informasi/retur-penjualan',    module: 'transactions.return_sale' },
+      { title: 'Biaya/Jasa',                 icon: Wallet,  path: '/informasi/biaya-jasa' },
+      { title: 'Histori Pembayaran Utang',   icon: History, path: '/informasi/pembayaran-utang',   module: 'transactions.payable' },
+      { title: 'Histori Pembayaran Piutang', icon: History, path: '/informasi/pembayaran-piutang', module: 'transactions.receivable' },
     ],
   },
   {
     title: 'Laporan',
     icon: BarChart3,
     children: [
-      { title: 'Saldo Piutang', icon: Wallet, path: '/laporan/saldo-piutang' },
-      { title: 'Saldo Utang', icon: Wallet, path: '/laporan/saldo-utang' },
-      ...(isOwner ? [{ title: 'Saldo Stok', icon: Package, path: '/laporan/saldo-stok' }] : []),
-      { title: 'Kartu Stok', icon: ClipboardList, path: '/laporan/kartu-stok' },
-      { title: 'Laporan Harian', icon: BarChart3, path: '/laporan/laporan-harian' },
+      { title: 'Saldo Piutang',  icon: Wallet,        path: '/laporan/saldo-piutang' },
+      { title: 'Saldo Utang',    icon: Wallet,        path: '/laporan/saldo-utang' },
+      { title: 'Saldo Stok',     icon: Package,       path: '/laporan/saldo-stok', module: '__owner_only__' as PermissionModule },
+      { title: 'Kartu Stok',     icon: ClipboardList, path: '/laporan/kartu-stok' },
+      { title: 'Laporan Harian', icon: BarChart3,     path: '/laporan/laporan-harian', module: '__owner_only__' as PermissionModule },
     ],
   },
-  { title: 'Pengaturan', icon: Settings, path: '/pengaturan' },
-  ...(isOwner ? [{ title: 'Kelola Admin', icon: Shield, path: '/pengaturan/admin' }] : []),
+  { title: 'Pengaturan', icon: Settings, path: '/pengaturan', module: 'settings' },
 ];
 
 interface NavGroupProps {
@@ -174,8 +179,31 @@ const NavChild = ({ item }: { item: MenuItem }) => {
 
 export const AppSidebar = ({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) => {
   const { user, logout, isOwner } = useAuth();
+  const { canView } = usePermissions();
   const navigate = useNavigate();
-  const menu = buildMenu(isOwner);
+
+  // Filter menu items: items without a module key are always shown.
+  // Items WITH a module key are shown only if canView(module) returns true.
+  // Group parents are shown only if they have at least one visible child.
+  const filterItems = (items: MenuItem[]): MenuItem[] =>
+    items
+      .map(item => {
+        if (item.children) {
+          const visibleChildren = item.children.filter(c => !c.module || canView(c.module));
+          return visibleChildren.length > 0 ? { ...item, children: visibleChildren } : null;
+        }
+        if (item.module && !canView(item.module)) return null;
+        return item;
+      })
+      .filter(Boolean) as MenuItem[];
+
+  // Add owner-only items before filtering
+  const fullMenuWithOwner: MenuItem[] = [
+    ...FULL_MENU,
+    ...(isOwner ? [{ title: 'Kelola Admin', icon: Shield, path: '/pengaturan/admin' } as MenuItem] : []),
+  ];
+
+  const menu = filterItems(fullMenuWithOwner);
 
   const handleLogout = () => {
     logout();
