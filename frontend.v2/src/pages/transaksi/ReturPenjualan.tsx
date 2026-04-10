@@ -12,9 +12,15 @@ import {
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Plus, Trash2, RotateCcw, FileDown, CheckCircle2, AlertTriangle } from 'lucide-react';
-import { CUSTOMERS, TRANSACTIONS, PRODUCTS, formatRupiah } from '@/data/mockData';
+import { Plus, Trash2, RotateCcw, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { formatCurrency } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { useCustomers } from '@/hooks/api/useCustomers';
+import { useTransactions } from '@/hooks/api/useTransactions';
+import { useProducts } from '@/hooks/api/useProducts';
+import PrintLayout from '@/components/print/PrintLayout';
+import { ReturPenjualanPrint } from '@/components/print/ReturPenjualanPrint';
+import type { Transaction } from '@/types';
 
 interface ReturItem { productId: string; nama: string; qty: number; harga: number; satuan: string; subtotal: number; }
 
@@ -30,20 +36,32 @@ const ReturPenjualan = () => {
   const [catatan, setCatatan] = useState('');
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [savedTrx, setSavedTrx] = useState<Transaction | null>(null);
+
+  const { data: customersData } = useCustomers({ perPage: 200 });
+  const { data: transactionsData } = useTransactions({ type: selectedCustomer ? `penjualan_tunai,penjualan_kredit` : undefined });
+  const { data: productsData } = useProducts({ perPage: 999 });
+
+  const customers = customersData?.data ?? [];
+  const penjualanFakturs = (transactionsData?.data ?? []).filter(t =>
+    (t.type === 'penjualan_tunai' || t.type === 'penjualan_kredit') &&
+    (!selectedCustomer || t.customerId === selectedCustomer)
+  );
+  const products = productsData?.data ?? [];
+  const selectedTrx = penjualanFakturs.find(t => t.invoiceNumber === selectedFaktur);
 
   const noRetur = `RTJ-${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}-${String(Math.floor(Math.random()*900)+100)}`;
-  const penjualanFakturs = TRANSACTIONS.filter(t => (t.tipe === 'penjualan_tunai' || t.tipe === 'penjualan_kredit') && (!selectedCustomer || t.customerId === selectedCustomer));
-  const selectedTrx = TRANSACTIONS.find(t => t.noFaktur === selectedFaktur);
+
 
   const addItem = () => {
-    const product = PRODUCTS.find(p => p.id === selectedProduct);
+    const product = products.find(p => p.id === selectedProduct);
     if (!product) return toast({ title: 'Pilih produk', variant: 'destructive' });
     const qtyNum = parseInt(qty) || 1;
-    const trxItem = selectedTrx?.items.find(i => i.productId === selectedProduct);
-    const harga = trxItem?.harga || product.hargaJual;
-    setItems([...items, { productId: product.id, nama: product.nama, qty: qtyNum, harga, satuan: product.satuan, subtotal: harga * qtyNum }]);
+    const trxItem = selectedTrx?.items?.find(i => i.productId === selectedProduct);
+    const harga = trxItem ? Number(trxItem.price) : Number(product.sellPrice ?? product.buyPrice ?? 0);
+    setItems([...items, { productId: product.id, nama: product.name, qty: qtyNum, harga, satuan: product.unit ?? 'pcs', subtotal: harga * qtyNum }]);
     setSelectedProduct(''); setQty('1');
-    toast({ title: `${product.nama} ditambahkan` });
+    toast({ title: `${product.name} ditambahkan` });
   };
 
   const removeItem = (idx: number) => setItems(items.filter((_, i) => i !== idx));
@@ -66,12 +84,16 @@ const ReturPenjualan = () => {
           <div className="text-center">
             <h2 className="text-2xl font-bold">Retur Penjualan Diproses</h2>
             <p className="text-muted-foreground mt-1">No. Retur: <span className="font-mono font-semibold text-primary">{noRetur}</span></p>
-            <p className="text-3xl font-bold text-warning mt-3">{formatRupiah(totalNilai)}</p>
+            <p className="text-3xl font-bold text-warning mt-3">{formatCurrency(totalNilai)}</p>
             <p className="text-sm text-muted-foreground">Nilai retur - metode: {metodeKembalian}</p>
           </div>
           <div className="flex gap-3">
-            <Button variant="outline" onClick={() => toast({ title: 'Mengekspor PDF...' })}><FileDown className="mr-2 h-4 w-4" />Export PDF</Button>
-            <Button onClick={() => { setItems([]); setSaved(false); setSelectedFaktur(''); setSelectedCustomer(''); setAlasan(''); setMetodeKembalian(''); setCatatan(''); }}>Retur Baru</Button>
+            {savedTrx && (
+              <PrintLayout buttonLabel="Cetak Retur" buttonSize="sm" buttonVariant="outline">
+                <ReturPenjualanPrint transaction={savedTrx} />
+              </PrintLayout>
+            )}
+            <Button onClick={() => { setItems([]); setSaved(false); setSavedTrx(null); setSelectedFaktur(''); setSelectedCustomer(''); setAlasan(''); setMetodeKembalian(''); setCatatan(''); }}>Retur Baru</Button>
           </div>
         </div>
       </MainLayout>
@@ -107,7 +129,7 @@ const ReturPenjualan = () => {
                   <Select value={selectedCustomer} onValueChange={setSelectedCustomer}>
                     <SelectTrigger className="text-xs"><SelectValue placeholder="Pilih customer" /></SelectTrigger>
                     <SelectContent>
-                      {CUSTOMERS.map(c => <SelectItem key={c.id} value={c.id}>{c.nama}</SelectItem>)}
+                      {customers.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -118,7 +140,7 @@ const ReturPenjualan = () => {
                   <Select value={selectedFaktur} onValueChange={setSelectedFaktur}>
                     <SelectTrigger className="text-xs"><SelectValue placeholder="Pilih faktur" /></SelectTrigger>
                     <SelectContent>
-                      {penjualanFakturs.map(t => <SelectItem key={t.id} value={t.noFaktur}>{t.noFaktur} - {t.customerNama}</SelectItem>)}
+                      {penjualanFakturs.map(t => <SelectItem key={t.id} value={t.invoiceNumber}>{t.invoiceNumber} - {t.customer}</SelectItem>)}
                       <SelectItem value="manual">Input Manual</SelectItem>
                     </SelectContent>
                   </Select>
@@ -141,14 +163,14 @@ const ReturPenjualan = () => {
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Pilih Barang Retur</p>
                 <div className="grid gap-2 md:grid-cols-4">
                   <div className="md:col-span-2">
-                    <Select value={selectedProduct} onValueChange={setSelectedProduct}>
-                      <SelectTrigger className="text-xs h-8"><SelectValue placeholder="Pilih produk" /></SelectTrigger>
-                      <SelectContent>
-                        {(selectedTrx?.items ?? PRODUCTS.map(p => ({ productId: p.id, productNama: p.nama, qty: 0, harga: p.hargaJual, satuan: p.satuan, diskon: 0, subtotal: 0 }))).map(i => (
-                          <SelectItem key={i.productId} value={i.productId}>{i.productNama}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      <Select value={selectedProduct} onValueChange={setSelectedProduct}>
+                        <SelectTrigger className="text-xs h-8"><SelectValue placeholder="Pilih produk" /></SelectTrigger>
+                        <SelectContent>
+                          {products.map(p => (
+                            <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                   </div>
                   <Input type="number" value={qty} onChange={e => setQty(e.target.value)} placeholder="Qty" className="text-xs h-8" min="1" />
                   <Button onClick={addItem} size="sm" className="h-8 text-xs"><Plus className="mr-1 h-3.5 w-3.5" />Tambah</Button>
@@ -175,8 +197,8 @@ const ReturPenjualan = () => {
                           <TableCell className="text-xs">{idx + 1}</TableCell>
                           <TableCell className="font-medium">{item.nama}<p className="text-xs text-muted-foreground">{item.satuan}</p></TableCell>
                           <TableCell className="text-right tabular-nums">{item.qty}</TableCell>
-                          <TableCell className="text-right tabular-nums text-xs">{formatRupiah(item.harga)}</TableCell>
-                          <TableCell className="text-right font-semibold tabular-nums text-warning">{formatRupiah(item.subtotal)}</TableCell>
+                          <TableCell className="text-right tabular-nums text-xs">{formatCurrency(item.harga)}</TableCell>
+                          <TableCell className="text-right font-semibold tabular-nums text-warning">{formatCurrency(item.subtotal)}</TableCell>
                           <TableCell>
                             <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:bg-destructive/10" onClick={() => removeItem(idx)}><Trash2 className="h-3.5 w-3.5" /></Button>
                           </TableCell>
@@ -197,7 +219,7 @@ const ReturPenjualan = () => {
               <div className="flex justify-between text-sm"><span className="text-muted-foreground">Total Qty</span><span className="tabular-nums">{items.reduce((s,i) => s+i.qty,0)}</span></div>
               <div className="rounded-lg border bg-warning/10 p-3">
                 <p className="text-xs text-muted-foreground">Total Nilai Retur</p>
-                <p className="text-xl font-bold text-warning tabular-nums">{formatRupiah(totalNilai)}</p>
+                <p className="text-xl font-bold text-warning tabular-nums">{formatCurrency(totalNilai)}</p>
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Metode Pengembalian</Label>
@@ -219,7 +241,7 @@ const ReturPenjualan = () => {
                 <Button variant="outline" className="flex-1 h-9 text-sm" onClick={() => { setItems([]); setSelectedFaktur(''); setAlasan(''); setMetodeKembalian(''); }}>Reset</Button>
                 <Button className="flex-1 h-9 text-sm" onClick={handleSave} disabled={items.length === 0}>Simpan</Button>
               </div>
-              <Button variant="outline" className="w-full h-8 text-xs" onClick={() => toast({ title: 'Mengekspor PDF...' })}><FileDown className="mr-1.5 h-3.5 w-3.5" />Export PDF</Button>
+              <Button variant="outline" className="w-full h-8 text-xs" onClick={() => toast({ title: 'Mengekspor PDF...' })}>Export PDF</Button>
             </CardContent>
           </Card>
         </div>
@@ -229,12 +251,27 @@ const ReturPenjualan = () => {
           <AlertDialogHeader>
             <AlertDialogTitle>Konfirmasi Retur Penjualan</AlertDialogTitle>
             <AlertDialogDescription>
-              Retur senilai <strong>{formatRupiah(totalNilai)}</strong> akan menambah stok dan mengurangi piutang/kas customer. Tindakan ini tidak dapat dibatalkan.
+              Retur senilai <strong>{formatCurrency(totalNilai)}</strong> akan menambah stok dan mengurangi piutang/kas customer. Tindakan ini tidak dapat dibatalkan.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Batal</AlertDialogCancel>
-            <AlertDialogAction onClick={() => { setConfirmOpen(false); setSaved(true); toast({ title: 'Retur berhasil', description: noRetur }); }}>Ya, Proses Retur</AlertDialogAction>
+            <AlertDialogAction onClick={() => {
+              // Build a mock transaction object for the print template
+              const fakeTrx: Transaction = {
+                id: noRetur, invoiceNumber: noRetur, date: new Date().toISOString().split('T')[0],
+                type: 'retur_penjualan', supplierId: null, customerId: selectedCustomer,
+                customer: customers.find(c => c.id === selectedCustomer)?.name ?? undefined,
+                subtotal: totalNilai, discount: 0, tax: 0, total: totalNilai, paid: 0,
+                remaining: totalNilai, status: 'completed', paymentStatus: 'belum_lunas',
+                notes: catatan,
+                items: items.map((i, idx) => ({ id: String(idx), productId: i.productId, productName: i.nama, quantity: i.qty, price: i.harga, discount: 0, subtotal: i.subtotal })),
+                createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+              };
+              setSavedTrx(fakeTrx);
+              setConfirmOpen(false); setSaved(true);
+              toast({ title: 'Retur berhasil', description: noRetur });
+            }}>Ya, Proses Retur</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

@@ -1,52 +1,50 @@
 import { useState } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
-import { PageHeader, DataTableContainer, CurrencyCell } from '@/components/ui/DataComponents';
-import { PRODUCTS, STOCK_MOVEMENTS, formatRupiah } from '@/data/mockData';
+import { PageHeader, DataTableContainer } from '@/components/ui/DataComponents';
+import { useProducts } from '@/hooks/api/useProducts';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Package, ArrowUp, ArrowDown, Download, Printer } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Package, ArrowUp, ArrowDown } from 'lucide-react';
 import { StatCard } from '@/components/ui/StatCard';
+import { api } from '@/lib/api';
+import { useQuery } from '@tanstack/react-query';
+import { formatCurrency } from '@/lib/utils';
+import PrintLayout from '@/components/print/PrintLayout';
+import { KartuStokPrint } from '@/components/print/KartuStokPrint';
 
 const KartuStok = () => {
-  const [selectedProduct, setSelectedProduct] = useState(PRODUCTS[0].id);
-  const product = PRODUCTS.find(p => p.id === selectedProduct)!;
-  const movements = STOCK_MOVEMENTS.filter(m => m.productId === selectedProduct);
-  const totalMasuk = movements.filter(m => m.tipe === 'masuk').reduce((s, m) => s + m.qty, 0);
-  const totalKeluar = movements.filter(m => m.tipe === 'keluar').reduce((s, m) => s + m.qty, 0);
+  const [selectedProduct, setSelectedProduct] = useState('');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
 
-  const handlePrint = () => window.print();
+  const { data: productsData } = useProducts({ perPage: 999 });
+  const products = productsData?.data ?? [];
 
-  const handleExportPDF = () => {
-    const content = `
-KARTU STOK - TOKOSYNC ERP
-Produk  : ${product.nama} (${product.kode})
-Gudang  : ${product.gudangNama}
-Dicetak : ${new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}
-${'='.repeat(70)}
+  const product = products.find(p => p.id === selectedProduct);
 
-Stok Saat Ini : ${product.stok} ${product.satuan}
-Total Masuk   : ${totalMasuk} ${product.satuan}
-Total Keluar  : ${totalKeluar} ${product.satuan}
+  const { data: mutationsData, isLoading } = useQuery({
+    queryKey: ['stock-mutations', selectedProduct, fromDate, toDate],
+    queryFn: () => api.get<{ data: Array<{ id: string; productId: string; type: string; quantity: number; balance: number; reference: string; notes: string; createdAt: string }> }>(
+      '/stock-mutations',
+      { productId: selectedProduct, from: fromDate || undefined, to: toDate || undefined } as Record<string, unknown>
+    ),
+    enabled: !!selectedProduct,
+  });
 
-${'='.repeat(70)}
-${['Tanggal', 'Keterangan', 'Referensi', 'Masuk', 'Keluar', 'Saldo'].join('\t')}
-${'-'.repeat(70)}
-${movements.map(m =>
-      [m.tanggal, m.keterangan, m.referensi,
-        m.tipe === 'masuk' ? `+${m.qty}` : '',
-        m.tipe === 'keluar' ? `-${m.qty}` : '',
-        m.saldo].join('\t')
-    ).join('\n')}
-    `;
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `kartu-stok-${product.kode}-${new Date().toISOString().slice(0, 10)}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  const mutations = mutationsData?.data ?? [];
+  const totalMasuk = mutations.filter(m => m.type === 'IN' || m.type === 'in').reduce((s, m) => s + m.quantity, 0);
+  const totalKeluar = mutations.filter(m => m.type === 'OUT' || m.type === 'out').reduce((s, m) => s + m.quantity, 0);
+
+  const printEntries = mutations.map(m => ({
+    tanggal: m.createdAt,
+    keterangan: m.notes ?? m.type,
+    referensi: m.reference,
+    masuk: (m.type === 'IN' || m.type === 'in') ? m.quantity : 0,
+    keluar: (m.type === 'OUT' || m.type === 'out') ? m.quantity : 0,
+    saldo: m.balance,
+  }));
 
   return (
     <MainLayout title="Kartu Stok" subtitle="Histori pergerakan stok per produk">
@@ -54,34 +52,46 @@ ${movements.map(m =>
         title="Kartu Stok"
         description="Audit trail lengkap pergerakan stok per produk"
         actions={
-          <>
-            <Button variant="outline" size="sm" onClick={handlePrint}>
-              <Printer className="h-4 w-4 mr-1.5" />Cetak
-            </Button>
-            <Button variant="outline" size="sm" onClick={handleExportPDF}>
-              <Download className="h-4 w-4 mr-1.5" />Export PDF
-            </Button>
-          </>
+          <PrintLayout buttonLabel="Cetak Kartu Stok" buttonSize="sm" buttonVariant="outline" hideButton={!selectedProduct}>
+            <KartuStokPrint
+              productName={product?.name ?? ''}
+              productCode={product?.code ?? ''}
+              satuan={product?.unit}
+              periodFrom={fromDate}
+              periodTo={toDate}
+              entries={printEntries}
+              hargaBeli={product ? Number(product.buyPrice) : undefined}
+            />
+          </PrintLayout>
         }
       />
 
       {/* Product Selector */}
-      <div className="mb-5">
-        <label className="text-sm font-medium text-foreground mb-1.5 block">Pilih Produk</label>
-        <Select value={selectedProduct} onValueChange={setSelectedProduct}>
-          <SelectTrigger className="w-full max-w-md">
-            <SelectValue placeholder="Pilih produk" />
-          </SelectTrigger>
-          <SelectContent>
-            {PRODUCTS.map(p => (
-              <SelectItem key={p.id} value={p.id}>
-                <span className="font-mono text-xs text-muted-foreground mr-2">{p.kode}</span>
-                {p.nama}
-                {p.stok <= p.stokMinimum && <span className="ml-2 text-destructive text-xs">(Stok Rendah)</span>}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="mb-5 flex flex-wrap gap-3 items-end">
+        <div className="flex-1 min-w-48">
+          <label className="text-sm font-medium text-foreground mb-1.5 block">Pilih Produk</label>
+          <Select value={selectedProduct} onValueChange={setSelectedProduct}>
+            <SelectTrigger className="w-full max-w-md">
+              <SelectValue placeholder="Pilih produk" />
+            </SelectTrigger>
+            <SelectContent>
+              {products.map(p => (
+                <SelectItem key={p.id} value={p.id}>
+                  <span className="font-mono text-xs text-muted-foreground mr-2">{p.code}</span>
+                  {p.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <label className="text-sm font-medium text-foreground mb-1.5 block">Dari</label>
+          <Input type="date" className="h-9" value={fromDate} onChange={e => setFromDate(e.target.value)} />
+        </div>
+        <div>
+          <label className="text-sm font-medium text-foreground mb-1.5 block">Sampai</label>
+          <Input type="date" className="h-9" value={toDate} onChange={e => setToDate(e.target.value)} />
+        </div>
       </div>
 
       {/* Product Info Card */}
@@ -91,28 +101,25 @@ ${movements.map(m =>
             <Package className="h-7 w-7 text-primary" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="font-bold text-base truncate">{product.nama}</p>
+            <p className="font-bold text-base truncate">{product.name}</p>
             <p className="text-sm text-muted-foreground">
-              {product.kode} &middot; {product.kategoriNama} &middot; {product.gudangNama}
+              {product.code} &middot; {product.categoryName}
             </p>
             <div className="flex items-center gap-3 mt-1.5">
               <span className="text-xs text-muted-foreground">
-                Harga Beli: <span className="font-medium text-foreground">{formatRupiah(product.hargaBeli)}</span>
+                Harga Beli: <span className="font-medium text-foreground">{formatCurrency(Number(product.buyPrice))}</span>
               </span>
               <span className="text-xs text-muted-foreground">
-                Harga Jual: <span className="font-medium text-foreground">{formatRupiah(product.hargaJual)}</span>
-              </span>
-              <span className="text-xs text-muted-foreground">
-                Min Stok: <span className="font-medium text-foreground">{product.stokMinimum} {product.satuan}</span>
+                Harga Jual: <span className="font-medium text-foreground">{formatCurrency(Number(product.sellPrice))}</span>
               </span>
             </div>
           </div>
           <div className="text-right shrink-0">
-            <p className={`text-3xl font-bold tabular-nums ${product.stok <= product.stokMinimum ? 'text-destructive' : 'text-primary'}`}>
-              {product.stok}
+            <p className={`text-3xl font-bold tabular-nums ${Number(product.stock) <= Number(product.minimumStock ?? 0) ? 'text-destructive' : 'text-primary'}`}>
+              {product.stock}
             </p>
-            <p className="text-xs text-muted-foreground">{product.satuan} tersisa</p>
-            {product.stok <= product.stokMinimum && (
+            <p className="text-xs text-muted-foreground">{product.unit} tersisa</p>
+            {Number(product.stock) <= Number(product.minimumStock ?? 0) && (
               <Badge variant="destructive" className="mt-1 text-xs">Stok Rendah</Badge>
             )}
           </div>
@@ -121,14 +128,21 @@ ${movements.map(m =>
 
       {/* Stat Cards */}
       <div className="mb-5 grid gap-4 sm:grid-cols-3">
-        <StatCard title="Total Masuk" value={`${totalMasuk} ${product?.satuan}`} icon={<ArrowUp className="h-5 w-5" />} color="success" />
-        <StatCard title="Total Keluar" value={`${totalKeluar} ${product?.satuan}`} icon={<ArrowDown className="h-5 w-5" />} color="destructive" />
-        <StatCard title="Saldo Akhir" value={`${product?.stok || 0} ${product?.satuan}`} icon={<Package className="h-5 w-5" />} color="primary" />
+        <StatCard title="Total Masuk" value={`${totalMasuk} ${product?.unit ?? ''}`} icon={<ArrowUp className="h-5 w-5" />} color="success" />
+        <StatCard title="Total Keluar" value={`${totalKeluar} ${product?.unit ?? ''}`} icon={<ArrowDown className="h-5 w-5" />} color="destructive" />
+        <StatCard title="Saldo Akhir" value={`${product?.stock ?? 0} ${product?.unit ?? ''}`} icon={<Package className="h-5 w-5" />} color="primary" />
       </div>
 
       {/* Movement Table */}
       <DataTableContainer>
-        {movements.length === 0 ? (
+        {!selectedProduct ? (
+          <div className="p-12 text-center">
+            <Package className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-50" />
+            <p className="text-muted-foreground">Pilih produk untuk melihat kartu stok.</p>
+          </div>
+        ) : isLoading ? (
+          <div className="p-12 text-center text-muted-foreground">Memuat data...</div>
+        ) : mutations.length === 0 ? (
           <div className="p-12 text-center">
             <Package className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-50" />
             <p className="text-muted-foreground">Belum ada data pergerakan stok untuk produk ini.</p>
@@ -144,38 +158,34 @@ ${movements.map(m =>
                 </tr>
               </thead>
               <tbody>
-                {movements.map((m, i) => (
+                {mutations.map((m, i) => (
                   <tr key={m.id} className="border-b hover:bg-muted/20 transition-colors">
                     <td className="px-4 py-3 text-muted-foreground text-xs">{i + 1}</td>
-                    <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{m.tanggal}</td>
-                    <td className="px-4 py-3">{m.keterangan}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-primary">{m.referensi}</td>
+                    <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{new Date(m.createdAt).toLocaleDateString('id-ID')}</td>
+                    <td className="px-4 py-3">{m.notes ?? m.type}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-primary">{m.reference}</td>
                     <td className="px-4 py-3">
-                      {m.tipe === 'masuk' && (
+                      {(m.type === 'IN' || m.type === 'in') && (
                         <span className="inline-flex items-center gap-1 rounded-full bg-success/10 border border-success/30 px-2 py-0.5 text-xs font-semibold text-success">
-                          <ArrowUp className="h-3 w-3" />+{m.qty}
+                          <ArrowUp className="h-3 w-3" />+{m.quantity}
                         </span>
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      {m.tipe === 'keluar' && (
+                      {(m.type === 'OUT' || m.type === 'out') && (
                         <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 border border-destructive/30 px-2 py-0.5 text-xs font-semibold text-destructive">
-                          <ArrowDown className="h-3 w-3" />-{m.qty}
+                          <ArrowDown className="h-3 w-3" />-{m.quantity}
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3 font-bold tabular-nums text-base">{m.saldo}</td>
+                    <td className="px-4 py-3 font-bold tabular-nums text-base">{m.balance}</td>
                   </tr>
                 ))}
                 <tr className="bg-muted/40 border-t-2">
                   <td colSpan={4} className="px-4 py-3 font-bold text-sm">RINGKASAN</td>
-                  <td className="px-4 py-3">
-                    <span className="text-success font-bold">+{totalMasuk}</span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="text-destructive font-bold">-{totalKeluar}</span>
-                  </td>
-                  <td className="px-4 py-3 font-bold text-base text-primary">{product?.stok}</td>
+                  <td className="px-4 py-3"><span className="text-success font-bold">+{totalMasuk}</span></td>
+                  <td className="px-4 py-3"><span className="text-destructive font-bold">-{totalKeluar}</span></td>
+                  <td className="px-4 py-3 font-bold text-base text-primary">{product?.stock}</td>
                 </tr>
               </tbody>
             </table>
@@ -186,3 +196,5 @@ ${movements.map(m =>
   );
 };
 export default KartuStok;
+
+

@@ -17,15 +17,17 @@ import {
 import { Plus, Search, Pencil, Trash2, Building2, Download } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { StatCard } from '@/components/ui/StatCard';
-import { SUPPLIERS, Supplier as SupplierType, formatRupiah } from '@/data/mockData';
+import { useSuppliers, useCreateSupplier, useUpdateSupplier, useDeleteSupplier } from '@/hooks/api/useSuppliers';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
+import { formatCurrency } from '@/lib/utils';
 
 const Supplier = () => {
-  const [suppliers, setSuppliers] = useState<SupplierType[]>(SUPPLIERS);
+  const { isOwner } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddOpen, setIsAddOpen] = useState(false);
-  const [editItem, setEditItem] = useState<SupplierType | null>(null);
-  const [form, setForm] = useState({ nama: '', telepon: '', email: '', alamat: '' });
+  const [editItem, setEditItem] = useState<{ id: string; name: string; phone: string; email: string; address: string; noRekening?: string } | null>(null);
+  const [form, setForm] = useState({ name: '', phone: '', email: '', address: '', noRekening: '' });
   const { toast } = useToast();
 
   const filtered = suppliers.filter(s =>
@@ -121,9 +123,11 @@ const Supplier = () => {
           <Button variant="outline" size="sm" onClick={handleExport}>
             <Download className="mr-1.5 h-4 w-4" />Export CSV
           </Button>
-          <Button size="sm" onClick={() => { setForm({ nama: '', telepon: '', email: '', alamat: '' }); setIsAddOpen(true); }}>
-            <Plus className="mr-1.5 h-4 w-4" />Tambah Supplier
-          </Button>
+          {isOwner && (
+            <Button size="sm" onClick={() => { setForm({ name: '', phone: '', email: '', address: '', noRekening: '' }); setIsAddOpen(true); }}>
+              <Plus className="mr-1.5 h-4 w-4" />Tambah Supplier
+            </Button>
+          )}
         </div>
       </div>
 
