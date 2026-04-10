@@ -26,6 +26,7 @@ class TransactionResource extends JsonResource
             'remaining'     => (float) $this->remaining,
             'status'        => $this->status,
             'paymentStatus' => $this->remaining <= 0 ? 'lunas' : 'belum_lunas',
+            'isHidden'      => (bool) $this->is_hidden,
             'notes'         => $this->notes,
             'items'         => TransactionDetailResource::collection(
                 $this->whenLoaded('details')

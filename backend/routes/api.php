@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\CustomerController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\DeliveryNoteController;
+use App\Http\Controllers\Api\ExpenseController;
 use App\Http\Controllers\Api\InfoController;
 use App\Http\Controllers\Api\KontraBonController;
 use App\Http\Controllers\Api\ProductController;
@@ -51,10 +52,12 @@ Route::middleware(['auth:sanctum', 'throttle:60,1'])->group(function () {
     Route::apiResource('customers', CustomerController::class);
     Route::apiResource('warehouses', WarehouseController::class);
     Route::apiResource('sales', SalesRepController::class);
+    Route::apiResource('expenses', ExpenseController::class);
 
     // ── Transactions (Admin & Owner) ──────────────────────────────────────────
     Route::apiResource('transactions', TransactionController::class);
     Route::patch('transactions/{transaction}/payment', [TransactionController::class, 'updatePayment']);
+    Route::patch('transactions/{transaction}/toggle-hidden', [TransactionController::class, 'toggleHidden']);
     Route::get('transactions/{transaction}/print/invoice', [TransactionController::class, 'printInvoice']);
     Route::get('transactions/{transaction}/print/receipt', [TransactionController::class, 'printReceipt']);
 
