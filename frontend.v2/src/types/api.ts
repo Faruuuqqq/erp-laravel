@@ -140,6 +140,7 @@ export interface Transaction {
   remaining: number;
   status: TransactionStatus;
   paymentStatus: 'lunas' | 'belum_lunas';
+  isHidden?: boolean;
   notes?: string;
   items?: TransactionDetail[];
   createdAt: string;

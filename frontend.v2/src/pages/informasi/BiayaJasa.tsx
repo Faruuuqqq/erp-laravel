@@ -22,8 +22,8 @@ import { extractErrorMessage } from '@/lib/api';
 
 const BiayaJasa = () => {
   const [search, setSearch] = useState('');
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isAddEditOpen, setIsAddEditOpen] = useState(false);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
   const [formData, setFormData] = useState({
     date: format(new Date(), 'yyyy-MM-dd'),
@@ -49,7 +49,7 @@ const BiayaJasa = () => {
       description: '',
       amount: 0,
     });
-    setIsDialogOpen(true);
+    setIsAddEditOpen(true);
   };
 
   const handleOpenEdit = (expense: Expense) => {
@@ -60,12 +60,12 @@ const BiayaJasa = () => {
       description: expense.description,
       amount: Number(expense.amount),
     });
-    setIsDialogOpen(true);
+    setIsAddEditOpen(true);
   };
 
   const handleOpenDelete = (expense: Expense) => {
     setSelectedExpense(expense);
-    setIsDeleteDialogOpen(true);
+    setIsDeleteConfirmOpen(true);
   };
 
   const handleSave = async () => {
@@ -80,7 +80,7 @@ const BiayaJasa = () => {
         await createExpense.mutateAsync(formData);
         toast({ title: 'Berhasil', description: 'Biaya berhasil ditambahkan' });
       }
-      setIsDialogOpen(false);
+      setIsAddEditOpen(false);
       refetch();
     } catch (error) {
       toast({ 
@@ -96,7 +96,7 @@ const BiayaJasa = () => {
     try {
       await deleteExpense.mutateAsync(selectedExpense.id);
       toast({ title: 'Berhasil', description: 'Biaya berhasil dihapus' });
-      setIsDeleteDialogOpen(false);
+      setIsDeleteConfirmOpen(false);
       refetch();
     } catch (error) {
       toast({ 
@@ -225,7 +225,7 @@ const BiayaJasa = () => {
       </DataTableContainer>
 
       {/* Add/Edit Dialog */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+      <Dialog open={isAddEditOpen} onOpenChange={setIsAddEditOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>{selectedExpense ? 'Edit Biaya' : 'Tambah Biaya Baru'}</DialogTitle>
@@ -269,7 +269,7 @@ const BiayaJasa = () => {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Batal</Button>
+            <Button variant="outline" onClick={() => setIsAddEditOpen(false)}>Batal</Button>
             <Button onClick={handleSave} disabled={createExpense.isPending || updateExpense.isPending}>
               {(createExpense.isPending || updateExpense.isPending) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Simpan
@@ -279,7 +279,7 @@ const BiayaJasa = () => {
       </Dialog>
 
       {/* Delete Alert Dialog */}
-      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+      <AlertDialog open={isDeleteConfirmOpen} onOpenChange={setIsDeleteConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Hapus Data Biaya</AlertDialogTitle>

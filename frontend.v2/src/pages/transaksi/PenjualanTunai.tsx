@@ -11,6 +11,9 @@ import { Separator } from '@/components/ui/separator';
 import { Plus, Trash2, Banknote, Calculator, Printer, FileDown, CheckCircle2, Search } from 'lucide-react';
 import { PRODUCTS, CUSTOMERS, SALES_REPS, formatRupiah } from '@/data/mockData';
 import { useToast } from '@/hooks/use-toast';
+import { usePrint } from '@/contexts/PrintContext';
+import { FakturPenjualan } from '@/components/print/FakturPenjualan';
+import { Transaction } from '@/types';
 
 interface CartItem {
   productId: string;
@@ -24,6 +27,7 @@ interface CartItem {
 
 const PenjualanTunai = () => {
   const { toast } = useToast();
+  const { printDocument } = usePrint();
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedProduct, setSelectedProduct] = useState('');
   const [qty, setQty] = useState('1');
@@ -75,6 +79,35 @@ const PenjualanTunai = () => {
   const grandTotal = subtotal - diskonTotalNum;
   const kembalian = (parseFloat(bayar) || 0) - grandTotal;
 
+  const currentTransaction: Transaction = {
+    id: 'temp-id',
+    invoiceNumber: noFaktur,
+    date: new Date().toISOString().split('T')[0],
+    type: 'penjualan_tunai',
+    customer: CUSTOMERS.find(c => c.id === selectedCustomer)?.nama || 'Walk-in Customer',
+    customerId: selectedCustomer,
+    salesId: selectedSales,
+    subtotal: subtotal,
+    discount: diskonTotalNum,
+    tax: 0,
+    total: grandTotal,
+    paid: parseFloat(bayar) || 0,
+    remaining: kembalian < 0 ? Math.abs(kembalian) : 0,
+    status: 'completed',
+    paymentStatus: kembalian >= 0 ? 'lunas' : 'belum_lunas',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    items: cart.map((item, idx) => ({
+      id: `item-${idx}`,
+      productId: item.productId,
+      productName: item.nama,
+      quantity: item.qty,
+      price: item.harga,
+      discount: (item.harga * item.qty * item.diskon) / 100,
+      subtotal: item.subtotal
+    }))
+  };
+
   const handleSave = () => {
     if (cart.length === 0) return toast({ title: 'Keranjang masih kosong', variant: 'destructive' });
     if (!selectedCustomer) return toast({ title: 'Pilih customer terlebih dahulu', variant: 'destructive' });
@@ -83,8 +116,9 @@ const PenjualanTunai = () => {
   };
 
   const handlePrint = () => {
-    window.print();
-    toast({ title: 'Mencetak struk...' });
+    if (cart.length === 0) return toast({ title: 'Keranjang masih kosong', variant: 'destructive' });
+    printDocument(<FakturPenjualan transaction={currentTransaction} />);
+    toast({ title: 'Mencetak faktur...' });
   };
 
   const handleExportPdf = () => {
