@@ -12,10 +12,10 @@ class UserSeeder extends Seeder
     {
         // Owner – akses penuh (termasuk laporan keuangan)
         User::firstOrCreate(
-            ['email' => 'owner@tokosync.local'],
+            ['email' => 'owner@tokosync.id'],
             [
                 'name'      => 'Pemilik Toko',
-                'password'  => Hash::make('password123'),
+                'password'  => Hash::make('password'),
                 'role'      => 'owner',
                 'is_active' => true,
             ]
@@ -23,15 +23,15 @@ class UserSeeder extends Seeder
 
         // Admin/Kasir – akses operasional harian
         User::firstOrCreate(
-            ['email' => 'admin@tokosync.local'],
+            ['email' => 'admin@tokosync.id'],
             [
                 'name'      => 'Admin Kasir',
-                'password'  => Hash::make('password123'),
+                'password'  => Hash::make('password'),
                 'role'      => 'admin',
                 'is_active' => true,
             ]
         );
 
-        $this->command->info('Users seeded: owner@tokosync.local & admin@tokosync.local (password: password123)');
+        $this->command->info('Users seeded: owner@tokosync.id & admin@tokosync.id (password: password)');
     }
 }
