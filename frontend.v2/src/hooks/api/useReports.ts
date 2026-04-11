@@ -13,7 +13,7 @@ export const useDailyReport = (date?: string) => {
 export const useStockReport = (params?: { page?: number; perPage?: number; search?: string; category?: string }) => {
   return useQuery({
     queryKey: ['reports', 'stock', params],
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     queryFn: () => api.get<{ data: any[]; meta?: any; totalValue?: number }>('/reports/stock', params),
   });
 };
@@ -40,11 +40,11 @@ export const printBalanceReport = async (from?: string, to?: string): Promise<st
   return response.data.url;
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 export const useHistoryPembelian = (params?: { from?: string; to?: string; page?: number; perPage?: number }) => {
   return useQuery({
     queryKey: ['reports', 'history', 'pembelian', params],
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     queryFn: () => api.get<{ data: any; meta: any }>('/reports/history/pembelian', params),
   });
 };

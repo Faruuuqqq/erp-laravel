@@ -1,24 +1,30 @@
-﻿import { useState, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Search, History, Eye, FileDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, History, Eye, EyeOff, FileDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { useTransactions } from '@/hooks/api/useTransactions';
+import { useTransactions, useToggleHideTransaction } from '@/hooks/api/useTransactions';
 import { formatCurrency } from '@/lib/utils';
 import type { Transaction } from '@/types';
 
 const HistoriPembayaranUtang = () => {
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterHidden, setFilterHidden] = useState<'all' | 'visible' | 'hidden'>('visible');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [page, setPage] = useState(1);
   const [selectedTrx, setSelectedTrx] = useState<Transaction | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+
+  const toggleHideMutation = useToggleHideTransaction();
 
   const { data, isLoading } = useTransactions({
     type: 'pembayaran_utang',
@@ -31,9 +37,28 @@ const HistoriPembayaranUtang = () => {
 
   const transactions = data?.data ?? [];
   const meta = data?.meta;
-  const totalNilai = transactions.reduce((s, t) => s + t.paid, 0);
+  
+  const filtered = transactions
+    .filter(t => {
+      if (filterHidden === 'visible') return !t.isHidden;
+      if (filterHidden === 'hidden') return t.isHidden;
+      return true;
+    });
 
-  const handleExport = useCallback(() => toast({ title: 'Mengekspor PDF...' }), [toast]);
+  const hiddenCount = transactions.filter(t => t.isHidden).length;
+  const totalNilai = filtered.reduce((s, t) => s + t.paid, 0);
+
+  const handleToggleHide = useCallback(async (id: string) => {
+    setTogglingId(id);
+    try {
+      await toggleHideMutation.mutateAsync(id);
+      toast({ title: 'Berhasil', description: 'Status transaksi diperbarui' });
+    } catch {
+      toast({ title: 'Error', description: 'Gagal mengubah status transaksi', variant: 'destructive' });
+    } finally {
+      setTogglingId(null);
+    }
+  }, [toggleHideMutation, toast]);
 
   return (
     <MainLayout title="Histori Pembayaran Utang" subtitle="Riwayat pembayaran utang ke supplier">
@@ -55,50 +80,75 @@ const HistoriPembayaranUtang = () => {
       </div>
 
       <Card>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/50">
-                  <TableHead className="text-xs">No. Bukti</TableHead>
-                  <TableHead className="text-xs">Tanggal</TableHead>
-                  <TableHead className="text-xs">Supplier</TableHead>
-                  <TableHead className="text-xs text-right">Jumlah Dibayar</TableHead>
-                  <TableHead className="text-xs">Catatan</TableHead>
-                  <TableHead className="w-10" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading ? (
-                  Array.from({ length: 5 }).map((_, i) => <TableRow key={i}><TableCell colSpan={6}><Skeleton className="h-8 w-full" /></TableCell></TableRow>)
-                ) : transactions.length === 0 ? (
-                  <TableRow><TableCell colSpan={6} className="text-center py-10 text-muted-foreground">Tidak ada data pembayaran utang</TableCell></TableRow>
-                ) : transactions.map(t => (
-                  <TableRow key={t.id} className="text-sm hover:bg-muted/30">
-                    <TableCell className="font-mono text-xs text-primary font-semibold">{t.invoiceNumber}</TableCell>
-                    <TableCell className="text-xs">{t.date}</TableCell>
-                    <TableCell className="font-medium max-w-[160px] truncate">{t.supplier || '-'}</TableCell>
-                    <TableCell className="text-right font-bold tabular-nums text-primary">{formatCurrency(t.paid)}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">{t.notes || '-'}</TableCell>
-                    <TableCell>
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setSelectedTrx(t)}><Eye className="h-3.5 w-3.5" /></Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-          {meta && meta.last_page > 1 && (
-            <div className="flex items-center justify-between px-4 py-3 border-t text-xs text-muted-foreground">
-              <span>Halaman {meta.current_page} dari {meta.last_page} ({meta.total} data)</span>
-              <div className="flex gap-1">
-                <Button variant="outline" size="icon" className="h-7 w-7" disabled={page <= 1} onClick={() => setPage(p => p - 1)}><ChevronLeft className="h-3.5 w-3.5" /></Button>
-                <Button variant="outline" size="icon" className="h-7 w-7" disabled={page >= meta.last_page} onClick={() => setPage(p => p + 1)}><ChevronRight className="h-3.5 w-3.5" /></Button>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+         <CardContent className="p-0">
+           <div className="border-b">
+             <Tabs value={filterHidden} onValueChange={(v) => setFilterHidden(v as 'all' | 'visible' | 'hidden')}>
+               <TabsList className="w-full justify-start rounded-none h-10 bg-transparent border-b">
+                 <TabsTrigger value="visible" className="text-xs">Ditampilkan ({transactions.filter(t => !t.isHidden).length})</TabsTrigger>
+                 <TabsTrigger value="hidden" className="text-xs">Tersembunyi ({hiddenCount})</TabsTrigger>
+                 <TabsTrigger value="all" className="text-xs">Semua ({transactions.length})</TabsTrigger>
+               </TabsList>
+             </Tabs>
+           </div>
+           <div className="overflow-x-auto">
+             <Table>
+               <TableHeader>
+                 <TableRow className="bg-muted/50">
+                   <TableHead className="w-8 text-xs">#</TableHead>
+                   <TableHead className="text-xs">No. Bukti</TableHead>
+                   <TableHead className="text-xs">Tanggal</TableHead>
+                   <TableHead className="text-xs">Supplier</TableHead>
+                   <TableHead className="text-xs text-right">Jumlah Dibayar</TableHead>
+                   <TableHead className="text-xs">Catatan</TableHead>
+                   <TableHead className="w-16" />
+                 </TableRow>
+               </TableHeader>
+               <TableBody>
+                 {isLoading ? (
+                   Array.from({ length: 5 }).map((_, i) => <TableRow key={i}><TableCell colSpan={7}><Skeleton className="h-8 w-full" /></TableCell></TableRow>)
+                 ) : filtered.length === 0 ? (
+                   <TableRow><TableCell colSpan={7} className="text-center py-10 text-muted-foreground">Tidak ada data pembayaran utang</TableCell></TableRow>
+                 ) : filtered.map(t => (
+                   <TableRow key={t.id} className={`text-sm hover:bg-muted/30 ${t.isHidden ? 'opacity-60' : ''}`}>
+                     <TableCell className="text-xs text-muted-foreground">
+                       {t.isHidden ? <Badge variant="outline" className="text-xs">🔒</Badge> : ''}
+                     </TableCell>
+                     <TableCell className="font-mono text-xs text-primary font-semibold">{t.invoiceNumber}</TableCell>
+                     <TableCell className="text-xs">{t.date}</TableCell>
+                     <TableCell className="font-medium max-w-[160px] truncate">{t.supplier || '-'}</TableCell>
+                     <TableCell className="text-right font-bold tabular-nums text-primary">{formatCurrency(t.paid)}</TableCell>
+                     <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">{t.notes || '-'}</TableCell>
+                     <TableCell>
+                       <div className="flex gap-0.5">
+                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setSelectedTrx(t)}><Eye className="h-3.5 w-3.5" /></Button>
+                         <Button 
+                           variant="ghost" 
+                           size="icon" 
+                           className="h-7 w-7 text-muted-foreground hover:text-foreground" 
+                           title={t.isHidden ? 'Tampilkan' : 'Sembunyikan'}
+                           onClick={() => handleToggleHide(t.id)}
+                           disabled={togglingId === t.id}
+                         >
+                           {t.isHidden ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                         </Button>
+                       </div>
+                     </TableCell>
+                   </TableRow>
+                 ))}
+               </TableBody>
+             </Table>
+           </div>
+           {meta && meta.last_page > 1 && (
+             <div className="flex items-center justify-between px-4 py-3 border-t text-xs text-muted-foreground">
+               <span>Halaman {meta.current_page} dari {meta.last_page} ({meta.total} data)</span>
+               <div className="flex gap-1">
+                 <Button variant="outline" size="icon" className="h-7 w-7" disabled={page <= 1} onClick={() => setPage(p => p - 1)}><ChevronLeft className="h-3.5 w-3.5" /></Button>
+                 <Button variant="outline" size="icon" className="h-7 w-7" disabled={page >= meta.last_page} onClick={() => setPage(p => p + 1)}><ChevronRight className="h-3.5 w-3.5" /></Button>
+               </div>
+             </div>
+           )}
+         </CardContent>
+       </Card>
 
       <Dialog open={!!selectedTrx} onOpenChange={() => setSelectedTrx(null)}>
         <DialogContent>

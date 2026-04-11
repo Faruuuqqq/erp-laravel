@@ -1,16 +1,17 @@
-﻿import { useState, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Search, History, Eye, FileDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, History, Eye, EyeOff, FileDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { useTransactions } from '@/hooks/api/useTransactions';
+import { useTransactions, useToggleHideTransaction } from '@/hooks/api/useTransactions';
 import { useSuppliers } from '@/hooks/api/useSuppliers';
 import { formatCurrency } from '@/lib/utils';
 import type { Transaction } from '@/types';
@@ -30,10 +31,14 @@ const HistoriPembelian = () => {
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterSupplier, setFilterSupplier] = useState('all');
+  const [filterHidden, setFilterHidden] = useState<'all' | 'visible' | 'hidden'>('visible');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [page, setPage] = useState(1);
   const [selectedTrx, setSelectedTrx] = useState<Transaction | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+
+  const toggleHideMutation = useToggleHideTransaction();
 
   const { data, isLoading } = useTransactions({
     type: 'pembelian',
@@ -53,7 +58,27 @@ const HistoriPembelian = () => {
     ? transactions
     : transactions.filter(t => t.supplierId === filterSupplier);
 
-  const totalNilai = filtered.reduce((s, t) => s + t.total, 0);
+  const filteredByHidden = filtered
+    .filter(t => {
+      if (filterHidden === 'visible') return !t.isHidden;
+      if (filterHidden === 'hidden') return t.isHidden;
+      return true;
+    });
+
+  const hiddenCount = filtered.filter(t => t.isHidden).length;
+  const totalNilai = filteredByHidden.reduce((s, t) => s + t.total, 0);
+
+  const handleToggleHide = useCallback(async (id: string) => {
+    setTogglingId(id);
+    try {
+      await toggleHideMutation.mutateAsync(id);
+      toast({ title: 'Berhasil', description: 'Status transaksi diperbarui' });
+    } catch {
+      toast({ title: 'Error', description: 'Gagal mengubah status transaksi', variant: 'destructive' });
+    } finally {
+      setTogglingId(null);
+    }
+  }, [toggleHideMutation, toast]);
 
   const handleExport = useCallback(() => toast({ title: 'Mengekspor PDF...' }), [toast]);
 
@@ -61,17 +86,17 @@ const HistoriPembelian = () => {
     <MainLayout title="Histori Pembelian" subtitle="Riwayat pembelian barang dari supplier">
       {/* Summary */}
       <div className="mb-4 grid gap-3 md:grid-cols-3">
-        {[
-          { label: 'Total Transaksi', value: String(meta?.total ?? '-') },
-          { label: 'Nilai Ditampilkan', value: formatCurrency(totalNilai), color: 'text-primary' },
-          { label: 'Kredit / Belum Lunas', value: String(filtered.filter(t => (t.remaining ?? 0) > 0).length), color: 'text-warning' },
-        ].map(s => (
-          <Card key={s.label}><CardContent className="p-3">
-            <p className="text-xs text-muted-foreground">{s.label}</p>
-            <p className={`text-lg font-bold tabular-nums ${s.color ?? ''}`}>{s.value}</p>
-          </CardContent></Card>
-        ))}
-      </div>
+         {[
+           { label: 'Total Transaksi', value: String(meta?.total ?? '-') },
+           { label: 'Nilai Ditampilkan', value: formatCurrency(totalNilai), color: 'text-primary' },
+           { label: 'Kredit / Belum Lunas', value: String(filteredByHidden.filter(t => (t.remaining ?? 0) > 0).length), color: 'text-warning' },
+         ].map(s => (
+           <Card key={s.label}><CardContent className="p-3">
+             <p className="text-xs text-muted-foreground">{s.label}</p>
+             <p className={`text-lg font-bold tabular-nums ${s.color ?? ''}`}>{s.value}</p>
+           </CardContent></Card>
+         ))}
+       </div>
 
       {/* Filters */}
       <div className="mb-4 flex flex-col sm:flex-row gap-2 items-start sm:items-center justify-between">
@@ -96,59 +121,82 @@ const HistoriPembelian = () => {
       </div>
 
       <Card>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/50">
-                  <TableHead className="text-xs">No. Faktur</TableHead>
-                  <TableHead className="text-xs">Tanggal</TableHead>
-                  <TableHead className="text-xs">Supplier</TableHead>
-                  <TableHead className="text-xs text-right">Total</TableHead>
-                  <TableHead className="text-xs text-right">Terbayar</TableHead>
-                  <TableHead className="text-xs text-right">Sisa</TableHead>
-                  <TableHead className="text-xs">Status</TableHead>
-                  <TableHead className="w-10" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading ? (
-                  Array.from({ length: 5 }).map((_, i) => (
-                    <TableRow key={i}><TableCell colSpan={8}><Skeleton className="h-8 w-full" /></TableCell></TableRow>
-                  ))
-                ) : filtered.length === 0 ? (
-                  <TableRow><TableCell colSpan={8} className="text-center py-10 text-muted-foreground">Tidak ada data</TableCell></TableRow>
-                ) : filtered.map(t => (
-                  <TableRow key={t.id} className="text-sm hover:bg-muted/30">
-                    <TableCell className="font-mono text-xs text-primary font-semibold">{t.invoiceNumber}</TableCell>
-                    <TableCell className="text-xs">{t.date}</TableCell>
-                    <TableCell className="font-medium max-w-[160px] truncate">{t.supplier || '-'}</TableCell>
-                    <TableCell className="text-right font-semibold tabular-nums">{formatCurrency(t.total)}</TableCell>
-                    <TableCell className="text-right tabular-nums text-xs text-success">{formatCurrency(t.paid)}</TableCell>
-                    <TableCell className="text-right tabular-nums text-xs text-destructive">{formatCurrency(t.remaining ?? 0)}</TableCell>
-                    <TableCell><Badge variant={paymentStatusVariant(t)} className="text-xs">{paymentStatusLabel(t)}</Badge></TableCell>
-                    <TableCell>
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setSelectedTrx(t)}>
-                        <Eye className="h-3.5 w-3.5" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-          {/* Pagination */}
-          {meta && meta.last_page > 1 && (
-            <div className="flex items-center justify-between px-4 py-3 border-t text-xs text-muted-foreground">
-              <span>Halaman {meta.current_page} dari {meta.last_page} ({meta.total} data)</span>
-              <div className="flex gap-1">
-                <Button variant="outline" size="icon" className="h-7 w-7" disabled={page <= 1} onClick={() => setPage(p => p - 1)}><ChevronLeft className="h-3.5 w-3.5" /></Button>
-                <Button variant="outline" size="icon" className="h-7 w-7" disabled={page >= meta.last_page} onClick={() => setPage(p => p + 1)}><ChevronRight className="h-3.5 w-3.5" /></Button>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+         <CardContent className="p-0">
+           <div className="border-b">
+             <Tabs value={filterHidden} onValueChange={(v) => setFilterHidden(v as 'all' | 'visible' | 'hidden')}>
+               <TabsList className="w-full justify-start rounded-none h-10 bg-transparent border-b">
+                 <TabsTrigger value="visible" className="text-xs">Ditampilkan ({filtered.filter(t => !t.isHidden).length})</TabsTrigger>
+                 <TabsTrigger value="hidden" className="text-xs">Tersembunyi ({hiddenCount})</TabsTrigger>
+                 <TabsTrigger value="all" className="text-xs">Semua ({filtered.length})</TabsTrigger>
+               </TabsList>
+             </Tabs>
+           </div>
+           <div className="overflow-x-auto">
+             <Table>
+               <TableHeader>
+                 <TableRow className="bg-muted/50">
+                   <TableHead className="w-8 text-xs">#</TableHead>
+                   <TableHead className="text-xs">No. Faktur</TableHead>
+                   <TableHead className="text-xs">Tanggal</TableHead>
+                   <TableHead className="text-xs">Supplier</TableHead>
+                   <TableHead className="text-xs text-right">Total</TableHead>
+                   <TableHead className="text-xs text-right">Terbayar</TableHead>
+                   <TableHead className="text-xs text-right">Sisa</TableHead>
+                   <TableHead className="text-xs">Status</TableHead>
+                   <TableHead className="w-16" />
+                 </TableRow>
+               </TableHeader>
+               <TableBody>
+                 {isLoading ? (
+                   Array.from({ length: 5 }).map((_, i) => (
+                     <TableRow key={i}><TableCell colSpan={9}><Skeleton className="h-8 w-full" /></TableCell></TableRow>
+                   ))
+                 ) : filteredByHidden.length === 0 ? (
+                   <TableRow><TableCell colSpan={9} className="text-center py-10 text-muted-foreground">Tidak ada data</TableCell></TableRow>
+                 ) : filteredByHidden.map(t => (
+                   <TableRow key={t.id} className={`text-sm hover:bg-muted/30 ${t.isHidden ? 'opacity-60' : ''}`}>
+                     <TableCell className="text-xs text-muted-foreground">
+                       {t.isHidden ? <Badge variant="outline" className="text-xs">🔒</Badge> : ''}
+                     </TableCell>
+                     <TableCell className="font-mono text-xs text-primary font-semibold">{t.invoiceNumber}</TableCell>
+                     <TableCell className="text-xs">{t.date}</TableCell>
+                     <TableCell className="font-medium max-w-[160px] truncate">{t.supplier || '-'}</TableCell>
+                     <TableCell className="text-right font-semibold tabular-nums">{formatCurrency(t.total)}</TableCell>
+                     <TableCell className="text-right tabular-nums text-xs text-success">{formatCurrency(t.paid)}</TableCell>
+                     <TableCell className="text-right tabular-nums text-xs text-destructive">{formatCurrency(t.remaining ?? 0)}</TableCell>
+                     <TableCell><Badge variant={paymentStatusVariant(t)} className="text-xs">{paymentStatusLabel(t)}</Badge></TableCell>
+                     <TableCell>
+                       <div className="flex gap-0.5">
+                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setSelectedTrx(t)}><Eye className="h-3.5 w-3.5" /></Button>
+                         <Button 
+                           variant="ghost" 
+                           size="icon" 
+                           className="h-7 w-7 text-muted-foreground hover:text-foreground" 
+                           title={t.isHidden ? 'Tampilkan' : 'Sembunyikan'}
+                           onClick={() => handleToggleHide(t.id)}
+                           disabled={togglingId === t.id}
+                         >
+                           {t.isHidden ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                         </Button>
+                       </div>
+                     </TableCell>
+                   </TableRow>
+                 ))}
+               </TableBody>
+             </Table>
+           </div>
+           {/* Pagination */}
+           {meta && meta.last_page > 1 && (
+             <div className="flex items-center justify-between px-4 py-3 border-t text-xs text-muted-foreground">
+               <span>Halaman {meta.current_page} dari {meta.last_page} ({meta.total} data)</span>
+               <div className="flex gap-1">
+                 <Button variant="outline" size="icon" className="h-7 w-7" disabled={page <= 1} onClick={() => setPage(p => p - 1)}><ChevronLeft className="h-3.5 w-3.5" /></Button>
+                 <Button variant="outline" size="icon" className="h-7 w-7" disabled={page >= meta.last_page} onClick={() => setPage(p => p + 1)}><ChevronRight className="h-3.5 w-3.5" /></Button>
+               </div>
+             </div>
+           )}
+         </CardContent>
+       </Card>
 
       {/* Detail Dialog */}
       <Dialog open={!!selectedTrx} onOpenChange={() => setSelectedTrx(null)}>
