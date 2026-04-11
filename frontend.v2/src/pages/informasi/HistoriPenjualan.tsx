@@ -4,11 +4,13 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Search, History, Eye, FileDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, History, Eye, EyeOff, FileDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useTransactions } from '@/hooks/api/useTransactions';
 import { useCustomers } from '@/hooks/api/useCustomers';
@@ -24,6 +26,16 @@ const HistoriPenjualan = () => {
   const [dateTo, setDateTo] = useState('');
   const [page, setPage] = useState(1);
   const [selectedTrx, setSelectedTrx] = useState<Transaction | null>(null);
+  const [showLunasOnly, setShowLunasOnly] = useState(false);
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
+
+  const toggleHide = useCallback((id: string) => {
+    setHiddenIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
 
   const typeParam = filterType === 'kredit' ? 'penjualan_kredit' : filterType === 'tunai' ? 'penjualan_tunai' : undefined;
 
@@ -52,14 +64,26 @@ const HistoriPenjualan = () => {
   const allTrx = [...tunai, ...kredit].sort((a, b) => b.date.localeCompare(a.date));
   const isLoading = l1 || l2;
 
-  const filtered = filterCustomer === 'all'
-    ? allTrx
-    : allTrx.filter(t => t.customerId === filterCustomer);
+  const filtered = allTrx
+    .filter(t => filterCustomer === 'all' || t.customerId === filterCustomer)
+    .filter(t => !showLunasOnly || (t.remaining ?? 0) === 0)
+    .filter(t => !hiddenIds.has(t.id));
 
   const totalNilai = filtered.reduce((s, t) => s + t.total, 0);
   const totalKredit = allTrx.filter(t => (t.remaining ?? 0) > 0).length;
 
-  const handleExport = useCallback(() => toast({ title: 'Mengekspor PDF...' }), [toast]);
+  const handleExport = useCallback(() => {
+    const rows = filtered.map(t =>
+      `${t.invoiceNumber}\t${t.date}\t${t.customer || 'Walk-in'}\t${t.type === 'penjualan_kredit' ? 'Kredit' : 'Tunai'}\t${formatCurrency(t.total)}\t${formatCurrency(t.paid)}\t${formatCurrency(t.remaining ?? 0)}`
+    );
+    const content = `HISTORI PENJUALAN\nDari: ${dateFrom || '-'} s/d ${dateTo || '-'}\n${'='.repeat(80)}\nFaktur\tTanggal\tCustomer\tTipe\tTotal\tTerbayar\tSisa\n${rows.join('\n')}\n${'='.repeat(80)}\nGRAND TOTAL: ${formatCurrency(totalNilai)}`;
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `histori-penjualan-${new Date().toISOString().slice(0,10)}.txt`; a.click();
+    URL.revokeObjectURL(url);
+    toast({ title: 'Export berhasil', description: `${filtered.length} transaksi diekspor` });
+  }, [filtered, dateFrom, dateTo, totalNilai, toast]);
 
   return (
     <MainLayout title="Histori Penjualan" subtitle="Riwayat transaksi penjualan tunai dan kredit">
@@ -100,7 +124,18 @@ const HistoriPenjualan = () => {
             </SelectContent>
           </Select>
         </div>
-        <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={handleExport}><FileDown className="h-3.5 w-3.5" />Export PDF</Button>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            <Switch id="show-lunas" checked={showLunasOnly} onCheckedChange={setShowLunasOnly} />
+            <Label htmlFor="show-lunas" className="text-xs text-muted-foreground cursor-pointer">Lunas saja</Label>
+          </div>
+          {hiddenIds.size > 0 && (
+            <Button variant="ghost" size="sm" className="h-8 text-xs gap-1" onClick={() => setHiddenIds(new Set())}>
+              <EyeOff className="h-3.5 w-3.5" />{hiddenIds.size} tersembunyi
+            </Button>
+          )}
+          <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={handleExport}><FileDown className="h-3.5 w-3.5" />Export</Button>
+        </div>
       </div>
 
       <Card>
@@ -116,32 +151,44 @@ const HistoriPenjualan = () => {
                   <TableHead className="text-xs text-right">Total</TableHead>
                   <TableHead className="text-xs text-right">Terbayar</TableHead>
                   <TableHead className="text-xs text-right">Sisa</TableHead>
-                  <TableHead className="w-10" />
+                  <TableHead className="text-xs">Status</TableHead>
+                  <TableHead className="w-16" />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  Array.from({ length: 5 }).map((_, i) => <TableRow key={i}><TableCell colSpan={8}><Skeleton className="h-8 w-full" /></TableCell></TableRow>)
+                  Array.from({ length: 5 }).map((_, i) => <TableRow key={i}><TableCell colSpan={9}><Skeleton className="h-8 w-full" /></TableCell></TableRow>)
                 ) : filtered.length === 0 ? (
-                  <TableRow><TableCell colSpan={8} className="text-center py-10 text-muted-foreground">Tidak ada data</TableCell></TableRow>
-                ) : filtered.map(t => (
-                  <TableRow key={t.id} className="text-sm hover:bg-muted/30">
-                    <TableCell className="font-mono text-xs text-primary font-semibold">{t.invoiceNumber}</TableCell>
-                    <TableCell className="text-xs">{t.date}</TableCell>
-                    <TableCell className="max-w-[140px] truncate">{t.customer || 'Walk-in'}</TableCell>
-                    <TableCell>
-                      <Badge variant={t.type === 'penjualan_kredit' ? 'outline' : 'secondary'} className="text-xs">
-                        {t.type === 'penjualan_kredit' ? 'Kredit' : 'Tunai'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right font-semibold tabular-nums">{formatCurrency(t.total)}</TableCell>
-                    <TableCell className="text-right tabular-nums text-xs text-success">{formatCurrency(t.paid)}</TableCell>
-                    <TableCell className="text-right tabular-nums text-xs text-warning">{formatCurrency(t.remaining ?? 0)}</TableCell>
-                    <TableCell>
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setSelectedTrx(t)}><Eye className="h-3.5 w-3.5" /></Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                  <TableRow><TableCell colSpan={9} className="text-center py-10 text-muted-foreground">Tidak ada data</TableCell></TableRow>
+                ) : filtered.map(t => {
+                  const isLunas = (t.remaining ?? 0) === 0;
+                  return (
+                    <TableRow key={t.id} className="text-sm hover:bg-muted/30">
+                      <TableCell className="font-mono text-xs text-primary font-semibold">{t.invoiceNumber}</TableCell>
+                      <TableCell className="text-xs">{t.date}</TableCell>
+                      <TableCell className="max-w-[140px] truncate">{t.customer || 'Walk-in'}</TableCell>
+                      <TableCell>
+                        <Badge variant={t.type === 'penjualan_kredit' ? 'outline' : 'secondary'} className="text-xs">
+                          {t.type === 'penjualan_kredit' ? 'Kredit' : 'Tunai'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right font-semibold tabular-nums">{formatCurrency(t.total)}</TableCell>
+                      <TableCell className="text-right tabular-nums text-xs text-success">{formatCurrency(t.paid)}</TableCell>
+                      <TableCell className="text-right tabular-nums text-xs text-warning">{formatCurrency(t.remaining ?? 0)}</TableCell>
+                      <TableCell>
+                        {isLunas
+                          ? <Badge variant="default" className="text-xs">Lunas</Badge>
+                          : <Badge variant="destructive" className="text-xs">Piutang</Badge>}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-0.5">
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setSelectedTrx(t)}><Eye className="h-3.5 w-3.5" /></Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" title="Sembunyikan baris ini" onClick={() => toggleHide(t.id)}><EyeOff className="h-3.5 w-3.5" /></Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>

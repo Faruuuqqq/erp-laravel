@@ -64,7 +64,7 @@ export const FakturPenjualan = ({ transaction }: FakturPenjualanProps) => {
           )}
           <tr>
             <td colSpan={5} className="text-right font-bold py-2 border-none text-xl">TOTAL AKHIR</td>
-            <td className="text-right font-bold py-2 border-b-2 text-xl">{formatRupiah(Number(transaction.total))}</td>
+            <td className="text-right font-bold py-2 border-b-2 text-xl">{formatCurrency(Number(transaction.total))}</td>
           </tr>
           <tr>
             <td colSpan={5} className="text-right font-bold py-2 border-none">Bayar</td>

@@ -18,12 +18,17 @@ export interface LoginResponse {
 }
 
 export interface PaginationMeta {
+  // snake_case (Laravel default)
   current_page: number;
   from: number;
   last_page: number;
   per_page: number;
   to: number;
   total: number;
+  // camelCase aliases (used by frontend pages)
+  currentPage?: number;
+  lastPage?: number;
+  perPage?: number;
 }
 
 export interface PaginatedResponse<T> {
