@@ -1,4 +1,4 @@
-﻿import { useState, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,12 +7,13 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Search, History, Eye, EyeOff, FileDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { useTransactions } from '@/hooks/api/useTransactions';
+import { useTransactions, useToggleHideTransaction } from '@/hooks/api/useTransactions';
 import { useCustomers } from '@/hooks/api/useCustomers';
 import { formatCurrency } from '@/lib/utils';
 import type { Transaction } from '@/types';
@@ -22,20 +23,15 @@ const HistoriPenjualan = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCustomer, setFilterCustomer] = useState('all');
   const [filterType, setFilterType] = useState('all');
+  const [filterHidden, setFilterHidden] = useState<'all' | 'visible' | 'hidden'>('visible');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [page, setPage] = useState(1);
   const [selectedTrx, setSelectedTrx] = useState<Transaction | null>(null);
   const [showLunasOnly, setShowLunasOnly] = useState(false);
-  const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
-  const toggleHide = useCallback((id: string) => {
-    setHiddenIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  }, []);
+  const toggleHideMutation = useToggleHideTransaction();
 
   const typeParam = filterType === 'kredit' ? 'penjualan_kredit' : filterType === 'tunai' ? 'penjualan_tunai' : undefined;
 
@@ -67,10 +63,27 @@ const HistoriPenjualan = () => {
   const filtered = allTrx
     .filter(t => filterCustomer === 'all' || t.customerId === filterCustomer)
     .filter(t => !showLunasOnly || (t.remaining ?? 0) === 0)
-    .filter(t => !hiddenIds.has(t.id));
+    .filter(t => {
+      if (filterHidden === 'visible') return !t.isHidden;
+      if (filterHidden === 'hidden') return t.isHidden;
+      return true;
+    });
 
+  const hiddenCount = allTrx.filter(t => t.isHidden).length;
   const totalNilai = filtered.reduce((s, t) => s + t.total, 0);
   const totalKredit = allTrx.filter(t => (t.remaining ?? 0) > 0).length;
+
+  const handleToggleHide = useCallback(async (id: string) => {
+    setTogglingId(id);
+    try {
+      await toggleHideMutation.mutateAsync(id);
+      toast({ title: 'Berhasil', description: 'Status transaksi diperbarui' });
+    } catch {
+      toast({ title: 'Error', description: 'Gagal mengubah status transaksi', variant: 'destructive' });
+    } finally {
+      setTogglingId(null);
+    }
+  }, [toggleHideMutation, toast]);
 
   const handleExport = useCallback(() => {
     const rows = filtered.map(t =>
@@ -129,21 +142,26 @@ const HistoriPenjualan = () => {
             <Switch id="show-lunas" checked={showLunasOnly} onCheckedChange={setShowLunasOnly} />
             <Label htmlFor="show-lunas" className="text-xs text-muted-foreground cursor-pointer">Lunas saja</Label>
           </div>
-          {hiddenIds.size > 0 && (
-            <Button variant="ghost" size="sm" className="h-8 text-xs gap-1" onClick={() => setHiddenIds(new Set())}>
-              <EyeOff className="h-3.5 w-3.5" />{hiddenIds.size} tersembunyi
-            </Button>
-          )}
           <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={handleExport}><FileDown className="h-3.5 w-3.5" />Export</Button>
         </div>
       </div>
 
       <Card>
         <CardContent className="p-0">
+          <div className="border-b">
+            <Tabs value={filterHidden} onValueChange={(v) => setFilterHidden(v as 'all' | 'visible' | 'hidden')}>
+              <TabsList className="w-full justify-start rounded-none h-10 bg-transparent border-b">
+                <TabsTrigger value="visible" className="text-xs">Ditampilkan ({allTrx.filter(t => !t.isHidden).length})</TabsTrigger>
+                <TabsTrigger value="hidden" className="text-xs">Tersembunyi ({hiddenCount})</TabsTrigger>
+                <TabsTrigger value="all" className="text-xs">Semua ({allTrx.length})</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/50">
+                  <TableHead className="w-8 text-xs">#</TableHead>
                   <TableHead className="text-xs">No. Faktur</TableHead>
                   <TableHead className="text-xs">Tanggal</TableHead>
                   <TableHead className="text-xs">Customer</TableHead>
@@ -157,13 +175,16 @@ const HistoriPenjualan = () => {
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  Array.from({ length: 5 }).map((_, i) => <TableRow key={i}><TableCell colSpan={9}><Skeleton className="h-8 w-full" /></TableCell></TableRow>)
+                  Array.from({ length: 5 }).map((_, i) => <TableRow key={i}><TableCell colSpan={10}><Skeleton className="h-8 w-full" /></TableCell></TableRow>)
                 ) : filtered.length === 0 ? (
-                  <TableRow><TableCell colSpan={9} className="text-center py-10 text-muted-foreground">Tidak ada data</TableCell></TableRow>
-                ) : filtered.map(t => {
+                  <TableRow><TableCell colSpan={10} className="text-center py-10 text-muted-foreground">Tidak ada data</TableCell></TableRow>
+                ) : filtered.map((t, idx) => {
                   const isLunas = (t.remaining ?? 0) === 0;
                   return (
-                    <TableRow key={t.id} className="text-sm hover:bg-muted/30">
+                    <TableRow key={t.id} className={`text-sm hover:bg-muted/30 ${t.isHidden ? 'opacity-60' : ''}`}>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {t.isHidden ? <Badge variant="outline" className="text-xs">🔒</Badge> : ''}
+                      </TableCell>
                       <TableCell className="font-mono text-xs text-primary font-semibold">{t.invoiceNumber}</TableCell>
                       <TableCell className="text-xs">{t.date}</TableCell>
                       <TableCell className="max-w-[140px] truncate">{t.customer || 'Walk-in'}</TableCell>
@@ -183,7 +204,16 @@ const HistoriPenjualan = () => {
                       <TableCell>
                         <div className="flex gap-0.5">
                           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setSelectedTrx(t)}><Eye className="h-3.5 w-3.5" /></Button>
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" title="Sembunyikan baris ini" onClick={() => toggleHide(t.id)}><EyeOff className="h-3.5 w-3.5" /></Button>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-7 w-7 text-muted-foreground hover:text-foreground" 
+                            title={t.isHidden ? 'Tampilkan' : 'Sembunyikan'}
+                            onClick={() => handleToggleHide(t.id)}
+                            disabled={togglingId === t.id}
+                          >
+                            {t.isHidden ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -198,7 +228,7 @@ const HistoriPenjualan = () => {
       <Dialog open={!!selectedTrx} onOpenChange={() => setSelectedTrx(null)}>
         <DialogContent className="max-w-xl">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><History className="h-4 w-4" />Detail Penjualan â€” {selectedTrx?.invoiceNumber}</DialogTitle>
+            <DialogTitle className="flex items-center gap-2"><History className="h-4 w-4" />Detail Penjualan – {selectedTrx?.invoiceNumber}</DialogTitle>
           </DialogHeader>
           {selectedTrx && (
             <div className="space-y-4">
