@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import type { Customer, PaginatedResponse } from '@/types';
 
@@ -42,20 +42,26 @@ export const useCustomer = (id: string) => {
 };
 
 export const useCreateCustomer = () => {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (data: CreateCustomerRequest) => api.post('/customers', data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['customers'] }),
   });
 };
 
 export const useUpdateCustomer = () => {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: UpdateCustomerRequest }) =>
       api.put(`/customers/${id}`, data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['customers'] }),
   });
 };
 
 export const useDeleteCustomer = () => {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.delete(`/customers/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['customers'] }),
   });
 };

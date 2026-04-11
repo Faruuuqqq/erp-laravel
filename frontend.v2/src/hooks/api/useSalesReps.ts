@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import type { SalesRep, PaginatedResponse } from '@/types';
 
@@ -18,20 +18,26 @@ export const useSalesRep = (id: string) => {
 };
 
 export const useCreateSalesRep = () => {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (data: any) => api.post('/sales', data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['sales'] }),
   });
 };
 
 export const useUpdateSalesRep = () => {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: any }) =>
       api.put(`/sales/${id}`, data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['sales'] }),
   });
 };
 
 export const useDeleteSalesRep = () => {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.delete(`/sales/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['sales'] }),
   });
 };
