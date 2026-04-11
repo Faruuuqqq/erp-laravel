@@ -82,15 +82,15 @@ const CustomerPage = () => {
     }
   };
 
-  const handleExport = () => {
-    const rows = [['Kode', 'Nama', 'Telepon', 'Email', 'Alamat', 'Total Piutang', 'Limit Kredit'],
-    ...customers.map(c => [`CUS-${c.id}`, c.name, c.phone, c.email || '', c.address || '', formatRupiah(c.balance), formatRupiah(c.creditLimit || 0)])];
-    const csv = rows.map(r => r.join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = 'customer.csv'; a.click();
-    URL.revokeObjectURL(url);
-  };
+   const handleExport = () => {
+     const rows = [['Kode', 'Nama', 'Telepon', 'Email', 'Alamat', 'Total Piutang', 'Limit Kredit'],
+     ...customers.map(c => [`CUS-${c.id}`, c.name, c.phone, c.email || '', c.address || '', formatCurrency(c.balance), formatCurrency(c.creditLimit || 0)])];
+     const csv = rows.map(r => r.join(',')).join('\n');
+     const blob = new Blob([csv], { type: 'text/csv' });
+     const url = URL.createObjectURL(blob);
+     const a = document.createElement('a'); a.href = url; a.download = 'customer.csv'; a.click();
+     URL.revokeObjectURL(url);
+   };
 
   const FormDialog = ({ open, onOpenChange, title }: { open: boolean; onOpenChange: (v: boolean) => void; title: string }) => (
     <Dialog open={open} onOpenChange={v => { onOpenChange(v); if (!v) setEditItem(null); }}>

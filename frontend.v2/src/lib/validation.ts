@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { formatRupiah } from '../data/mockData';
+import { formatCurrency } from './utils';
 
 // ------------------------------
 // Global Validation Schemas
@@ -106,7 +106,7 @@ export const formatCurrencyInput = (value: string): string => {
   const numericValue = value.replace(/[^0-9]/g, '');
   if (!numericValue) return '';
   // Format as IDR currency
-  return formatRupiah(parseInt(numericValue));
+  return formatCurrency(parseInt(numericValue));
 };
 
 export const parseCurrencyInput = (value: string): number => {

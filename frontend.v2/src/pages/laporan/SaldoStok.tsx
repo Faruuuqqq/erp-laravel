@@ -16,9 +16,6 @@ import { SaldoStokPrint } from '@/components/print/SaldoStokPrint';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
 
-const formatRupiah = (value: number) =>
-  new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(value);
-
 interface StockItem {
   id: string;
   code: string;
