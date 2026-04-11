@@ -15,7 +15,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { usePrint } from '@/contexts/PrintContext';
 import { useCustomers } from '@/hooks/api/useCustomers';
 import { useTransactions } from '@/hooks/api/useTransactions';
+import { usePdfExport } from '@/hooks/usePdfExport';
 import { KontraBonPrint } from '@/components/print/KontraBonPrint';
+import { PdfHeader } from '@/components/PdfHeader';
 import { formatCurrency } from '@/lib/utils';
 import type { Transaction } from '@/types';
 
@@ -24,8 +26,10 @@ const KontraBon = () => {
   const { canPrint } = usePermissions();
   const { user } = useAuth();
   const { printDocument } = usePrint();
+  const { exportToPdf } = usePdfExport();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCustomer, setFilterCustomer] = useState('all');
+  const [isExporting, setIsExporting] = useState(false);
 
   const { data: customersData } = useCustomers({ perPage: 200 });
   // Load all outstanding penjualan_kredit (remaining > 0)
@@ -98,18 +102,83 @@ const KontraBon = () => {
     );
   }, [printDocument, user?.name]);
 
-  // Export CSV
-  const handleExport = useCallback(() => {
-    const rows = allPiutang.map(t =>
-      `${t.customer}\t${t.invoiceNumber}\t${t.date}\t${formatCurrency(t.total)}\t${formatCurrency(t.paid)}\t${formatCurrency(t.remaining ?? 0)}`
-    );
-    const content = `KONTRA BON\nTotal Outstanding: ${formatCurrency(totalNilai)}\n${'='.repeat(70)}\nCustomer\tFaktur\tTanggal\tTotal\tTerbayar\tSisa\n${rows.join('\n')}`;
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob); const a = document.createElement('a');
-    a.href = url; a.download = `kontra-bon-${new Date().toISOString().slice(0,10)}.txt`; a.click();
-    URL.revokeObjectURL(url);
-    toast({ title: 'Export berhasil', description: `${allPiutang.length} bon diekspor` });
-  }, [allPiutang, totalNilai, toast]);
+  // Export PDF
+  const handleExport = useCallback(async () => {
+    setIsExporting(true);
+    try {
+      // Create content for PDF
+      const pdfContent = document.createElement('div');
+      pdfContent.innerHTML = `
+        <div id="pdf-content-export" style="background: white; padding: 24px; font-family: Arial, sans-serif;">
+          <div style="margin-bottom: 24px; padding-bottom: 12px; border-bottom: 2px solid #ccc;">
+            <h1 style="margin: 0 0 6px 0; font-size: 24px; font-weight: bold;">Toko ABC</h1>
+            <p style="margin: 0; font-size: 12px; color: #666;">Jl. Jalan Raya No. 123, Jakarta 12345 | (021) 1234-5678</p>
+          </div>
+          
+          <div style="margin-bottom: 12px;">
+            <h2 style="margin: 0 0 3px 0; font-size: 20px; font-weight: bold;">Kontra Bon</h2>
+            <p style="margin: 0; font-size: 12px; color: #666;">Daftar bon yang belum dilunasi per customer</p>
+          </div>
+          
+          <div style="font-size: 11px; color: #999; margin-bottom: 12px;">
+            <p style="margin: 0;">Tanggal: ${new Date().toLocaleDateString('id-ID')}</p>
+            <p style="margin: 0;">Waktu: ${new Date().toLocaleTimeString('id-ID')}</p>
+          </div>
+          
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 12px;">
+            <thead>
+              <tr style="background-color: #f0f0f0;">
+                <th style="padding: 8px; border: 1px solid #ddd; text-align: left; font-weight: bold;">Customer</th>
+                <th style="padding: 8px; border: 1px solid #ddd; text-align: left; font-weight: bold;">No. Faktur</th>
+                <th style="padding: 8px; border: 1px solid #ddd; text-align: left; font-weight: bold;">Tanggal</th>
+                <th style="padding: 8px; border: 1px solid #ddd; text-align: right; font-weight: bold;">Total</th>
+                <th style="padding: 8px; border: 1px solid #ddd; text-align: right; font-weight: bold;">Terbayar</th>
+                <th style="padding: 8px; border: 1px solid #ddd; text-align: right; font-weight: bold;">Sisa</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${allPiutang.map(t => `
+                <tr>
+                  <td style="padding: 6px; border: 1px solid #ddd;">${t.customer || 'Unknown'}</td>
+                  <td style="padding: 6px; border: 1px solid #ddd; font-family: monospace;">${t.invoiceNumber}</td>
+                  <td style="padding: 6px; border: 1px solid #ddd;">${t.date}</td>
+                  <td style="padding: 6px; border: 1px solid #ddd; text-align: right; font-family: monospace;">${formatCurrency(t.total)}</td>
+                  <td style="padding: 6px; border: 1px solid #ddd; text-align: right; font-family: monospace;">${formatCurrency(t.paid)}</td>
+                  <td style="padding: 6px; border: 1px solid #ddd; text-align: right; font-family: monospace; font-weight: bold;">${formatCurrency(t.remaining ?? 0)}</td>
+                </tr>
+              `).join('')}
+              <tr style="background-color: #f9f9f9; font-weight: bold;">
+                <td colspan="5" style="padding: 8px; border: 1px solid #ddd; text-align: right;">TOTAL OUTSTANDING:</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: right; font-family: monospace;">${formatCurrency(totalNilai)}</td>
+              </tr>
+            </tbody>
+          </table>
+          
+          <div style="font-size: 10px; color: #999; margin-top: 12px;">
+            <p style="margin: 0;">Total Bon: ${allPiutang.length} | Unique Customers: ${uniqueCustomers}</p>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(pdfContent);
+      
+      await exportToPdf('pdf-content-export', {
+        filename: `kontra-bon-${new Date().toISOString().slice(0, 10)}.pdf`,
+        title: 'Kontra Bon',
+        subtitle: `${allPiutang.length} bon aktif - Total: ${formatCurrency(totalNilai)}`,
+        companyName: 'Toko ABC',
+        companyAddress: 'Jl. Jalan Raya No. 123, Jakarta 12345',
+        companyPhone: '(021) 1234-5678',
+      });
+      
+      document.body.removeChild(pdfContent);
+      toast({ title: 'PDF berhasil diunduh', description: `Kontra bon untuk ${allPiutang.length} transaksi` });
+    } catch (error) {
+      toast({ title: 'Error', description: 'Gagal mengekspor PDF', variant: 'destructive' });
+      console.error(error);
+    } finally {
+      setIsExporting(false);
+    }
+  }, [allPiutang, totalNilai, uniqueCustomers, exportToPdf, toast]);
 
   return (
     <MainLayout title="Kontra Bon" subtitle="Bon yang belum dilunasi per customer">
@@ -145,18 +214,18 @@ const KontraBon = () => {
             </SelectContent>
           </Select>
         </div>
-        <div className="flex gap-2">
-          {canPrint('transactions.kontra_bon') && (
-            <>
-              <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={handleExport}>
-                <FileDown className="h-3.5 w-3.5" />Export
-              </Button>
-              <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={handlePrintAll}>
-                <Printer className="h-3.5 w-3.5" />Cetak Semua
-              </Button>
-            </>
-          )}
-        </div>
+         <div className="flex gap-2">
+           {canPrint('transactions.kontra_bon') && (
+             <>
+               <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={handleExport} disabled={isExporting}>
+                 <FileDown className="h-3.5 w-3.5" />{isExporting ? 'Generating...' : 'Export PDF'}
+               </Button>
+               <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={handlePrintAll}>
+                 <Printer className="h-3.5 w-3.5" />Cetak Semua
+               </Button>
+             </>
+           )}
+         </div>
       </div>
 
       <Card>

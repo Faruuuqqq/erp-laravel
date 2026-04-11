@@ -15,11 +15,13 @@ import { Search, History, Eye, EyeOff, FileDown, ChevronLeft, ChevronRight } fro
 import { useToast } from '@/hooks/use-toast';
 import { useTransactions, useToggleHideTransaction } from '@/hooks/api/useTransactions';
 import { useCustomers } from '@/hooks/api/useCustomers';
+import { usePdfExport } from '@/hooks/usePdfExport';
 import { formatCurrency } from '@/lib/utils';
 import type { Transaction } from '@/types';
 
 const HistoriPenjualan = () => {
   const { toast } = useToast();
+  const { exportToPdf } = usePdfExport();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCustomer, setFilterCustomer] = useState('all');
   const [filterType, setFilterType] = useState('all');
@@ -30,6 +32,7 @@ const HistoriPenjualan = () => {
   const [selectedTrx, setSelectedTrx] = useState<Transaction | null>(null);
   const [showLunasOnly, setShowLunasOnly] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
 
   const toggleHideMutation = useToggleHideTransaction();
 
@@ -85,18 +88,71 @@ const HistoriPenjualan = () => {
     }
   }, [toggleHideMutation, toast]);
 
-  const handleExport = useCallback(() => {
-    const rows = filtered.map(t =>
-      `${t.invoiceNumber}\t${t.date}\t${t.customer || 'Walk-in'}\t${t.type === 'penjualan_kredit' ? 'Kredit' : 'Tunai'}\t${formatCurrency(t.total)}\t${formatCurrency(t.paid)}\t${formatCurrency(t.remaining ?? 0)}`
-    );
-    const content = `HISTORI PENJUALAN\nDari: ${dateFrom || '-'} s/d ${dateTo || '-'}\n${'='.repeat(80)}\nFaktur\tTanggal\tCustomer\tTipe\tTotal\tTerbayar\tSisa\n${rows.join('\n')}\n${'='.repeat(80)}\nGRAND TOTAL: ${formatCurrency(totalNilai)}`;
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `histori-penjualan-${new Date().toISOString().slice(0,10)}.txt`; a.click();
-    URL.revokeObjectURL(url);
-    toast({ title: 'Export berhasil', description: `${filtered.length} transaksi diekspor` });
-  }, [filtered, dateFrom, dateTo, totalNilai, toast]);
+  const handleExport = useCallback(async () => {
+    setIsExporting(true);
+    try {
+      const htmlContent = `
+        <div style="background: white; padding: 24px; font-family: Arial, sans-serif; font-size: 12px;">
+          <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+              <tr style="border-bottom: 2px solid #333;">
+                <th style="padding: 8px; text-align: left; font-weight: bold;">No. Faktur</th>
+                <th style="padding: 8px; text-align: left; font-weight: bold;">Tanggal</th>
+                <th style="padding: 8px; text-align: left; font-weight: bold;">Customer</th>
+                <th style="padding: 8px; text-align: left; font-weight: bold;">Tipe</th>
+                <th style="padding: 8px; text-align: right; font-weight: bold;">Total</th>
+                <th style="padding: 8px; text-align: right; font-weight: bold;">Terbayar</th>
+                <th style="padding: 8px; text-align: right; font-weight: bold;">Sisa</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${filtered.map(t => `
+                <tr style="border-bottom: 1px solid #ddd;">
+                  <td style="padding: 8px; text-align: left; font-family: monospace;">${t.invoiceNumber}</td>
+                  <td style="padding: 8px; text-align: left;">${t.date}</td>
+                  <td style="padding: 8px; text-align: left;">${t.customer || 'Walk-in'}</td>
+                  <td style="padding: 8px; text-align: left;">${t.type === 'penjualan_kredit' ? 'Kredit' : 'Tunai'}</td>
+                  <td style="padding: 8px; text-align: right;">${formatCurrency(t.total)}</td>
+                  <td style="padding: 8px; text-align: right;">${formatCurrency(t.paid)}</td>
+                  <td style="padding: 8px; text-align: right;">${formatCurrency(t.remaining ?? 0)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+            <tfoot>
+              <tr style="border-top: 2px solid #333; font-weight: bold;">
+                <td colspan="4" style="padding: 8px; text-align: right;">TOTAL:</td>
+                <td style="padding: 8px; text-align: right;">${formatCurrency(totalNilai)}</td>
+                <td colspan="2"></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      `;
+
+      const tempDiv = document.createElement('div');
+      tempDiv.id = 'pdf-export-content';
+      tempDiv.innerHTML = htmlContent;
+      document.body.appendChild(tempDiv);
+
+      const dateRange = dateFrom || dateTo ? ` (${dateFrom || '-'} s/d ${dateTo || '-'})` : '';
+      await exportToPdf('pdf-export-content', {
+        filename: `histori-penjualan-${new Date().toISOString().slice(0, 10)}.pdf`,
+        title: 'Histori Penjualan',
+        subtitle: `${filtered.length} transaksi${dateRange}`,
+        companyName: 'Toko ABC',
+        companyPhone: '(021) 1234-5678',
+        companyAddress: 'Jl. Jalan Raya No. 123, Jakarta 12345',
+      });
+
+      document.body.removeChild(tempDiv);
+      toast({ title: 'Export berhasil', description: `${filtered.length} transaksi diekspor ke PDF` });
+    } catch (error) {
+      toast({ title: 'Error', description: 'Gagal mengekspor ke PDF', variant: 'destructive' });
+      console.error(error);
+    } finally {
+      setIsExporting(false);
+    }
+  }, [filtered, totalNilai, dateFrom, dateTo, exportToPdf, toast]);
 
   return (
     <MainLayout title="Histori Penjualan" subtitle="Riwayat transaksi penjualan tunai dan kredit">
@@ -142,7 +198,7 @@ const HistoriPenjualan = () => {
             <Switch id="show-lunas" checked={showLunasOnly} onCheckedChange={setShowLunasOnly} />
             <Label htmlFor="show-lunas" className="text-xs text-muted-foreground cursor-pointer">Lunas saja</Label>
           </div>
-          <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={handleExport}><FileDown className="h-3.5 w-3.5" />Export</Button>
+           <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={handleExport} disabled={isExporting}><FileDown className="h-3.5 w-3.5" />{isExporting ? 'Generating...' : 'Export PDF'}</Button>
         </div>
       </div>
 

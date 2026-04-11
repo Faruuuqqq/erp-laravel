@@ -10,6 +10,7 @@ import { usePrint } from '@/contexts/PrintContext';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLaporanHarian } from '@/hooks/api/useInfo';
+import { usePdfExport } from '@/hooks/usePdfExport';
 import { LaporanHarianPrint } from '@/components/print/LaporanHarianPrint';
 import { formatCurrency } from '@/lib/utils';
 import type { Transaction } from '@/types';
@@ -41,9 +42,11 @@ const TIPE_LABELS: Record<string, string> = {
 const LaporanHarian = () => {
   const today = new Date().toISOString().split('T')[0];
   const [selectedDate, setSelectedDate] = useState(today);
+  const [isExporting, setIsExporting] = useState(false);
   const { isOwner, canPrint } = usePermissions();
   const { user } = useAuth();
   const { printDocument } = usePrint();
+  const { exportToPdf } = usePdfExport();
 
   const { data, isLoading } = useLaporanHarian(selectedDate);
   const report = data as { data?: DailyReport } | undefined;
@@ -72,14 +75,97 @@ const LaporanHarian = () => {
     );
   }, [printDocument, selectedDate, user?.name, summary, displayTx]);
 
-  const handleExportPDF = useCallback(() => {
-    const content = `LAPORAN HARIAN - TOKOSYNC ERP\nTanggal: ${selectedDate}\n${'='.repeat(70)}\nTotal Penjualan  : ${formatCurrency(summary.totalPenjualan)}\nTotal Pembelian  : ${formatCurrency(summary.totalPembelian)}\nBiaya Operasional: ${formatCurrency(summary.totalBiaya)}\nKas Bersih       : ${formatCurrency(summary.kasBersih)}\n${'='.repeat(70)}\n${displayTx.map(tx => `${tx.invoiceNumber}\t${tx.type}\t${tx.customer || tx.supplier || '-'}\t${formatCurrency(tx.total)}`).join('\n')}`;
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `laporan-harian-${selectedDate}.txt`; a.click();
-    URL.revokeObjectURL(url);
-  }, [selectedDate, summary, displayTx]);
+  const handleExportPDF = useCallback(async () => {
+    setIsExporting(true);
+    try {
+      const htmlContent = `
+        <div style="background: white; padding: 24px; font-family: Arial, sans-serif; font-size: 12px;">
+          <div style="margin-bottom: 20px; padding-bottom: 12px; border-bottom: 2px solid #333;">
+            <h3 style="margin: 0 0 4px 0; font-size: 14px; font-weight: bold;">Ringkasan Laporan Harian</h3>
+            <p style="margin: 0; font-size: 11px; color: #666;">Tanggal: ${selectedDate}</p>
+          </div>
+
+          <div style="margin-bottom: 20px;">
+            <table style="width: 100%; border-collapse: collapse;">
+              <tbody>
+                <tr style="border-bottom: 1px solid #ddd;">
+                  <td style="padding: 8px; text-align: left; width: 50%;">Total Penjualan Tunai</td>
+                  <td style="padding: 8px; text-align: right; font-weight: bold;">${formatCurrency(summary.penjualanTunai)}</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #ddd;">
+                  <td style="padding: 8px; text-align: left;">Total Penjualan Kredit</td>
+                  <td style="padding: 8px; text-align: right; font-weight: bold;">${formatCurrency(summary.penjualanKredit)}</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #ddd;">
+                  <td style="padding: 8px; text-align: left;">Total Pembelian</td>
+                  <td style="padding: 8px; text-align: right; font-weight: bold;">${formatCurrency(summary.totalPembelian)}</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #ddd;">
+                  <td style="padding: 8px; text-align: left;">Biaya Operasional</td>
+                  <td style="padding: 8px; text-align: right; font-weight: bold;">${formatCurrency(summary.totalBiaya)}</td>
+                </tr>
+                <tr style="border-top: 2px solid #333; background-color: #f5f5f5;">
+                  <td style="padding: 8px; text-align: left; font-weight: bold;">Kas Bersih (Tunai)</td>
+                  <td style="padding: 8px; text-align: right; font-weight: bold; font-size: 13px;">${formatCurrency(summary.kasBersih)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div style="margin-bottom: 20px; padding-bottom: 12px; border-bottom: 2px solid #333;">
+            <h3 style="margin: 0; font-size: 13px; font-weight: bold;">Daftar Transaksi</h3>
+          </div>
+
+          <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+              <tr style="border-bottom: 2px solid #333;">
+                <th style="padding: 8px; text-align: left; font-weight: bold;">No. Faktur</th>
+                <th style="padding: 8px; text-align: left; font-weight: bold;">Tipe</th>
+                <th style="padding: 8px; text-align: left; font-weight: bold;">Customer / Supplier</th>
+                <th style="padding: 8px; text-align: right; font-weight: bold;">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${displayTx.map(tx => `
+                <tr style="border-bottom: 1px solid #ddd;">
+                  <td style="padding: 8px; text-align: left; font-family: monospace; font-size: 11px;">${tx.invoiceNumber}</td>
+                  <td style="padding: 8px; text-align: left; font-size: 11px;">${TIPE_LABELS[tx.type] ?? tx.type}</td>
+                  <td style="padding: 8px; text-align: left;">${tx.customer || tx.supplier || '—'}</td>
+                  <td style="padding: 8px; text-align: right;">${formatCurrency(tx.total)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+            <tfoot>
+              <tr style="border-top: 2px solid #333; font-weight: bold; background-color: #f5f5f5;">
+                <td colspan="3" style="padding: 8px; text-align: right;">TOTAL TRANSAKSI:</td>
+                <td style="padding: 8px; text-align: right;">${formatCurrency(displayTx.reduce((s, t) => s + t.total, 0))}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      `;
+
+      const tempDiv = document.createElement('div');
+      tempDiv.id = 'pdf-export-content';
+      tempDiv.innerHTML = htmlContent;
+      document.body.appendChild(tempDiv);
+
+      await exportToPdf('pdf-export-content', {
+        filename: `laporan-harian-${selectedDate}.pdf`,
+        title: 'Laporan Harian',
+        subtitle: `${selectedDate} - ${displayTx.length} transaksi`,
+        companyName: 'Toko ABC',
+        companyPhone: '(021) 1234-5678',
+        companyAddress: 'Jl. Jalan Raya No. 123, Jakarta 12345',
+      });
+
+      document.body.removeChild(tempDiv);
+    } catch (error) {
+      console.error('PDF export failed:', error);
+    } finally {
+      setIsExporting(false);
+    }
+  }, [selectedDate, summary, displayTx, exportToPdf]);
 
   return (
     <MainLayout title="Laporan Harian" subtitle="Ringkasan transaksi harian">
@@ -101,7 +187,7 @@ const LaporanHarian = () => {
             {canPrint('__owner_only__') && (
               <Button variant="outline" size="sm" onClick={handlePrint}><Printer className="h-4 w-4 mr-1.5" />Cetak</Button>
             )}
-            <Button variant="outline" size="sm" onClick={handleExportPDF}><Download className="h-4 w-4 mr-1.5" />Export</Button>
+            <Button variant="outline" size="sm" onClick={handleExportPDF} disabled={isExporting}><Download className="h-4 w-4 mr-1.5" />{isExporting ? 'Generating...' : 'Export PDF'}</Button>
           </>
         }
       />

@@ -13,6 +13,7 @@ import { Search, History, Eye, EyeOff, FileDown, ChevronLeft, ChevronRight } fro
 import { useToast } from '@/hooks/use-toast';
 import { useTransactions, useToggleHideTransaction } from '@/hooks/api/useTransactions';
 import { useSuppliers } from '@/hooks/api/useSuppliers';
+import { usePdfExport } from '@/hooks/usePdfExport';
 import { formatCurrency } from '@/lib/utils';
 import type { Transaction } from '@/types';
 
@@ -29,6 +30,7 @@ const paymentStatusLabel = (t: Transaction) => {
 
 const HistoriPembelian = () => {
   const { toast } = useToast();
+  const { exportToPdf } = usePdfExport();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterSupplier, setFilterSupplier] = useState('all');
   const [filterHidden, setFilterHidden] = useState<'all' | 'visible' | 'hidden'>('visible');
@@ -37,6 +39,7 @@ const HistoriPembelian = () => {
   const [page, setPage] = useState(1);
   const [selectedTrx, setSelectedTrx] = useState<Transaction | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
 
   const toggleHideMutation = useToggleHideTransaction();
 
@@ -80,7 +83,71 @@ const HistoriPembelian = () => {
     }
   }, [toggleHideMutation, toast]);
 
-  const handleExport = useCallback(() => toast({ title: 'Mengekspor PDF...' }), [toast]);
+  const handleExport = useCallback(async () => {
+    setIsExporting(true);
+    try {
+      const htmlContent = `
+        <div style="background: white; padding: 24px; font-family: Arial, sans-serif; font-size: 12px;">
+          <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+              <tr style="border-bottom: 2px solid #333;">
+                <th style="padding: 8px; text-align: left; font-weight: bold;">No. Faktur</th>
+                <th style="padding: 8px; text-align: left; font-weight: bold;">Tanggal</th>
+                <th style="padding: 8px; text-align: left; font-weight: bold;">Supplier</th>
+                <th style="padding: 8px; text-align: right; font-weight: bold;">Total</th>
+                <th style="padding: 8px; text-align: right; font-weight: bold;">Terbayar</th>
+                <th style="padding: 8px; text-align: right; font-weight: bold;">Sisa</th>
+                <th style="padding: 8px; text-align: left; font-weight: bold;">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${filteredByHidden.map(t => `
+                <tr style="border-bottom: 1px solid #ddd;">
+                  <td style="padding: 8px; text-align: left; font-family: monospace;">${t.invoiceNumber}</td>
+                  <td style="padding: 8px; text-align: left;">${t.date}</td>
+                  <td style="padding: 8px; text-align: left;">${t.supplier || '-'}</td>
+                  <td style="padding: 8px; text-align: right;">${formatCurrency(t.total)}</td>
+                  <td style="padding: 8px; text-align: right;">${formatCurrency(t.paid)}</td>
+                  <td style="padding: 8px; text-align: right;">${formatCurrency(t.remaining ?? 0)}</td>
+                  <td style="padding: 8px; text-align: left;">${paymentStatusLabel(t)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+            <tfoot>
+              <tr style="border-top: 2px solid #333; font-weight: bold;">
+                <td colspan="3" style="padding: 8px; text-align: right;">TOTAL:</td>
+                <td style="padding: 8px; text-align: right;">${formatCurrency(totalNilai)}</td>
+                <td colspan="3"></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      `;
+
+      const tempDiv = document.createElement('div');
+      tempDiv.id = 'pdf-export-content';
+      tempDiv.innerHTML = htmlContent;
+      document.body.appendChild(tempDiv);
+
+      const dateRange = dateFrom || dateTo ? ` (${dateFrom || '-'} s/d ${dateTo || '-'})` : '';
+      await exportToPdf('pdf-export-content', {
+        filename: `histori-pembelian-${new Date().toISOString().slice(0, 10)}.pdf`,
+        title: 'Histori Pembelian',
+        subtitle: `${filteredByHidden.length} transaksi${dateRange}`,
+        companyName: 'Toko ABC',
+        companyPhone: '(021) 1234-5678',
+        companyAddress: 'Jl. Jalan Raya No. 123, Jakarta 12345',
+      });
+
+      document.body.removeChild(tempDiv);
+      toast({ title: 'Export berhasil', description: `${filteredByHidden.length} transaksi diekspor ke PDF` });
+    } catch (error) {
+      toast({ title: 'Error', description: 'Gagal mengekspor ke PDF', variant: 'destructive' });
+      console.error(error);
+    } finally {
+      setIsExporting(false);
+    }
+  }, [filteredByHidden, totalNilai, dateFrom, dateTo, exportToPdf, toast]);
 
   return (
     <MainLayout title="Histori Pembelian" subtitle="Riwayat pembelian barang dari supplier">
@@ -115,9 +182,9 @@ const HistoriPembelian = () => {
             </SelectContent>
           </Select>
         </div>
-        <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={handleExport}>
-          <FileDown className="h-3.5 w-3.5" />Export PDF
-        </Button>
+         <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={handleExport} disabled={isExporting}>
+           <FileDown className="h-3.5 w-3.5" />{isExporting ? 'Generating...' : 'Export PDF'}
+         </Button>
       </div>
 
       <Card>
