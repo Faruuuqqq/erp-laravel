@@ -130,7 +130,7 @@ const Sales = () => {
                      </TableRow>
                    ) : filtered.map(s => (
                      <TableRow key={s.id}>
-                       <TableCell className="font-mono text-xs text-primary">{s.code}</TableCell>
+                        <TableCell className="font-mono text-xs text-primary">{s.code ?? 'S-' + s.id.slice(0, 4)}</TableCell>
                        <TableCell className="font-medium">{s.name}</TableCell>
                        <TableCell className="text-muted-foreground">{s.phone ?? '—'}</TableCell>
                        <TableCell className="text-muted-foreground text-xs">{s.email ?? '—'}</TableCell>
@@ -209,8 +209,8 @@ const Sales = () => {
                </div>
                <div className="space-y-1.5">
                  <Label>Status</Label>
-                 <Select value={form.status} onValueChange={(v: 'aktif' | 'nonaktif') => setForm(p => ({ ...p, status: v }))}>
-                   <SelectTrigger><SelectValue /></SelectTrigger>
+                  <Select value={form.status} onValueChange={(v: 'aktif' | 'nonaktif') => setForm(p => ({ ...p, status: v }))}>
+                    <SelectTrigger><SelectValue placeholder="Pilih status" /></SelectTrigger>
                    <SelectContent>
                      <SelectItem value="aktif">Aktif</SelectItem>
                      <SelectItem value="nonaktif">Nonaktif</SelectItem>

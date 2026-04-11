@@ -133,7 +133,7 @@ const Gudang = () => {
                      </TableRow>
                    ) : filtered.map(g => (
                      <TableRow key={g.id}>
-                       <TableCell className="font-mono text-xs text-primary">{g.code}</TableCell>
+                        <TableCell className="font-mono text-xs text-primary">{g.code ?? 'W-' + g.id.slice(0, 4)}</TableCell>
                        <TableCell className="font-medium">{g.name}</TableCell>
                        <TableCell className="text-muted-foreground text-sm max-w-48 line-clamp-2">{g.address || '—'}</TableCell>
                        <TableCell className="text-muted-foreground">{g.manager || '—'}</TableCell>
@@ -204,8 +204,8 @@ const Gudang = () => {
                </div>
                <div className="space-y-1.5">
                  <Label>Status</Label>
-                 <Select value={form.status} onValueChange={(v: 'aktif' | 'nonaktif') => setField('status', v)}>
-                   <SelectTrigger><SelectValue /></SelectTrigger>
+                  <Select value={form.status} onValueChange={(v: 'aktif' | 'nonaktif') => setField('status', v)}>
+                    <SelectTrigger><SelectValue placeholder="Pilih status" /></SelectTrigger>
                    <SelectContent>
                      <SelectItem value="aktif">Aktif</SelectItem>
                      <SelectItem value="nonaktif">Nonaktif</SelectItem>
