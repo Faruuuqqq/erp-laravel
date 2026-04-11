@@ -1,57 +1,53 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { PageHeader, DataTableContainer, CurrencyCell } from '@/components/ui/DataComponents';
 import { StatCard } from '@/components/ui/StatCard';
-import { SUPPLIERS, formatRupiah } from '@/data/mockData';
+import { Skeleton } from '@/components/ui/skeleton';
 import { TrendingDown, Search, Download, Printer, Building2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useSaldoUtang } from '@/hooks/api/useInfo';
+import { formatCurrency } from '@/lib/utils';
+
+interface UtangSupplier {
+  id: string;
+  code: string;
+  name: string;
+  phone: string;
+  email: string;
+  address: string;
+  balance: number;
+  totalTransactions: number;
+}
 
 const SaldoUtang = () => {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
 
-  const withDebt = SUPPLIERS.filter(s => s.totalUtang > 0);
-  const total = SUPPLIERS.reduce((s, sup) => s + sup.totalUtang, 0);
+  const { data, isLoading } = useSaldoUtang();
+  const suppliers: UtangSupplier[] = (data as { data?: UtangSupplier[] })?.data ?? [];
 
-  const filtered = SUPPLIERS.filter(s => {
-    const matchSearch = s.nama.toLowerCase().includes(search.toLowerCase()) ||
-      s.kode.toLowerCase().includes(search.toLowerCase());
-    if (filter === 'utang') return matchSearch && s.totalUtang > 0;
-    if (filter === 'lunas') return matchSearch && s.totalUtang === 0;
+  const withDebt = suppliers.filter(s => s.balance > 0);
+  const total = suppliers.reduce((s, sup) => s + sup.balance, 0);
+
+  const filtered = suppliers.filter(s => {
+    const matchSearch = s.name.toLowerCase().includes(search.toLowerCase()) ||
+      s.code.toLowerCase().includes(search.toLowerCase());
+    if (filter === 'utang') return matchSearch && s.balance > 0;
+    if (filter === 'lunas') return matchSearch && s.balance === 0;
     return matchSearch;
   });
 
-  const handlePrint = () => window.print();
-
-  const handleExportPDF = () => {
-    const content = `
-SALDO UTANG - TOKOSYNC ERP
-Dicetak: ${new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}
-${'='.repeat(60)}
-
-Total Utang      : ${formatRupiah(total)}
-Supplier Berutang: ${withDebt.length} supplier
-
-${'='.repeat(60)}
-${['Kode', 'Nama Supplier', 'Telepon', 'Total Utang'].join('\t')}
-${'-'.repeat(60)}
-${filtered.filter(s => s.totalUtang > 0).map(s =>
-      [s.kode, s.nama, s.telepon, formatRupiah(s.totalUtang)].join('\t')
-    ).join('\n')}
-${'-'.repeat(60)}
-GRAND TOTAL: ${formatRupiah(total)}
-    `;
+  const handleExportPDF = useCallback(() => {
+    const content = `SALDO UTANG - TOKOSYNC ERP\nDicetak: ${new Date().toLocaleDateString('id-ID')}\n${'='.repeat(60)}\nTotal Utang: ${formatCurrency(total)}\nSupplier: ${withDebt.length}\n${'='.repeat(60)}\n${filtered.filter(s => s.balance > 0).map(s => `${s.code}\t${s.name}\t${formatCurrency(s.balance)}`).join('\n')}\n${'='.repeat(60)}\nGRAND TOTAL: ${formatCurrency(total)}`;
     const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url;
-    a.download = `saldo-utang-${new Date().toISOString().slice(0, 10)}.txt`;
-    a.click();
+    a.href = url; a.download = `saldo-utang-${new Date().toISOString().slice(0, 10)}.txt`; a.click();
     URL.revokeObjectURL(url);
-  };
+  }, [filtered, total, withDebt.length]);
 
   return (
     <MainLayout title="Saldo Utang" subtitle="Daftar utang toko ke supplier">
@@ -60,33 +56,25 @@ GRAND TOTAL: ${formatRupiah(total)}
         description="Ringkasan outstanding utang per supplier"
         actions={
           <>
-            <Button variant="outline" size="sm" onClick={handlePrint}>
-              <Printer className="h-4 w-4 mr-1.5" />Cetak
-            </Button>
-            <Button variant="outline" size="sm" onClick={handleExportPDF}>
-              <Download className="h-4 w-4 mr-1.5" />Export PDF
-            </Button>
+            <Button variant="outline" size="sm" onClick={() => window.print()}><Printer className="h-4 w-4 mr-1.5" />Cetak</Button>
+            <Button variant="outline" size="sm" onClick={handleExportPDF}><Download className="h-4 w-4 mr-1.5" />Export</Button>
           </>
         }
       />
 
-      {/* Stats */}
       <div className="mb-5 grid gap-4 sm:grid-cols-3">
-        <StatCard title="Total Utang" value={total} icon={<TrendingDown className="h-5 w-5" />} color="destructive" />
-        <StatCard title="Supplier Berutang" value={`${withDebt.length} Supplier`} icon={<Building2 className="h-5 w-5" />} color="warning" />
-        <StatCard title="Supplier Lunas" value={`${SUPPLIERS.length - withDebt.length} Supplier`} icon={<TrendingDown className="h-5 w-5" />} color="success" />
+        <StatCard title="Total Utang" value={isLoading ? '...' : total} icon={<TrendingDown className="h-5 w-5" />} color="destructive" />
+        <StatCard title="Supplier Berutang" value={isLoading ? '...' : `${withDebt.length} Supplier`} icon={<Building2 className="h-5 w-5" />} color="warning" />
+        <StatCard title="Supplier Lunas" value={isLoading ? '...' : `${suppliers.length - withDebt.length} Supplier`} icon={<TrendingDown className="h-5 w-5" />} color="success" />
       </div>
 
-      {/* Filters */}
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="relative flex-1 max-w-72">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input placeholder="Cari supplier..." className="pl-9 h-9" value={search} onChange={e => setSearch(e.target.value)} />
         </div>
         <Select value={filter} onValueChange={setFilter}>
-          <SelectTrigger className="w-44 h-9">
-            <SelectValue />
-          </SelectTrigger>
+          <SelectTrigger className="w-44 h-9"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Semua Supplier</SelectItem>
             <SelectItem value="utang">Ada Utang</SelectItem>
@@ -107,27 +95,29 @@ GRAND TOTAL: ${formatRupiah(total)}
               </tr>
             </thead>
             <tbody>
-              {filtered.length === 0 ? (
+              {isLoading ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <tr key={i}><td colSpan={7} className="px-4 py-2"><Skeleton className="h-8 w-full" /></td></tr>
+                ))
+              ) : filtered.length === 0 ? (
                 <tr><td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">Tidak ada data yang sesuai.</td></tr>
               ) : (
                 <>
                   {filtered.map(s => (
-                    <tr key={s.id} className={`border-b transition-colors hover:bg-muted/20 ${s.totalUtang > 0 ? 'bg-destructive/5' : ''}`}>
-                      <td className="px-4 py-3 font-mono text-xs text-primary">{s.kode}</td>
+                    <tr key={s.id} className={`border-b transition-colors hover:bg-muted/20 ${s.balance > 0 ? 'bg-destructive/5' : ''}`}>
+                      <td className="px-4 py-3 font-mono text-xs text-primary">{s.code}</td>
                       <td className="px-4 py-3">
-                        <div className="font-medium">{s.nama}</div>
+                        <div className="font-medium">{s.name}</div>
                         {s.email && <div className="text-xs text-muted-foreground">{s.email}</div>}
                       </td>
-                      <td className="px-4 py-3 text-muted-foreground">{s.telepon}</td>
-                      <td className="px-4 py-3 text-muted-foreground max-w-48 truncate text-xs">{s.alamat}</td>
-                      <td className="px-4 py-3"><CurrencyCell value={s.totalTransaksi} /></td>
+                      <td className="px-4 py-3 text-muted-foreground">{s.phone}</td>
+                      <td className="px-4 py-3 text-muted-foreground max-w-48 truncate text-xs">{s.address}</td>
+                      <td className="px-4 py-3"><CurrencyCell value={s.totalTransactions} /></td>
                       <td className="px-4 py-3">
-                        {s.totalUtang > 0
-                          ? <CurrencyCell value={s.totalUtang} color="red" />
-                          : <span className="text-success text-xs font-medium">Lunas</span>}
+                        {s.balance > 0 ? <CurrencyCell value={s.balance} color="red" /> : <span className="text-success text-xs font-medium">Lunas</span>}
                       </td>
                       <td className="px-4 py-3">
-                        {s.totalUtang > 0
+                        {s.balance > 0
                           ? <Badge variant="destructive" className="text-xs">Ada Utang</Badge>
                           : <Badge variant="outline" className="text-success border-success text-xs">Lunas</Badge>}
                       </td>
@@ -147,4 +137,5 @@ GRAND TOTAL: ${formatRupiah(total)}
     </MainLayout>
   );
 };
+
 export default SaldoUtang;

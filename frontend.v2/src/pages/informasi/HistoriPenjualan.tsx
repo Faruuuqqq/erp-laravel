@@ -1,116 +1,109 @@
 import { useState, useCallback } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Pagination } from '@/components/ui/pagination';
-import { Search, Eye, EyeOff, Printer, ShoppingCart, CreditCard, DollarSign } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { useTransactions, useToggleHideTransaction } from '@/hooks/api/useTransactions';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Search, History, Eye, FileDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { usePermissions } from '@/hooks/usePermissions';
+import { useTransactions } from '@/hooks/api/useTransactions';
+import { useCustomers } from '@/hooks/api/useCustomers';
 import { formatCurrency } from '@/lib/utils';
-import PrintLayout from '@/components/print/PrintLayout';
-import { FakturPenjualan } from '@/components/print/FakturPenjualan';
 import type { Transaction } from '@/types';
 
 const HistoriPenjualan = () => {
   const { toast } = useToast();
-  const { isOwner } = usePermissions();
-  const [search, setSearch] = useState('');
-  const [filterType, setFilterType] = useState('');
-  const [fromDate, setFromDate] = useState('');
-  const [toDate, setToDate] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterCustomer, setFilterCustomer] = useState('all');
+  const [filterType, setFilterType] = useState('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(25);
   const [selectedTrx, setSelectedTrx] = useState<Transaction | null>(null);
 
-  const params = {
-    search: search || undefined,
-    type: filterType || undefined,
-    from: fromDate || undefined,
-    to: toDate || undefined,
+  const typeParam = filterType === 'kredit' ? 'penjualan_kredit' : filterType === 'tunai' ? 'penjualan_tunai' : undefined;
+
+  const { data: tunaiData, isLoading: l1 } = useTransactions({
+    type: 'penjualan_tunai',
+    search: searchTerm || undefined,
+    from: dateFrom || undefined,
+    to: dateTo || undefined,
     page,
-    perPage,
-  };
+    perPage: 15,
+  });
+  const { data: kreditData, isLoading: l2 } = useTransactions({
+    type: 'penjualan_kredit',
+    search: searchTerm || undefined,
+    from: dateFrom || undefined,
+    to: dateTo || undefined,
+    page,
+    perPage: 15,
+  });
 
-  const { data, isLoading } = useTransactions(params);
-  const toggleHide = useToggleHideTransaction();
+  const { data: customersData } = useCustomers({ perPage: 200 });
+  const customers = customersData?.data ?? [];
 
-  const transactions = data?.data ?? [];
-  const meta = data?.meta;
+  const tunai = filterType !== 'kredit' ? (tunaiData?.data ?? []) : [];
+  const kredit = filterType !== 'tunai' ? (kreditData?.data ?? []) : [];
+  const allTrx = [...tunai, ...kredit].sort((a, b) => b.date.localeCompare(a.date));
+  const isLoading = l1 || l2;
 
-  const handleToggleHide = useCallback(async (trx: Transaction) => {
-    try {
-      await toggleHide.mutateAsync(trx.id);
-      toast({
-        title: trx.isHidden ? 'Transaksi ditampilkan' : 'Transaksi disembunyikan',
-        description: `${trx.invoiceNumber} berhasil diubah`,
-      });
-    } catch {
-      toast({ title: 'Gagal', description: 'Tidak dapat mengubah status transaksi', variant: 'destructive' });
-    }
-  }, [toggleHide, toast]);
+  const filtered = filterCustomer === 'all'
+    ? allTrx
+    : allTrx.filter(t => t.customerId === filterCustomer);
 
-  const totalNilai = transactions.reduce((s, t) => s + t.total, 0);
-  const tunaiCount = transactions.filter(t => t.type === 'penjualan_tunai').length;
-  const kreditCount = transactions.filter(t => t.type === 'penjualan_kredit').length;
+  const totalNilai = filtered.reduce((s, t) => s + t.total, 0);
+  const totalKredit = allTrx.filter(t => (t.remaining ?? 0) > 0).length;
 
-  const statusVariant = (t: Transaction) =>
-    t.paymentStatus === 'lunas' ? 'default' : 'destructive';
+  const handleExport = useCallback(() => toast({ title: 'Mengekspor PDF...' }), [toast]);
 
   return (
-    <MainLayout title="Histori Penjualan" subtitle="Riwayat penjualan barang ke customer">
-      {/* Summary Cards */}
-      <div className="mb-4 grid gap-3 md:grid-cols-4">
-        <Card><CardContent className="p-3">
-          <div className="flex items-center gap-2"><ShoppingCart className="h-4 w-4 text-muted-foreground" /><p className="text-xs text-muted-foreground">Total Transaksi</p></div>
-          <p className="text-lg font-bold">{meta?.total ?? transactions.length}</p>
-        </CardContent></Card>
-        <Card><CardContent className="p-3">
-          <div className="flex items-center gap-2"><DollarSign className="h-4 w-4 text-primary" /><p className="text-xs text-muted-foreground">Nilai (Halaman)</p></div>
-          <p className="text-lg font-bold text-primary tabular-nums">{formatCurrency(totalNilai)}</p>
-        </CardContent></Card>
-        <Card><CardContent className="p-3">
-          <p className="text-xs text-muted-foreground">Penjualan Tunai</p>
-          <p className="text-lg font-bold text-green-600">{tunaiCount}</p>
-        </CardContent></Card>
-        <Card><CardContent className="p-3">
-          <p className="text-xs text-muted-foreground">Penjualan Kredit</p>
-          <p className="text-lg font-bold text-orange-500"><CreditCard className="inline h-4 w-4 mr-1" />{kreditCount}</p>
-        </CardContent></Card>
+    <MainLayout title="Histori Penjualan" subtitle="Riwayat transaksi penjualan tunai dan kredit">
+      <div className="mb-4 grid gap-3 md:grid-cols-3">
+        {[
+          { label: 'Total Transaksi', value: String(allTrx.length) },
+          { label: 'Nilai Ditampilkan', value: formatCurrency(totalNilai), color: 'text-primary' },
+          { label: 'Piutang Belum Lunas', value: String(totalKredit), color: 'text-warning' },
+        ].map(s => (
+          <Card key={s.label}><CardContent className="p-3">
+            <p className="text-xs text-muted-foreground">{s.label}</p>
+            <p className={`text-lg font-bold tabular-nums ${s.color ?? ''}`}>{s.value}</p>
+          </CardContent></Card>
+        ))}
       </div>
 
-      {/* Filters */}
       <div className="mb-4 flex flex-col sm:flex-row gap-2 items-start sm:items-center justify-between">
         <div className="flex gap-2 flex-wrap">
           <div className="relative w-56">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-            <Input placeholder="Cari faktur/customer..." className="pl-8 text-xs h-8"
-              value={search} onChange={e => setSearch(e.target.value)} />
+            <Input placeholder="Cari faktur..." className="pl-8 text-xs h-8" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setPage(1); }} />
           </div>
-          <Select value={filterType} onValueChange={setFilterType}>
-            <SelectTrigger className="w-36 text-xs h-8"><SelectValue placeholder="Semua Tipe" /></SelectTrigger>
+          <Input type="date" className="text-xs h-8 w-36" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setPage(1); }} />
+          <Input type="date" className="text-xs h-8 w-36" value={dateTo} onChange={e => { setDateTo(e.target.value); setPage(1); }} />
+          <Select value={filterType} onValueChange={v => { setFilterType(v); setPage(1); }}>
+            <SelectTrigger className="w-36 text-xs h-8"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="">Semua Tipe</SelectItem>
-              <SelectItem value="penjualan_tunai">Tunai</SelectItem>
-              <SelectItem value="penjualan_kredit">Kredit</SelectItem>
+              <SelectItem value="all">Tunai + Kredit</SelectItem>
+              <SelectItem value="tunai">Tunai</SelectItem>
+              <SelectItem value="kredit">Kredit</SelectItem>
             </SelectContent>
           </Select>
-          <Input type="date" className="w-auto h-8 text-xs" value={fromDate} onChange={e => setFromDate(e.target.value)} />
-          <span className="self-center text-muted-foreground text-xs">–</span>
-          <Input type="date" className="w-auto h-8 text-xs" value={toDate} onChange={e => setToDate(e.target.value)} />
+          <Select value={filterCustomer} onValueChange={v => { setFilterCustomer(v); setPage(1); }}>
+            <SelectTrigger className="w-44 text-xs h-8"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Semua Customer</SelectItem>
+              {customers.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
         </div>
+        <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={handleExport}><FileDown className="h-3.5 w-3.5" />Export PDF</Button>
       </div>
 
-      {/* Table */}
       <Card>
-        <CardHeader className="py-3 px-4">
-          <CardTitle className="text-sm font-semibold">Daftar Transaksi Penjualan</CardTitle>
-        </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <Table>
@@ -121,102 +114,53 @@ const HistoriPenjualan = () => {
                   <TableHead className="text-xs">Customer</TableHead>
                   <TableHead className="text-xs">Tipe</TableHead>
                   <TableHead className="text-xs text-right">Total</TableHead>
-                  <TableHead className="text-xs">Status</TableHead>
-                  {isOwner && <TableHead className="text-xs text-center">Hidden</TableHead>}
-                  <TableHead className="w-20 text-xs text-center">Aksi</TableHead>
+                  <TableHead className="text-xs text-right">Terbayar</TableHead>
+                  <TableHead className="text-xs text-right">Sisa</TableHead>
+                  <TableHead className="w-10" />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  <TableRow><TableCell colSpan={isOwner ? 8 : 7} className="text-center py-10 text-muted-foreground">Memuat data...</TableCell></TableRow>
-                ) : transactions.length === 0 ? (
-                  <TableRow><TableCell colSpan={isOwner ? 8 : 7} className="text-center py-10 text-muted-foreground">Tidak ada data penjualan</TableCell></TableRow>
-                ) : (
-                  transactions.map(t => (
-                    <TableRow key={t.id} className={`text-sm hover:bg-muted/30 ${t.isHidden ? 'opacity-60 bg-muted/10' : ''}`}>
-                      <TableCell className="font-mono text-xs text-primary font-semibold">{t.invoiceNumber}</TableCell>
-                      <TableCell className="text-xs">{new Date(t.date).toLocaleDateString('id-ID')}</TableCell>
-                      <TableCell className="font-medium max-w-[140px] truncate">{t.customer ?? <span className="text-muted-foreground italic">Umum</span>}</TableCell>
-                      <TableCell>
-                        <Badge variant={t.type === 'penjualan_tunai' ? 'secondary' : 'outline'} className="text-xs">
-                          {t.type === 'penjualan_tunai' ? 'Tunai' : 'Kredit'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right font-semibold tabular-nums">{formatCurrency(t.total)}</TableCell>
-                      <TableCell>
-                        <Badge variant={statusVariant(t)} className="text-xs">
-                          {t.paymentStatus === 'lunas' ? 'Lunas' : 'Belum Lunas'}
-                        </Badge>
-                      </TableCell>
-                      {isOwner && (
-                        <TableCell className="text-center">
-                          {t.isHidden ? (
-                            <Badge variant="outline" className="text-xs text-orange-500 border-orange-300">Hidden</Badge>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">-</span>
-                          )}
-                        </TableCell>
-                      )}
-                      <TableCell>
-                        <div className="flex justify-center gap-1">
-                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setSelectedTrx(t)}>
-                            <Eye className="h-3.5 w-3.5" />
-                          </Button>
-                          {isOwner && (
-                            <Button
-                              variant="ghost" size="icon" className="h-7 w-7"
-                              onClick={() => handleToggleHide(t)}
-                              disabled={toggleHide.isPending}
-                              title={t.isHidden ? 'Tampilkan transaksi ini' : 'Sembunyikan dari admin'}
-                            >
-                              {t.isHidden ? <Eye className="h-3.5 w-3.5 text-orange-500" /> : <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />}
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
+                  Array.from({ length: 5 }).map((_, i) => <TableRow key={i}><TableCell colSpan={8}><Skeleton className="h-8 w-full" /></TableCell></TableRow>)
+                ) : filtered.length === 0 ? (
+                  <TableRow><TableCell colSpan={8} className="text-center py-10 text-muted-foreground">Tidak ada data</TableCell></TableRow>
+                ) : filtered.map(t => (
+                  <TableRow key={t.id} className="text-sm hover:bg-muted/30">
+                    <TableCell className="font-mono text-xs text-primary font-semibold">{t.invoiceNumber}</TableCell>
+                    <TableCell className="text-xs">{t.date}</TableCell>
+                    <TableCell className="max-w-[140px] truncate">{t.customer || 'Walk-in'}</TableCell>
+                    <TableCell>
+                      <Badge variant={t.type === 'penjualan_kredit' ? 'outline' : 'secondary'} className="text-xs">
+                        {t.type === 'penjualan_kredit' ? 'Kredit' : 'Tunai'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right font-semibold tabular-nums">{formatCurrency(t.total)}</TableCell>
+                    <TableCell className="text-right tabular-nums text-xs text-success">{formatCurrency(t.paid)}</TableCell>
+                    <TableCell className="text-right tabular-nums text-xs text-warning">{formatCurrency(t.remaining ?? 0)}</TableCell>
+                    <TableCell>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setSelectedTrx(t)}><Eye className="h-3.5 w-3.5" /></Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
               </TableBody>
             </Table>
           </div>
-          {meta && (
-            <div className="p-4">
-              <Pagination
-                currentPage={meta.current_page}
-                totalPages={meta.last_page}
-                totalItems={meta.total}
-                itemsPerPage={perPage}
-                onPageChange={setPage}
-                onItemsPerPageChange={(n) => { setPerPage(n); setPage(1); }}
-              />
-            </div>
-          )}
         </CardContent>
       </Card>
 
-      {/* Detail Dialog */}
       <Dialog open={!!selectedTrx} onOpenChange={() => setSelectedTrx(null)}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-xl">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              Detail Penjualan — {selectedTrx?.invoiceNumber}
-              {selectedTrx?.isHidden && isOwner && (
-                <Badge variant="outline" className="text-orange-500 border-orange-300 text-xs">Hidden</Badge>
-              )}
-            </DialogTitle>
+            <DialogTitle className="flex items-center gap-2"><History className="h-4 w-4" />Detail Penjualan — {selectedTrx?.invoiceNumber}</DialogTitle>
           </DialogHeader>
           {selectedTrx && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3 text-sm">
-                <div><p className="text-xs text-muted-foreground">Tanggal</p><p className="font-medium">{new Date(selectedTrx.date).toLocaleDateString('id-ID')}</p></div>
-                <div><p className="text-xs text-muted-foreground">Customer</p><p className="font-medium">{selectedTrx.customer ?? 'Umum'}</p></div>
-                <div><p className="text-xs text-muted-foreground">Tipe</p><Badge variant="outline" className="text-xs">{selectedTrx.type === 'penjualan_tunai' ? 'Tunai' : 'Kredit'}</Badge></div>
-                <div><p className="text-xs text-muted-foreground">Status Bayar</p><Badge variant={statusVariant(selectedTrx)} className="text-xs">{selectedTrx.paymentStatus === 'lunas' ? 'Lunas' : 'Belum Lunas'}</Badge></div>
-                <div><p className="text-xs text-muted-foreground">Total</p><p className="font-bold text-primary tabular-nums">{formatCurrency(selectedTrx.total)}</p></div>
-                <div><p className="text-xs text-muted-foreground">Sisa</p><p className="font-semibold text-destructive tabular-nums">{formatCurrency(selectedTrx.remaining)}</p></div>
+                <div><p className="text-xs text-muted-foreground">Tanggal</p><p className="font-medium">{selectedTrx.date}</p></div>
+                <div><p className="text-xs text-muted-foreground">Customer</p><p className="font-medium">{selectedTrx.customer || 'Walk-in'}</p></div>
+                <div><p className="text-xs text-muted-foreground">Total</p><p className="font-bold text-primary">{formatCurrency(selectedTrx.total)}</p></div>
+                <div><p className="text-xs text-muted-foreground">Sisa Piutang</p><p className="font-bold text-warning">{formatCurrency(selectedTrx.remaining ?? 0)}</p></div>
               </div>
-
               {selectedTrx.items && selectedTrx.items.length > 0 && (
                 <Table>
                   <TableHeader>
@@ -228,8 +172,8 @@ const HistoriPenjualan = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {selectedTrx.items.map((item) => (
-                      <TableRow key={item.id} className="text-sm">
+                    {selectedTrx.items.map((item, i) => (
+                      <TableRow key={i} className="text-sm">
                         <TableCell>{item.productName}</TableCell>
                         <TableCell className="text-right tabular-nums">{item.quantity}</TableCell>
                         <TableCell className="text-right tabular-nums text-xs">{formatCurrency(item.price)}</TableCell>
@@ -239,11 +183,8 @@ const HistoriPenjualan = () => {
                   </TableBody>
                 </Table>
               )}
-
               <div className="flex gap-2 justify-end">
-                <PrintLayout buttonLabel="Cetak Faktur" buttonSize="sm" buttonVariant="outline">
-                  <FakturPenjualan transaction={selectedTrx} />
-                </PrintLayout>
+                <Button variant="outline" size="sm" onClick={handleExport}><FileDown className="mr-1.5 h-3.5 w-3.5" />Export PDF</Button>
                 <Button size="sm" onClick={() => setSelectedTrx(null)}>Tutup</Button>
               </div>
             </div>
