@@ -26,16 +26,26 @@ interface UpdateCustomerRequest {
   credit_limit?: number;
 }
 
+// Query key factory
+export const customerKeys = {
+  all: ['customers'] as const,
+  lists: () => [...customerKeys.all, 'list'] as const,
+  list: (filters?: CustomerQueryParams) =>
+    [...customerKeys.lists(), { page: filters?.page ?? 1, perPage: filters?.per_page ?? 20, search: filters?.search ?? '' }] as const,
+  details: () => [...customerKeys.all, 'detail'] as const,
+  detail: (id: string) => [...customerKeys.details(), id] as const,
+};
+
 export const useCustomers = (params?: CustomerQueryParams) => {
   return useQuery({
-    queryKey: ['customers', params],
+    queryKey: customerKeys.list(params),
     queryFn: () => api.get<PaginatedResponse<Customer>>('/customers', params),
   });
 };
 
 export const useCustomer = (id: string) => {
   return useQuery({
-    queryKey: ['customers', id],
+    queryKey: customerKeys.detail(id),
     queryFn: () => api.get<Customer>(`/customers/${id}`),
     enabled: !!id,
   });
@@ -45,7 +55,31 @@ export const useCreateCustomer = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (data: CreateCustomerRequest) => api.post('/customers', data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['customers'] }),
+    onMutate: async (newCustomer) => {
+      await queryClient.cancelQueries({ queryKey: customerKeys.lists() });
+      const previousCustomers = queryClient.getQueryData(customerKeys.lists());
+      const tempId = 'temp-' + Date.now();
+      
+      queryClient.setQueryData(customerKeys.lists(), (old: any) => ({
+        ...old,
+        data: [...(old?.data || []), { ...newCustomer, id: tempId }],
+      }));
+      
+      return { previousCustomers, tempId };
+    },
+    onSuccess: (result, newCustomer, context) => {
+      queryClient.setQueryData(customerKeys.lists(), (old: any) => ({
+        ...old,
+        data: (old?.data || []).map((c: any) =>
+          c.id === context?.tempId ? result.data : c
+        ),
+      }));
+    },
+    onError: (err, newCustomer, context) => {
+      if (context?.previousCustomers) {
+        queryClient.setQueryData(customerKeys.lists(), context.previousCustomers);
+      }
+    },
   });
 };
 
@@ -54,7 +88,25 @@ export const useUpdateCustomer = () => {
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: UpdateCustomerRequest }) =>
       api.put(`/customers/${id}`, data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['customers'] }),
+    onMutate: async ({ id, data }) => {
+      await queryClient.cancelQueries({ queryKey: customerKeys.detail(id) });
+      const previousCustomer = queryClient.getQueryData(customerKeys.detail(id));
+      
+      queryClient.setQueryData(customerKeys.detail(id), { ...previousCustomer, ...data });
+      queryClient.setQueryData(customerKeys.lists(), (old: any) => ({
+        ...old,
+        data: (old?.data || []).map((c: any) =>
+          c.id === id ? { ...c, ...data } : c
+        ),
+      }));
+      
+      return { previousCustomer };
+    },
+    onError: (err, { id }, context) => {
+      if (context?.previousCustomer) {
+        queryClient.setQueryData(customerKeys.detail(id), context.previousCustomer);
+      }
+    },
   });
 };
 
@@ -62,6 +114,21 @@ export const useDeleteCustomer = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.delete(`/customers/${id}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['customers'] }),
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: customerKeys.lists() });
+      const previousCustomers = queryClient.getQueryData(customerKeys.lists());
+      
+      queryClient.setQueryData(customerKeys.lists(), (old: any) => ({
+        ...old,
+        data: (old?.data || []).filter((c: any) => c.id !== id),
+      }));
+      
+      return { previousCustomers };
+    },
+    onError: (err, id, context) => {
+      if (context?.previousCustomers) {
+        queryClient.setQueryData(customerKeys.lists(), context.previousCustomers);
+      }
+    },
   });
 };

@@ -8,16 +8,57 @@ interface WarehouseParams {
   search?: string;
 }
 
+// Transform status values: Frontend ('aktif'/'nonaktif') ↔ Backend ('active'/'inactive')
+const toBackendStatus = (status?: string): string | undefined => {
+  if (!status) return undefined;
+  return status === 'aktif' ? 'active' : status === 'nonaktif' ? 'inactive' : status;
+};
+
+const toFrontendStatus = (status?: string): 'aktif' | 'nonaktif' | undefined => {
+  if (!status) return undefined;
+  return status === 'active' ? 'aktif' : status === 'inactive' ? 'nonaktif' : undefined;
+};
+
+const transformToBackend = (data: any) => ({
+  ...data,
+  status: toBackendStatus(data.status),
+});
+
+const transformToFrontend = (warehouse: Warehouse): Warehouse => ({
+  ...warehouse,
+  status: toFrontendStatus(warehouse.status) as 'aktif' | 'nonaktif',
+});
+
+const transformListToFrontend = (response: PaginatedResponse<Warehouse>): PaginatedResponse<Warehouse> => ({
+  ...response,
+  data: response.data.map(transformToFrontend),
+});
+
+// Query key factory
+export const warehouseKeys = {
+  all: ['warehouses'] as const,
+  lists: () => [...warehouseKeys.all, 'list'] as const,
+  list: (filters?: WarehouseParams) =>
+    [...warehouseKeys.lists(), { page: filters?.page ?? 1, perPage: filters?.perPage ?? 20, search: filters?.search ?? '' }] as const,
+  details: () => [...warehouseKeys.all, 'detail'] as const,
+  detail: (id: string) => [...warehouseKeys.details(), id] as const,
+};
+
 export const useWarehouses = (params?: WarehouseParams) => {
   return useQuery({
-    queryKey: ['warehouses', params],
-    queryFn: () => api.get<PaginatedResponse<Warehouse>>('/warehouses', params as Record<string, unknown>),
+    queryKey: warehouseKeys.list(params),
+    queryFn: async () => {
+      const response = await api.get<PaginatedResponse<Warehouse>>('/warehouses', params as Record<string, unknown>);
+      return transformListToFrontend(response);
+    },
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 };
 
 export const useWarehouse = (id: string) => {
   return useQuery({
-    queryKey: ['warehouses', id],
+    queryKey: warehouseKeys.detail(id),
     queryFn: () => api.get<Warehouse>(`/warehouses/${id}`),
     enabled: !!id,
   });
@@ -27,7 +68,31 @@ export const useCreateWarehouse = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (data: Record<string, unknown>) => api.post('/warehouses', data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['warehouses'] }),
+    onMutate: async (newWarehouse) => {
+      await queryClient.cancelQueries({ queryKey: warehouseKeys.lists() });
+      const previousWarehouses = queryClient.getQueryData(warehouseKeys.lists());
+      const tempId = 'temp-' + Date.now();
+      
+      queryClient.setQueryData(warehouseKeys.lists(), (old: any) => ({
+        ...old,
+        data: [...(old?.data || []), { ...newWarehouse, id: tempId }],
+      }));
+      
+      return { previousWarehouses, tempId };
+    },
+    onSuccess: (result, newWarehouse, context) => {
+      queryClient.setQueryData(warehouseKeys.lists(), (old: any) => ({
+        ...old,
+        data: (old?.data || []).map((w: any) =>
+          w.id === context?.tempId ? result.data : w
+        ),
+      }));
+    },
+    onError: (err, newWarehouse, context) => {
+      if (context?.previousWarehouses) {
+        queryClient.setQueryData(warehouseKeys.lists(), context.previousWarehouses);
+      }
+    },
   });
 };
 
@@ -36,7 +101,25 @@ export const useUpdateWarehouse = () => {
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: Record<string, unknown> }) =>
       api.put(`/warehouses/${id}`, data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['warehouses'] }),
+    onMutate: async ({ id, data }) => {
+      await queryClient.cancelQueries({ queryKey: warehouseKeys.detail(id) });
+      const previousWarehouse = queryClient.getQueryData(warehouseKeys.detail(id));
+      
+      queryClient.setQueryData(warehouseKeys.detail(id), { ...previousWarehouse, ...data });
+      queryClient.setQueryData(warehouseKeys.lists(), (old: any) => ({
+        ...old,
+        data: (old?.data || []).map((w: any) =>
+          w.id === id ? { ...w, ...data } : w
+        ),
+      }));
+      
+      return { previousWarehouse };
+    },
+    onError: (err, { id }, context) => {
+      if (context?.previousWarehouse) {
+        queryClient.setQueryData(warehouseKeys.detail(id), context.previousWarehouse);
+      }
+    },
   });
 };
 
@@ -44,6 +127,21 @@ export const useDeleteWarehouse = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.delete(`/warehouses/${id}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['warehouses'] }),
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: warehouseKeys.lists() });
+      const previousWarehouses = queryClient.getQueryData(warehouseKeys.lists());
+      
+      queryClient.setQueryData(warehouseKeys.lists(), (old: any) => ({
+        ...old,
+        data: (old?.data || []).filter((w: any) => w.id !== id),
+      }));
+      
+      return { previousWarehouses };
+    },
+    onError: (err, id, context) => {
+      if (context?.previousWarehouses) {
+        queryClient.setQueryData(warehouseKeys.lists(), context.previousWarehouses);
+      }
+    },
   });
 };
