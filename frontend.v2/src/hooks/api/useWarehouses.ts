@@ -3,9 +3,10 @@ import { api } from '@/lib/api';
 import type { Warehouse, PaginatedResponse } from '@/types';
 
 interface WarehouseParams {
-  perPage?: number;
+  per_page?: number;
   page?: number;
   search?: string;
+  status?: 'aktif' | 'nonaktif';
 }
 
 // Transform status values: Frontend ('aktif'/'nonaktif') ↔ Backend ('active'/'inactive')
@@ -39,7 +40,7 @@ export const warehouseKeys = {
   all: ['warehouses'] as const,
   lists: () => [...warehouseKeys.all, 'list'] as const,
   list: (filters?: WarehouseParams) =>
-    [...warehouseKeys.lists(), { page: filters?.page ?? 1, perPage: filters?.perPage ?? 20, search: filters?.search ?? '' }] as const,
+    [...warehouseKeys.lists(), { page: filters?.page ?? 1, per_page: filters?.per_page ?? 20, search: filters?.search ?? '', status: filters?.status }] as const,
   details: () => [...warehouseKeys.all, 'detail'] as const,
   detail: (id: string) => [...warehouseKeys.details(), id] as const,
 };
@@ -48,7 +49,13 @@ export const useWarehouses = (params?: WarehouseParams) => {
   return useQuery({
     queryKey: warehouseKeys.list(params),
     queryFn: async () => {
-      const response = await api.get<PaginatedResponse<Warehouse>>('/warehouses', params as Record<string, unknown>);
+      const apiParams = {
+        page: params?.page ?? 1,
+        per_page: params?.per_page ?? 20,
+        search: params?.search,
+        status: toBackendStatus(params?.status),  // Transform frontend status to backend
+      };
+      const response = await api.get<PaginatedResponse<Warehouse>>('/warehouses', apiParams as Record<string, unknown>);
       return transformListToFrontend(response);
     },
     staleTime: 5 * 60 * 1000,

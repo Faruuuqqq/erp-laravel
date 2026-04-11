@@ -28,21 +28,34 @@ const transformListToFrontend = (response: PaginatedResponse<SalesRep>): Paginat
   data: response.data.map(transformToFrontend),
 });
 
+interface SalesRepQueryParams {
+  page?: number;
+  per_page?: number;
+  search?: string;
+  status?: 'aktif' | 'nonaktif';
+}
+
 // Query key factory
 export const salesRepKeys = {
   all: ['sales'] as const,
   lists: () => [...salesRepKeys.all, 'list'] as const,
-  list: (filters?: { page?: number; perPage?: number; search?: string }) =>
-    [...salesRepKeys.lists(), { page: filters?.page ?? 1, perPage: filters?.perPage ?? 20, search: filters?.search ?? '' }] as const,
+  list: (filters?: SalesRepQueryParams) =>
+    [...salesRepKeys.lists(), { page: filters?.page ?? 1, per_page: filters?.per_page ?? 20, search: filters?.search ?? '', status: filters?.status }] as const,
   details: () => [...salesRepKeys.all, 'detail'] as const,
   detail: (id: string) => [...salesRepKeys.details(), id] as const,
 };
 
-export const useSalesReps = (params?: any) => {
+export const useSalesReps = (params?: SalesRepQueryParams) => {
   return useQuery({
     queryKey: salesRepKeys.list(params),
     queryFn: async () => {
-      const response = await api.get<PaginatedResponse<SalesRep>>('/sales', params);
+      const apiParams = {
+        page: params?.page ?? 1,
+        per_page: params?.per_page ?? 20,
+        search: params?.search,
+        status: toBackendStatus(params?.status),  // Transform frontend status to backend
+      };
+      const response = await api.get<PaginatedResponse<SalesRep>>('/sales', apiParams);
       return transformListToFrontend(response);
     },
     staleTime: 5 * 60 * 1000,

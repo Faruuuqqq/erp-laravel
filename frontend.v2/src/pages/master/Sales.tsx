@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { useRetryableAction } from '@/hooks/useRetryableAction';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,61 +29,65 @@ import type { SalesRep } from '@/types';
 const BLANK_FORM = { name: '', phone: '', email: '', area: '', status: 'aktif' as 'aktif' | 'nonaktif' };
 
 const Sales = () => {
-  const { canCreate, canEdit, canDelete } = usePermissions();
-  const { toast } = useToast();
+   const { canCreate, canEdit, canDelete } = usePermissions();
+   const { toast } = useToast();
+   const { execute: executeRetryable } = useRetryableAction({ maxRetries: 3, delayMs: 1000 });
   const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [statusFilter, setStatusFilter] = useState<'aktif' | 'nonaktif' | 'semua'>('semua');
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editItem, setEditItem] = useState<SalesRep | null>(null);
   const [form, setForm] = useState(BLANK_FORM);
 
   const debouncedSearch = useDebouncedValue(searchTerm, 300);
-  const { data: salesData, isLoading } = useSalesReps({ search: debouncedSearch || undefined, perPage: 20 });
+  const { data: salesData, isLoading } = useSalesReps({ page: currentPage, search: debouncedSearch || undefined, per_page: 20, status: statusFilter === 'semua' ? undefined : statusFilter });
   const createMutation = useCreateSalesRep();
   const updateMutation = useUpdateSalesRep();
   const deleteMutation = useDeleteSalesRep();
 
-  const list = salesData?.data ?? [];
-  const activeCount = list.filter(s => s.status === 'aktif').length;
-  const totalPenjualan = list.reduce((s, r) => s + Number(r.totalSales ?? 0), 0);
+   const list = salesData?.data ?? [];
+   const pagination = salesData?.meta;
 
-  const filtered = list.filter(s =>
-    s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (s.code ?? '').toLowerCase().includes(searchTerm.toLowerCase())
-  );
+   const activeCount = list.filter(s => s.status === 'aktif' || s.status === 'active').length;
+   const totalPenjualan = formatCurrency(list.reduce((sum, s) => sum + Number(s.totalSales ?? 0), 0));
 
   const openEdit = useCallback((s: SalesRep) => {
     setEditItem(s);
     setForm({ name: s.name, phone: s.phone ?? '', email: s.email ?? '', area: s.area ?? '', status: (s.status ?? 'aktif') as 'aktif' | 'nonaktif' });
   }, []);
 
-  const handleSave = async () => {
-    if (!form.name.trim()) return;
-    const payload = { name: form.name, phone: form.phone, email: form.email, area: form.area, status: form.status };
-    try {
-      if (editItem) {
-        await updateMutation.mutateAsync({ id: editItem.id, data: payload });
-        toast({ title: 'Sales diperbarui', description: `${form.name} berhasil diperbarui.` });
-        setEditItem(null);
-      } else {
-        await createMutation.mutateAsync(payload);
-        toast({ title: 'Sales ditambahkan', description: `${form.name} berhasil ditambahkan.` });
-        setIsAddOpen(false);
-      }
-      setForm(BLANK_FORM);
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Gagal menyimpan data sales';
-      toast({ title: 'Error', description: msg, variant: 'destructive' });
-    }
-  };
-
-   const handleDelete = async (id: string, name: string) => {
-     try {
-       await deleteMutation.mutateAsync(id);
-       toast({ title: 'Sales dihapus', description: `${name} telah dihapus.`, variant: 'destructive' });
-     } catch {
-       toast({ title: 'Error', description: 'Gagal menghapus sales', variant: 'destructive' });
-     }
+   const handleSave = async () => {
+     if (!form.name.trim()) return;
+     const payload = { name: form.name, phone: form.phone, email: form.email, area: form.area, status: form.status };
+     await executeRetryable(
+       async () => {
+         if (editItem) {
+           await updateMutation.mutateAsync({ id: editItem.id, data: payload });
+           setEditItem(null);
+         } else {
+           await createMutation.mutateAsync(payload);
+           setIsAddOpen(false);
+         }
+         setForm(BLANK_FORM);
+       },
+       {
+         title: editItem ? 'Sales diperbarui' : 'Sales ditambahkan',
+         description: `${form.name} berhasil ${editItem ? 'diperbarui' : 'ditambahkan'}.`,
+         errorTitle: `Gagal ${editItem ? 'memperbarui' : 'menambahkan'} sales`,
+       }
+     );
    };
+
+    const handleDelete = async (id: string, name: string) => {
+      await executeRetryable(
+        () => deleteMutation.mutateAsync(id),
+        {
+          title: 'Sales dihapus',
+          description: `${name} telah dihapus.`,
+          errorTitle: 'Gagal menghapus sales',
+        }
+      );
+    };
 
    return (
      <MainLayout title="Sales" subtitle="Kelola daftar sales / marketing">
@@ -92,11 +97,23 @@ const Sales = () => {
         <StatCard title="Total Penjualan" value={totalPenjualan} icon={<TrendingUp className="h-5 w-5" />} color="info" />
       </div>
 
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="relative w-72">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input placeholder="Cari sales..." className="pl-9 h-9" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-        </div>
+       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+         <div className="flex gap-3">
+           <div className="relative w-72">
+             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+             <Input placeholder="Cari sales..." className="pl-9 h-9" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }} />
+           </div>
+           <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v as any); setCurrentPage(1); }}>
+             <SelectTrigger className="w-48">
+               <SelectValue placeholder="Filter Status" />
+             </SelectTrigger>
+             <SelectContent>
+               <SelectItem value="semua">Semua Status</SelectItem>
+               <SelectItem value="aktif">Aktif</SelectItem>
+               <SelectItem value="nonaktif">Nonaktif</SelectItem>
+             </SelectContent>
+           </Select>
+         </div>
         {canCreate('sales_reps') && (
           <Button size="sm" onClick={() => { setForm(BLANK_FORM); setIsAddOpen(true); }}>
             <Plus className="mr-1.5 h-4 w-4" />Tambah Sales
@@ -123,12 +140,12 @@ const Sales = () => {
                      {(canEdit('sales_reps') || canDelete('sales_reps')) && <TableHead className="text-center">Aksi</TableHead>}
                    </TableRow>
                  </TableHeader>
-                 <TableBody>
-                   {filtered.length === 0 ? (
-                     <TableRow>
-                       <TableCell colSpan={(canEdit('sales_reps') || canDelete('sales_reps')) ? 8 : 7} className="py-10 text-center text-muted-foreground">Tidak ada data sales yang sesuai.</TableCell>
-                     </TableRow>
-                   ) : filtered.map(s => (
+                  <TableBody>
+                    {list.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={(canEdit('sales_reps') || canDelete('sales_reps')) ? 8 : 7} className="py-10 text-center text-muted-foreground">Tidak ada data sales yang sesuai.</TableCell>
+                      </TableRow>
+                    ) : list.map(s => (
                      <TableRow key={s.id}>
                         <TableCell className="font-mono text-xs text-primary">{s.code ?? 'S-' + s.id.slice(0, 4)}</TableCell>
                        <TableCell className="font-medium">{s.name}</TableCell>
@@ -177,12 +194,42 @@ const Sales = () => {
                </Table>
              </div>
            </CardContent>
-         </Card>
-       )}
+          </Card>
+        )}
 
-       <Dialog open={isAddOpen || !!editItem} onOpenChange={v => {
-         if (!v) { setIsAddOpen(false); setEditItem(null); setForm(BLANK_FORM); }
-       }}>
+        {/* Pagination UI */}
+        {pagination && (
+          <div className="mt-4 flex items-center justify-between rounded-lg border border-border p-4 bg-card">
+            <div className="text-sm text-muted-foreground">
+              Menampilkan {((pagination.current_page - 1) * pagination.per_page) + 1} - {Math.min(pagination.current_page * pagination.per_page, pagination.total)} dari {pagination.total} total
+            </div>
+            <div className="flex items-center gap-2">
+              <Button 
+                variant="outline" 
+                size="sm"
+                disabled={pagination.current_page === 1}
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              >
+                Sebelumnya
+              </Button>
+              <span className="text-sm text-muted-foreground px-2">
+                Halaman {pagination.current_page} dari {pagination.last_page}
+              </span>
+              <Button 
+                variant="outline" 
+                size="sm"
+                disabled={pagination.current_page === pagination.last_page}
+                onClick={() => setCurrentPage(prev => prev + 1)}
+              >
+                Selanjutnya
+              </Button>
+            </div>
+          </div>
+        )}
+
+        <Dialog open={isAddOpen || !!editItem} onOpenChange={v => {
+          if (!v) { setIsAddOpen(false); setEditItem(null); setForm(BLANK_FORM); }
+        }}>
          <DialogContent>
            <DialogHeader>
              <DialogTitle>{editItem ? 'Edit Sales' : 'Tambah Sales Baru'}</DialogTitle>

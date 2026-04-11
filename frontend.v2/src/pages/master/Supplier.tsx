@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { useRetryableAction } from '@/hooks/useRetryableAction';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,56 +28,64 @@ import type { Supplier as SupplierType } from '@/types';
 const BLANK_FORM = { name: '', phone: '', email: '', address: '', noRekening: '' };
 
 const Supplier = () => {
-  const { canCreate, canEdit, canDelete } = usePermissions();
-  const { toast } = useToast();
+   const { canCreate, canEdit, canDelete } = usePermissions();
+   const { toast } = useToast();
+   const { execute: executeRetryable } = useRetryableAction({ maxRetries: 3, delayMs: 1000 });
   const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editItem, setEditItem] = useState<SupplierType | null>(null);
   const [form, setForm] = useState(BLANK_FORM);
 
   const debouncedSearch = useDebouncedValue(searchTerm, 300);
-  const { data: suppliersData, isLoading } = useSuppliers({ search: debouncedSearch || undefined, perPage: 20 });
+  const { data: suppliersData, isLoading } = useSuppliers({ page: currentPage, search: debouncedSearch || undefined, per_page: 20 });
   const createMutation = useCreateSupplier();
   const updateMutation = useUpdateSupplier();
   const deleteMutation = useDeleteSupplier();
 
-  const suppliers = suppliersData?.data ?? [];
-  const totalUtang = suppliers.reduce((s, sup) => s + Number(sup.balance ?? 0), 0);
-  const withDebt = suppliers.filter(s => Number(s.balance ?? 0) > 0).length;
+   const suppliers = suppliersData?.data ?? [];
+   const pagination = suppliersData?.meta;
+
+   const withDebt = suppliers.filter(s => Number(s.balance ?? 0) > 0).length;
+   const totalUtang = formatCurrency(suppliers.reduce((sum, s) => sum + Number(s.balance ?? 0), 0));
 
   const openEdit = useCallback((s: SupplierType) => {
     setEditItem(s);
     setForm({ name: s.name, phone: s.phone ?? '', email: s.email ?? '', address: s.address ?? '', noRekening: s.noRekening ?? '' });
   }, []);
 
-  const handleSave = async () => {
-    if (!form.name.trim()) return;
-    const payload = { name: form.name, phone: form.phone, email: form.email, address: form.address, no_rekening: form.noRekening };
-    try {
-      if (editItem) {
-        await updateMutation.mutateAsync({ id: editItem.id, data: payload });
-        toast({ title: 'Supplier diperbarui', description: `${form.name} berhasil diperbarui.` });
-        setEditItem(null);
-      } else {
-        await createMutation.mutateAsync(payload);
-        toast({ title: 'Supplier ditambahkan', description: `${form.name} berhasil ditambahkan.` });
-        setIsAddOpen(false);
-      }
-      setForm(BLANK_FORM);
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Gagal menyimpan supplier';
-      toast({ title: 'Error', description: msg, variant: 'destructive' });
-    }
-  };
+   const handleSave = async () => {
+     if (!form.name.trim()) return;
+     const payload = { name: form.name, phone: form.phone, email: form.email, address: form.address, no_rekening: form.noRekening };
+     await executeRetryable(
+       async () => {
+         if (editItem) {
+           await updateMutation.mutateAsync({ id: editItem.id, data: payload });
+           setEditItem(null);
+         } else {
+           await createMutation.mutateAsync(payload);
+           setIsAddOpen(false);
+         }
+         setForm(BLANK_FORM);
+       },
+       {
+         title: editItem ? 'Supplier diperbarui' : 'Supplier ditambahkan',
+         description: `${form.name} berhasil ${editItem ? 'diperbarui' : 'ditambahkan'}.`,
+         errorTitle: `Gagal ${editItem ? 'memperbarui' : 'menambahkan'} supplier`,
+       }
+     );
+   };
 
-  const handleDelete = async (id: string, name: string) => {
-    try {
-      await deleteMutation.mutateAsync(id);
-      toast({ title: 'Supplier dihapus', description: `${name} telah dihapus.`, variant: 'destructive' });
-    } catch {
-      toast({ title: 'Error', description: 'Gagal menghapus supplier', variant: 'destructive' });
-    }
-  };
+   const handleDelete = async (id: string, name: string) => {
+     await executeRetryable(
+       () => deleteMutation.mutateAsync(id),
+       {
+         title: 'Supplier dihapus',
+         description: `${name} telah dihapus.`,
+         errorTitle: 'Gagal menghapus supplier',
+       }
+     );
+   };
 
    const handleExport = () => {
      const rows = [['Kode', 'Nama', 'Telepon', 'Email', 'Alamat', 'Total Utang'],
@@ -96,11 +105,11 @@ const Supplier = () => {
         <StatCard title="Total Utang" value={totalUtang} icon={<Building2 className="h-5 w-5" />} color="destructive" />
       </div>
 
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="relative w-full sm:w-72">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input placeholder="Cari supplier..." className="pl-9 h-9" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-        </div>
+       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+         <div className="relative w-full sm:w-72">
+           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+           <Input placeholder="Cari supplier..." className="pl-9 h-9" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }} />
+         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={handleExport}>
             <Download className="mr-1.5 h-4 w-4" />Export CSV
@@ -182,7 +191,37 @@ const Supplier = () => {
             </TableBody>
           </Table>
         </CardContent>
-      </Card>
+       </Card>
+
+       {/* Pagination UI */}
+       {pagination && (
+         <div className="mt-4 flex items-center justify-between rounded-lg border border-border p-4 bg-card">
+           <div className="text-sm text-muted-foreground">
+             Menampilkan {((pagination.current_page - 1) * pagination.per_page) + 1} - {Math.min(pagination.current_page * pagination.per_page, pagination.total)} dari {pagination.total} total
+           </div>
+           <div className="flex items-center gap-2">
+             <Button 
+               variant="outline" 
+               size="sm"
+               disabled={pagination.current_page === 1}
+               onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+             >
+               Sebelumnya
+             </Button>
+             <span className="text-sm text-muted-foreground px-2">
+               Halaman {pagination.current_page} dari {pagination.last_page}
+             </span>
+             <Button 
+               variant="outline" 
+               size="sm"
+               disabled={pagination.current_page === pagination.last_page}
+               onClick={() => setCurrentPage(prev => prev + 1)}
+             >
+               Selanjutnya
+             </Button>
+           </div>
+         </div>
+       )}
 
       <Dialog open={isAddOpen || !!editItem} onOpenChange={v => {
         if (!v) { setIsAddOpen(false); setEditItem(null); setForm(BLANK_FORM); }

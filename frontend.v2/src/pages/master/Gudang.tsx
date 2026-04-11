@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
+import { useRetryableAction } from '@/hooks/useRetryableAction';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,59 +33,62 @@ interface WarehouseForm {
 const BLANK_FORM = (): WarehouseForm => ({ name: '', address: '', manager: '', status: 'aktif' });
 
 const Gudang = () => {
-  const { toast } = useToast();
-  const { canCreate, canEdit, canDelete } = usePermissions();
+   const { toast } = useToast();
+   const { canCreate, canEdit, canDelete } = usePermissions();
+   const { execute: executeRetryable } = useRetryableAction({ maxRetries: 3, delayMs: 1000 });
   const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [statusFilter, setStatusFilter] = useState<'aktif' | 'nonaktif' | 'semua'>('semua');
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<WarehouseForm>(BLANK_FORM());
 
-  const { data, isLoading } = useWarehouses({ perPage: 20 });
+  const { data, isLoading } = useWarehouses({ page: currentPage, per_page: 20, status: statusFilter === 'semua' ? undefined : statusFilter });
   const createWh = useCreateWarehouse();
   const updateWh = useUpdateWarehouse();
   const deleteWh = useDeleteWarehouse();
 
-  const list = data?.data ?? [];
-  const filtered = list.filter(g =>
-    g.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (g.code ?? '').toLowerCase().includes(searchTerm.toLowerCase())
-  );
+   const list = data?.data ?? [];
+   const pagination = data?.meta;
 
-  const activeCount = list.filter(g => g.status === 'aktif').length;
+   const activeCount = list.filter(w => w.status === 'aktif' || w.status === 'active').length;
 
   const openEdit = useCallback((g: typeof list[0]) => {
     setEditId(g.id);
     setForm({ name: g.name, address: g.address ?? '', manager: g.manager ?? '', status: (g.status as 'aktif' | 'nonaktif') ?? 'aktif' });
   }, []);
 
-  const handleSave = useCallback(async () => {
-    if (!form.name.trim()) return toast({ title: 'Nama gudang harus diisi', variant: 'destructive' });
-    try {
-      if (editId) {
-        await updateWh.mutateAsync({ id: editId, data: { name: form.name, address: form.address, manager: form.manager, status: form.status } });
-        toast({ title: 'Gudang diperbarui', description: `${form.name} berhasil diperbarui.` });
-        setEditId(null);
-      } else {
-        await createWh.mutateAsync({ name: form.name, address: form.address, manager: form.manager, status: form.status });
-        toast({ title: 'Gudang ditambahkan', description: `${form.name} berhasil ditambahkan.` });
-        setIsAddOpen(false);
-      }
-      setForm(BLANK_FORM());
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Gagal menyimpan';
-      toast({ title: 'Error', description: msg, variant: 'destructive' });
-    }
-  }, [form, editId, createWh, updateWh, toast]);
+   const handleSave = useCallback(async () => {
+     if (!form.name.trim()) return toast({ title: 'Nama gudang harus diisi', variant: 'destructive' });
+     await executeRetryable(
+       async () => {
+         if (editId) {
+           await updateWh.mutateAsync({ id: editId, data: { name: form.name, address: form.address, manager: form.manager, status: form.status } });
+           setEditId(null);
+         } else {
+           await createWh.mutateAsync({ name: form.name, address: form.address, manager: form.manager, status: form.status });
+           setIsAddOpen(false);
+         }
+         setForm(BLANK_FORM());
+       },
+       {
+         title: editId ? 'Gudang diperbarui' : 'Gudang ditambahkan',
+         description: `${form.name} berhasil ${editId ? 'diperbarui' : 'ditambahkan'}.`,
+         errorTitle: `Gagal ${editId ? 'memperbarui' : 'menambahkan'} gudang`,
+       }
+     );
+   }, [form, editId, createWh, updateWh, toast, executeRetryable]);
 
-  const handleDelete = useCallback(async (id: string, name: string) => {
-    try {
-      await deleteWh.mutateAsync(id);
-      toast({ title: 'Gudang dihapus', description: `${name} telah dihapus.`, variant: 'destructive' });
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Gagal menghapus';
-      toast({ title: 'Error', description: msg, variant: 'destructive' });
-    }
-  }, [deleteWh, toast]);
+   const handleDelete = useCallback(async (id: string, name: string) => {
+     await executeRetryable(
+       () => deleteWh.mutateAsync(id),
+       {
+         title: 'Gudang dihapus',
+         description: `${name} telah dihapus.`,
+         errorTitle: 'Gagal menghapus gudang',
+       }
+     );
+   }, [deleteWh, executeRetryable]);
 
    const setField = useCallback(<K extends keyof WarehouseForm>(key: K, val: WarehouseForm[K]) =>
      setForm(p => ({ ...p, [key]: val })), []);
@@ -97,11 +101,23 @@ const Gudang = () => {
         <StatCard title="Gudang Nonaktif" value={`${list.length - activeCount} Nonaktif`} icon={<Warehouse className="h-5 w-5" />} color="warning" />
       </div>
 
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="relative w-72">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input placeholder="Cari gudang..." className="pl-9 h-9" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-        </div>
+       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+         <div className="flex gap-3">
+           <div className="relative w-72">
+             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+             <Input placeholder="Cari gudang..." className="pl-9 h-9" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }} />
+           </div>
+           <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v as any); setCurrentPage(1); }}>
+             <SelectTrigger className="w-48">
+               <SelectValue placeholder="Filter Status" />
+             </SelectTrigger>
+             <SelectContent>
+               <SelectItem value="semua">Semua Status</SelectItem>
+               <SelectItem value="aktif">Aktif</SelectItem>
+               <SelectItem value="nonaktif">Nonaktif</SelectItem>
+             </SelectContent>
+           </Select>
+         </div>
         {canCreate('master.warehouses') && (
           <Button size="sm" onClick={() => { setForm(BLANK_FORM()); setIsAddOpen(true); }}>
             <Plus className="mr-1.5 h-4 w-4" />Tambah Gudang
@@ -126,12 +142,12 @@ const Gudang = () => {
                      {(canEdit('master.warehouses') || canDelete('master.warehouses')) && <TableHead className="text-center">Aksi</TableHead>}
                    </TableRow>
                  </TableHeader>
-                 <TableBody>
-                   {filtered.length === 0 ? (
-                     <TableRow>
-                       <TableCell colSpan={(canEdit('master.warehouses') || canDelete('master.warehouses')) ? 6 : 5} className="py-10 text-center text-muted-foreground">Tidak ada gudang yang sesuai.</TableCell>
-                     </TableRow>
-                   ) : filtered.map(g => (
+                  <TableBody>
+                    {list.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={(canEdit('master.warehouses') || canDelete('master.warehouses')) ? 6 : 5} className="py-10 text-center text-muted-foreground">Tidak ada gudang yang sesuai.</TableCell>
+                      </TableRow>
+                    ) : list.map(g => (
                      <TableRow key={g.id}>
                         <TableCell className="font-mono text-xs text-primary">{g.code ?? 'W-' + g.id.slice(0, 4)}</TableCell>
                        <TableCell className="font-medium">{g.name}</TableCell>
@@ -178,12 +194,42 @@ const Gudang = () => {
                </Table>
              </div>
            </CardContent>
-         </Card>
-       )}
+          </Card>
+        )}
 
-       <Dialog open={isAddOpen || !!editId} onOpenChange={v => {
-         if (!v) { setIsAddOpen(false); setEditId(null); setForm(BLANK_FORM()); }
-       }}>
+        {/* Pagination UI */}
+        {pagination && (
+          <div className="mt-4 flex items-center justify-between rounded-lg border border-border p-4 bg-card">
+            <div className="text-sm text-muted-foreground">
+              Menampilkan {((pagination.current_page - 1) * pagination.per_page) + 1} - {Math.min(pagination.current_page * pagination.per_page, pagination.total)} dari {pagination.total} total
+            </div>
+            <div className="flex items-center gap-2">
+              <Button 
+                variant="outline" 
+                size="sm"
+                disabled={pagination.current_page === 1}
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              >
+                Sebelumnya
+              </Button>
+              <span className="text-sm text-muted-foreground px-2">
+                Halaman {pagination.current_page} dari {pagination.last_page}
+              </span>
+              <Button 
+                variant="outline" 
+                size="sm"
+                disabled={pagination.current_page === pagination.last_page}
+                onClick={() => setCurrentPage(prev => prev + 1)}
+              >
+                Selanjutnya
+              </Button>
+            </div>
+          </div>
+        )}
+
+        <Dialog open={isAddOpen || !!editId} onOpenChange={v => {
+          if (!v) { setIsAddOpen(false); setEditId(null); setForm(BLANK_FORM()); }
+        }}>
          <DialogContent>
            <DialogHeader>
              <DialogTitle>{editId ? 'Edit Gudang' : 'Tambah Gudang Baru'}</DialogTitle>

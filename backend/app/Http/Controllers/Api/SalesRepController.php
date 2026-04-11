@@ -12,8 +12,14 @@ class SalesRepController extends Controller
 {
     public function index(Request $request)
     {
-        $reps = SalesRep::when($request->search, fn($q) => $q->where('name', 'like', "%{$request->search}%"))
-            ->latest()->paginate($request->perPage ?? 50);
+        $query = SalesRep::when($request->search, fn($q) => $q->where('name', 'like', "%{$request->search}%"));
+        
+        // Add status filter
+        if ($request->has('status') && in_array($request->status, ['active', 'inactive'])) {
+            $query->where('status', $request->status);
+        }
+        
+        $reps = $query->latest()->paginate($request->perPage ?? 50);
         return SalesRepResource::collection($reps);
     }
 

@@ -2,20 +2,34 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import type { Product, PaginatedResponse } from '@/types';
 
+interface ProductQueryParams {
+  page?: number;
+  per_page?: number;
+  search?: string;
+  category_id?: number;
+  warehouse_id?: number;
+}
+
 // Query key factory
 export const productKeys = {
   all: ['products'] as const,
   lists: () => [...productKeys.all, 'list'] as const,
-  list: (filters?: { page?: number; perPage?: number; search?: string }) =>
-    [...productKeys.lists(), { page: filters?.page ?? 1, perPage: filters?.perPage ?? 20, search: filters?.search ?? '' }] as const,
+  list: (filters?: ProductQueryParams) =>
+    [...productKeys.lists(), { page: filters?.page ?? 1, per_page: filters?.per_page ?? 20, search: filters?.search ?? '', category_id: filters?.category_id, warehouse_id: filters?.warehouse_id }] as const,
   details: () => [...productKeys.all, 'detail'] as const,
   detail: (id: string) => [...productKeys.details(), id] as const,
 };
 
-export const useProducts = (params?: any) => {
+export const useProducts = (params?: ProductQueryParams) => {
   return useQuery({
     queryKey: productKeys.list(params),
-    queryFn: () => api.get<PaginatedResponse<Product>>('/products', params),
+    queryFn: () => api.get<PaginatedResponse<Product>>('/products', {
+      page: params?.page ?? 1,
+      per_page: params?.per_page ?? 20,
+      search: params?.search,
+      category_id: params?.category_id,
+      warehouse_id: params?.warehouse_id,
+    }),
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
   });

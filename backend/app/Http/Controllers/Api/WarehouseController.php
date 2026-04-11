@@ -12,8 +12,14 @@ class WarehouseController extends Controller
 {
     public function index(Request $request)
     {
-        $warehouses = Warehouse::when($request->search, fn($q) => $q->where('name', 'like', "%{$request->search}%"))
-            ->latest()->paginate($request->perPage ?? 50);
+        $query = Warehouse::when($request->search, fn($q) => $q->where('name', 'like', "%{$request->search}%"));
+        
+        // Add status filter
+        if ($request->has('status') && in_array($request->status, ['active', 'inactive'])) {
+            $query->where('status', $request->status);
+        }
+        
+        $warehouses = $query->latest()->paginate($request->perPage ?? 50);
         return WarehouseResource::collection($warehouses);
     }
 
