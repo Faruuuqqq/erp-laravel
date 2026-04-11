@@ -186,12 +186,14 @@ const Produk = () => {
                   <TableRow><TableCell colSpan={(canEdit('products') || canDelete('products')) ? 8 : 7} className="py-10 text-center text-muted-foreground">Memuat data...</TableCell></TableRow>
                 ) : filtered.length === 0 ? (
                   <TableRow><TableCell colSpan={(canEdit('products') || canDelete('products')) ? 8 : 7} className="py-10 text-center text-muted-foreground">Tidak ada produk yang sesuai.</TableCell></TableRow>
-                ) : filtered.map(p => {
-                  const isLow = Number(p.stock) <= Number(p.minimumStock ?? 0);
-                  const pct = Math.min(100, Math.round((Number(p.stock) / (Number(p.minimumStock ?? 1) * 3)) * 100));
+                 ) : filtered.map(p => {
+                   const isLow = Number(p.stock) <= Number(p.minimumStock ?? 0);
+                   const pct = Math.min(100, Math.round((Number(p.stock) / (Number(p.minimumStock ?? 1) * 3)) * 100));
+                   const categoryName = p.categoryName ?? categories.find(c => c.id === p.categoryId)?.name ?? '—';
+                   const warehouseName = p.warehouseName ?? warehouses.find(w => w.id === p.warehouseId)?.name ?? '—';
                   return (
                     <TableRow key={p.id} className={isLow ? 'bg-warning/5' : ''}>
-                      <TableCell className="font-mono text-xs text-primary">{p.code}</TableCell>
+                       <TableCell className="font-mono text-xs text-primary">{p.code ?? 'P-' + p.id.slice(0, 4)}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <div className="flex h-8 w-8 items-center justify-center rounded bg-muted shrink-0">
@@ -203,7 +205,7 @@ const Produk = () => {
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell><Badge variant="secondary" className="text-xs">{p.categoryName}</Badge></TableCell>
+                       <TableCell><Badge variant="secondary" className="text-xs">{categoryName}</Badge></TableCell>
                       <TableCell className="text-right text-sm">{formatCurrency(Number(p.buyPrice))}</TableCell>
                       <TableCell className="text-right font-medium text-sm">{formatCurrency(Number(p.sellPrice))}</TableCell>
                       <TableCell>
@@ -215,7 +217,7 @@ const Produk = () => {
                           <Progress value={pct} className={`h-1 ${isLow ? '[&>div]:bg-destructive' : '[&>div]:bg-success'}`} />
                         </div>
                       </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{p.warehouseName}</TableCell>
+                       <TableCell className="text-xs text-muted-foreground">{warehouseName}</TableCell>
                       {(canEdit('products') || canDelete('products')) && (
                         <TableCell>
                           <div className="flex justify-center gap-1">
