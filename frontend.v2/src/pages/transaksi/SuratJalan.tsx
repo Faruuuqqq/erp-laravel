@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -15,7 +15,10 @@ import { useProducts } from '@/hooks/api/useProducts';
 import { useCustomers } from '@/hooks/api/useCustomers';
 import { useSalesReps } from '@/hooks/api/useSalesReps';
 import { useWarehouses } from '@/hooks/api/useWarehouses';
+import { usePrint } from '@/contexts/PrintContext';
+import { SuratJalanPrint } from '@/components/print/SuratJalanPrint';
 import apiClient from '@/lib/api-client';
+import type { Transaction } from '@/types';
 
 interface SJItem {
   productId: string;
@@ -42,6 +45,9 @@ const SuratJalan = () => {
   const [tanggal, setTanggal] = useState(new Date().toISOString().split('T')[0]);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [savedTransaction, setSavedTransaction] = useState<Transaction | null>(null);
+
+  const { printDocument } = usePrint();
 
   // Real API data
   const { data: productsData } = useProducts({ perPage: 500 });
@@ -98,6 +104,9 @@ const SuratJalan = () => {
         notes: catatan,
         items: items.map(i => ({ product_id: i.productId, quantity: i.qty, notes: i.keterangan })),
       });
+      const response = await apiClient.post('/transactions', payload);
+      const savedTrx = response.data?.data as Transaction;
+      setSavedTransaction(savedTrx ?? null);
       toast({ title: 'Surat Jalan disimpan', description: noSJ });
       setItems([]); setSelectedCustomer(''); setSelectedGudang('');
       setAlamatKirim(''); setPengirim(''); setCatatan('');
@@ -109,10 +118,17 @@ const SuratJalan = () => {
     }
   };
 
-  const handlePrint = () => {
+  const handlePrint = useCallback(() => {
     setPreviewOpen(false);
-    setTimeout(() => window.print(), 200);
-  };
+    const trx = savedTransaction ?? {
+      id: noSJ, invoiceNumber: noSJ, date: tanggal,
+      customer: customer?.name ?? '', notes: alamatKirim,
+      salesId: sales?.name ?? gudang?.name ?? '',
+      type: 'surat_jalan', total: 0, paid: 0, status: 'completed',
+      items: items.map((i, idx) => ({ id: String(idx), productId: i.productId, productName: i.nama, quantity: i.qty, price: 0, subtotal: 0, unit: i.satuan })),
+    } as Transaction;
+    printDocument(<SuratJalanPrint transaction={trx} />);
+  }, [savedTransaction, printDocument, noSJ, tanggal, customer, alamatKirim, sales, gudang, items]);
 
   return (
     <MainLayout title="Surat Jalan" subtitle="Buat surat jalan untuk pengiriman barang">

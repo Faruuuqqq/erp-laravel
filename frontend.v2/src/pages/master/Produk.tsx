@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -41,7 +42,8 @@ const Produk = () => {
   const [editItem, setEditItem] = useState<Product | null>(null);
   const [form, setForm] = useState(BLANK_FORM);
 
-  const { data: productsData, isLoading } = useProducts({ search: searchTerm || undefined, perPage: 200 });
+  const debouncedSearch = useDebouncedValue(searchTerm, 300);
+  const { data: productsData, isLoading } = useProducts({ search: debouncedSearch || undefined, perPage: 200 });
   const { data: categoriesData } = useCategories();
   const { data: warehousesData } = useWarehouses();
 

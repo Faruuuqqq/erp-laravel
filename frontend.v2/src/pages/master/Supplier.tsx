@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,7 +34,8 @@ const Supplier = () => {
   const [editItem, setEditItem] = useState<SupplierType | null>(null);
   const [form, setForm] = useState(BLANK_FORM);
 
-  const { data: suppliersData, isLoading } = useSuppliers({ search: searchTerm || undefined, perPage: 200 });
+  const debouncedSearch = useDebouncedValue(searchTerm, 300);
+  const { data: suppliersData, isLoading } = useSuppliers({ search: debouncedSearch || undefined, perPage: 200 });
   const createMutation = useCreateSupplier();
   const updateMutation = useUpdateSupplier();
   const deleteMutation = useDeleteSupplier();

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+﻿import { useState, useCallback } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -198,7 +198,7 @@ const HistoriPenjualan = () => {
       <Dialog open={!!selectedTrx} onOpenChange={() => setSelectedTrx(null)}>
         <DialogContent className="max-w-xl">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><History className="h-4 w-4" />Detail Penjualan — {selectedTrx?.invoiceNumber}</DialogTitle>
+            <DialogTitle className="flex items-center gap-2"><History className="h-4 w-4" />Detail Penjualan â€” {selectedTrx?.invoiceNumber}</DialogTitle>
           </DialogHeader>
           {selectedTrx && (
             <div className="space-y-4">

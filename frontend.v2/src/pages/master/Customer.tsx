@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,7 +33,8 @@ const CustomerPage = () => {
   const [form, setForm] = useState({ name: '', phone: '', email: '', address: '', credit_limit: '10000000' });
   const { toast } = useToast();
 
-  const { data, isLoading, refetch } = useCustomers({ per_page: 100, search: searchTerm });
+  const debouncedSearch = useDebouncedValue(searchTerm, 300);
+  const { data, isLoading, refetch } = useCustomers({ per_page: 100, search: debouncedSearch });
   const createMutation = useCreateCustomer();
   const updateMutation = useUpdateCustomer();
   const deleteMutation = useDeleteCustomer();

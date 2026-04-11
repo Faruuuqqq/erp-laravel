@@ -8,6 +8,7 @@ import { Search, Package, Warehouse, TrendingUp } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useState } from 'react';
 import { useStockReport } from '@/hooks/api/useReports';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { formatCurrency } from '@/lib/utils';
 
 const SaldoStok = () => {
@@ -15,7 +16,8 @@ const SaldoStok = () => {
   const [perPage, setPerPage] = useState(50);
   const [searchTerm, setSearchTerm] = useState('');
 
-  const { data, isLoading, error } = useStockReport({ page, perPage });
+  const debouncedSearch = useDebouncedValue(searchTerm, 400);
+  const { data, isLoading, error } = useStockReport({ page, perPage, search: debouncedSearch || undefined });
 
   const items = data?.data || [];
   const meta = data?.meta;

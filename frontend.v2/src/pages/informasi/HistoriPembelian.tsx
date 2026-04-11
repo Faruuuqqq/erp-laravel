@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+﻿import { useState, useCallback } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -138,12 +138,12 @@ const HistoriPembelian = () => {
             </Table>
           </div>
           {/* Pagination */}
-          {meta && meta.lastPage > 1 && (
+          {meta && meta.last_page > 1 && (
             <div className="flex items-center justify-between px-4 py-3 border-t text-xs text-muted-foreground">
-              <span>Halaman {meta.currentPage} dari {meta.lastPage} ({meta.total} data)</span>
+              <span>Halaman {meta.current_page} dari {meta.last_page} ({meta.total} data)</span>
               <div className="flex gap-1">
                 <Button variant="outline" size="icon" className="h-7 w-7" disabled={page <= 1} onClick={() => setPage(p => p - 1)}><ChevronLeft className="h-3.5 w-3.5" /></Button>
-                <Button variant="outline" size="icon" className="h-7 w-7" disabled={page >= meta.lastPage} onClick={() => setPage(p => p + 1)}><ChevronRight className="h-3.5 w-3.5" /></Button>
+                <Button variant="outline" size="icon" className="h-7 w-7" disabled={page >= meta.last_page} onClick={() => setPage(p => p + 1)}><ChevronRight className="h-3.5 w-3.5" /></Button>
               </div>
             </div>
           )}
@@ -155,7 +155,7 @@ const HistoriPembelian = () => {
         <DialogContent className="max-w-xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <History className="h-4 w-4" />Detail Pembelian — {selectedTrx?.invoiceNumber}
+              <History className="h-4 w-4" />Detail Pembelian â€” {selectedTrx?.invoiceNumber}
             </DialogTitle>
           </DialogHeader>
           {selectedTrx && (

@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,7 +33,8 @@ const Sales = () => {
   const [editItem, setEditItem] = useState<SalesRep | null>(null);
   const [form, setForm] = useState(BLANK_FORM);
 
-  const { data: salesData, isLoading } = useSalesReps({ search: searchTerm || undefined, perPage: 200 });
+  const debouncedSearch = useDebouncedValue(searchTerm, 300);
+  const { data: salesData, isLoading } = useSalesReps({ search: debouncedSearch || undefined, perPage: 200 });
   const createMutation = useCreateSalesRep();
   const updateMutation = useUpdateSalesRep();
   const deleteMutation = useDeleteSalesRep();
