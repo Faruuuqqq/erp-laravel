@@ -104,6 +104,15 @@ export const useUpdateCustomer = () => {
       
       return { previousCustomer };
     },
+    onSuccess: (result, { id }, context) => {
+      queryClient.setQueryData(customerKeys.detail(id), result.data);
+      queryClient.setQueryData(customerKeys.lists(), (old: any) => ({
+        ...old,
+        data: (old?.data || []).map((c: any) =>
+          c.id === id ? result.data : c
+        ),
+      }));
+    },
     onError: (err, { id }, context) => {
       if (context?.previousCustomer) {
         queryClient.setQueryData(customerKeys.detail(id), context.previousCustomer);

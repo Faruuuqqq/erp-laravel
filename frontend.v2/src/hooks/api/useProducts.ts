@@ -113,6 +113,15 @@ export const useUpdateProduct = () => {
       
       return { previousProduct };
     },
+    onSuccess: (result, { id }, context) => {
+      queryClient.setQueryData(productKeys.detail(id), result.data);
+      queryClient.setQueryData(productKeys.lists(), (old: any) => ({
+        ...old,
+        data: (old?.data || []).map((p: any) =>
+          p.id === id ? result.data : p
+        ),
+      }));
+    },
     onError: (err, { id }, context) => {
       if (context?.previousProduct) {
         queryClient.setQueryData(productKeys.detail(id), context.previousProduct);

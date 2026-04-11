@@ -122,6 +122,16 @@ export const useUpdateSalesRep = () => {
       
       return { previousSalesRep };
     },
+    onSuccess: (result, { id }, context) => {
+      const transformedResult = transformToFrontend(result.data);
+      queryClient.setQueryData(salesRepKeys.detail(id), transformedResult);
+      queryClient.setQueryData(salesRepKeys.lists(), (old: any) => ({
+        ...old,
+        data: (old?.data || []).map((s: any) =>
+          s.id === id ? transformedResult : s
+        ),
+      }));
+    },
     onError: (err, { id }, context) => {
       if (context?.previousSalesRep) {
         queryClient.setQueryData(salesRepKeys.detail(id), context.previousSalesRep);

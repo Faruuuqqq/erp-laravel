@@ -122,6 +122,16 @@ export const useUpdateWarehouse = () => {
       
       return { previousWarehouse };
     },
+    onSuccess: (result, { id }, context) => {
+      const transformedResult = transformToFrontend(result.data);
+      queryClient.setQueryData(warehouseKeys.detail(id), transformedResult);
+      queryClient.setQueryData(warehouseKeys.lists(), (old: any) => ({
+        ...old,
+        data: (old?.data || []).map((w: any) =>
+          w.id === id ? transformedResult : w
+        ),
+      }));
+    },
     onError: (err, { id }, context) => {
       if (context?.previousWarehouse) {
         queryClient.setQueryData(warehouseKeys.detail(id), context.previousWarehouse);

@@ -94,6 +94,15 @@ export const useUpdateSupplier = () => {
       
       return { previousSupplier };
     },
+    onSuccess: (result, { id }, context) => {
+      queryClient.setQueryData(supplierKeys.detail(id), result.data);
+      queryClient.setQueryData(supplierKeys.lists(), (old: any) => ({
+        ...old,
+        data: (old?.data || []).map((s: any) =>
+          s.id === id ? result.data : s
+        ),
+      }));
+    },
     onError: (err, { id }, context) => {
       if (context?.previousSupplier) {
         queryClient.setQueryData(supplierKeys.detail(id), context.previousSupplier);
