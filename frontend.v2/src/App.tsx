@@ -38,7 +38,21 @@ import Pengaturan from "./pages/Pengaturan";
 import AdminManagement from "./pages/pengaturan/AdminManagement";
 import NotFound from "./pages/NotFound";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000, // 5 minutes - data stays fresh for 5 min
+      gcTime: 10 * 60 * 1000, // 10 minutes - cache persists for 10 min after unused
+      refetchOnWindowFocus: false, // Don't refetch when window regains focus
+      refetchOnReconnect: 'stale', // Refetch only if data is stale when reconnecting
+      refetchOnMount: 'stale', // Refetch only if data is stale when component mounts
+      retry: 1, // Retry failed requests once
+    },
+    mutations: {
+      retry: 1, // Retry failed mutations once
+    },
+  },
+});
 
 const ProtectedRoute = ({ children, ownerOnly }: { children: React.ReactNode; ownerOnly?: boolean }) => {
   const { isAuthenticated, isOwner, isLoading } = useAuth();

@@ -29,20 +29,23 @@ export const useCreateProduct = () => {
       // Snapshot previous data
       const previousProducts = queryClient.getQueryData(['products']);
       
+      // Generate temp ID for optimistic update
+      const tempId = 'temp-' + Date.now();
+      
       // Optimistically update cache
       queryClient.setQueryData(['products'], (old: any) => ({
         ...old,
-        data: [...(old?.data || []), { ...newProduct, id: 'temp-' + Date.now() }],
+        data: [...(old?.data || []), { ...newProduct, id: tempId }],
       }));
       
-      return { previousProducts };
+      return { previousProducts, tempId };
     },
     onSuccess: (result, newProduct, context) => {
       // Replace optimistic data dengan real data dari server
       queryClient.setQueryData(['products'], (old: any) => ({
         ...old,
         data: (old?.data || []).map((p: any) => 
-          p.id === 'temp-' + newProduct.timestamp ? result.data : p
+          p.id === context?.tempId ? result.data : p
         ),
       }));
     },
@@ -51,10 +54,6 @@ export const useCreateProduct = () => {
       if (context?.previousProducts) {
         queryClient.setQueryData(['products'], context.previousProducts);
       }
-    },
-    onSettled: () => {
-      // Refetch untuk ensure data up-to-date
-      queryClient.invalidateQueries({ queryKey: ['products'] });
     },
   });
 };
@@ -75,9 +74,6 @@ export const useUpdateProduct = () => {
       if (context?.previousProduct) {
         queryClient.setQueryData(['products', id], context.previousProduct);
       }
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['products'] });
     },
   });
 };
@@ -101,9 +97,6 @@ export const useDeleteProduct = () => {
         queryClient.setQueryData(['products'], context.previousProducts);
       }
     },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['products'] });
-    },
   });
 };
 
@@ -123,9 +116,6 @@ export const useUpdateStock = () => {
       if (context?.previousProduct) {
         queryClient.setQueryData(['products', id], context.previousProduct);
       }
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['products'] });
     },
   });
 };

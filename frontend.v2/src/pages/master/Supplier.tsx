@@ -65,7 +65,6 @@ const Supplier = () => {
         setIsAddOpen(false);
       }
       setForm(BLANK_FORM);
-      queryClient.invalidateQueries({ queryKey: ['suppliers'] });
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Gagal menyimpan supplier';
       toast({ title: 'Error', description: msg, variant: 'destructive' });
@@ -76,7 +75,6 @@ const Supplier = () => {
     try {
       await deleteMutation.mutateAsync(id);
       toast({ title: 'Supplier dihapus', description: `${name} telah dihapus.`, variant: 'destructive' });
-      queryClient.invalidateQueries({ queryKey: ['suppliers'] });
     } catch {
       toast({ title: 'Error', description: 'Gagal menghapus supplier', variant: 'destructive' });
     }
