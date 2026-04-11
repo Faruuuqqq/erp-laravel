@@ -40,8 +40,8 @@ const SaldoStok = () => {
   const { printDocument } = usePrint();
 
   const { data, isLoading } = useStockReport();
-  const items = data?.data?.data?.items ?? [];
-  const totalValue = data?.data?.data?.totalValue ?? 0;
+  const items = (data?.data?.items as StockItem[]) ?? [];
+  const totalValue = data?.data?.totalValue ?? 0;
 
   const categories = Array.from(new Set((items as StockItem[]).map(p => p.category).filter(Boolean)));
 

@@ -34,7 +34,7 @@ const SaldoUtang = () => {
     search: debouncedSearch || undefined,
     status: filter !== 'all' ? filter : undefined,
   });
-  const suppliers: UtangSupplier[] = (data as { data?: UtangSupplier[] })?.data ?? [];
+  const suppliers: UtangSupplier[] = (data?.data as UtangSupplier[]) ?? [];
 
   const withDebt = suppliers.filter(s => s.balance > 0);
   const total = suppliers.reduce((s, sup) => s + sup.balance, 0);

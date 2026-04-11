@@ -51,16 +51,17 @@ class InfoController extends Controller
      */
     public function saldoPiutang(): JsonResponse
     {
-        $customers = Customer::where('balance', '>', 0)
-            ->orderByDesc('balance')
-            ->get(['id', 'name', 'phone', 'balance']);
+        $customers = Customer::orderByDesc('balance')->get();
 
         return response()->json([
             'data' => $customers->map(fn($c) => [
-                'id'      => (string) $c->id,
-                'name'    => $c->name,
-                'phone'   => $c->phone,
-                'balance' => (float) $c->balance,
+                'id'          => (string) $c->id,
+                'code'        => $c->code ?? 'N/A',
+                'name'        => $c->name,
+                'email'       => $c->email,
+                'phone'       => $c->phone,
+                'balance'     => (float) $c->balance,
+                'creditLimit' => (float) ($c->credit_limit ?? 0),
             ]),
         ]);
     }
@@ -71,16 +72,26 @@ class InfoController extends Controller
      */
     public function saldoUtang(): JsonResponse
     {
-        $suppliers = Supplier::where('balance', '>', 0)
-            ->orderByDesc('balance')
-            ->get(['id', 'name', 'phone', 'balance']);
+        $suppliers = Supplier::orderByDesc('balance')->get();
+
+        // Count transactions per supplier
+        $transactionCounts = Transaction::whereIn('type', ['pembelian', 'pembayaran_utang'])
+            ->select('supplier_id')
+            ->distinct()
+            ->groupBy('supplier_id')
+            ->get()
+            ->mapWithKeys(fn($t) => [$t->supplier_id => Transaction::where('supplier_id', $t->supplier_id)->count()]);
 
         return response()->json([
             'data' => $suppliers->map(fn($s) => [
-                'id'      => (string) $s->id,
-                'name'    => $s->name,
-                'phone'   => $s->phone,
-                'balance' => (float) $s->balance,
+                'id'                 => (string) $s->id,
+                'code'               => $s->code ?? 'N/A',
+                'name'               => $s->name,
+                'email'              => $s->email,
+                'phone'              => $s->phone,
+                'address'            => $s->address,
+                'balance'            => (float) $s->balance,
+                'totalTransactions'  => (float) ($transactionCounts[$s->id] ?? 0),
             ]),
         ]);
     }
@@ -110,7 +121,15 @@ class InfoController extends Controller
     public function laporanHarian(Request $request): JsonResponse
     {
         $date         = $request->date ?? today()->toDateString();
-        $transactions = Transaction::whereDate('date', $date)->get();
+        $transactions = Transaction::whereDate('date', $date)->with(['customer', 'supplier', 'details'])->get();
+
+        $sales = $transactions->whereIn('type', ['penjualan_tunai', 'penjualan_kredit']);
+        $purchases = $transactions->where('type', 'pembelian');
+
+        $penjualanTunai = $transactions->where('type', 'penjualan_tunai')->sum('total');
+        $penjualanKredit = $transactions->where('type', 'penjualan_kredit')->sum('total');
+        $totalPembelian = $purchases->sum('total');
+        $totalBiaya = 0; // Placeholder - expenses table integration if needed
 
         $byType = $transactions->groupBy('type')->map(fn($txs) => [
             'count' => $txs->count(),
@@ -119,11 +138,30 @@ class InfoController extends Controller
 
         return response()->json([
             'data' => [
-                'date'         => $date,
-                'totalIn'      => (float) $transactions->whereIn('type', ['penjualan_tunai', 'penjualan_kredit', 'pembayaran_piutang'])->sum('paid'),
-                'totalOut'     => (float) $transactions->whereIn('type', ['pembelian', 'pembayaran_utang'])->sum('paid'),
+                'date'     => $date,
+                'summary'  => [
+                    'totalPenjualan'   => (float) ($penjualanTunai + $penjualanKredit),
+                    'totalPembelian'   => (float) $totalPembelian,
+                    'totalBiaya'       => (float) $totalBiaya,
+                    'kasBersih'        => (float) ($penjualanTunai - $totalPembelian),
+                    'penjualanTunai'   => (float) $penjualanTunai,
+                    'penjualanKredit'  => (float) $penjualanKredit,
+                ],
+                'transactions' => $transactions->map(fn($t) => [
+                    'id'            => (string) $t->id,
+                    'invoiceNumber' => $t->invoice_number ?? 'N/A',
+                    'type'          => $t->type,
+                    'customer'      => $t->customer?->name,
+                    'supplier'      => $t->supplier?->name,
+                    'total'         => (float) $t->total,
+                    'paid'          => (float) $t->paid ?? 0,
+                    'remaining'     => (float) ($t->total - ($t->paid ?? 0)),
+                ])->values(),
+                'expenses'  => [],
+                'totalIn'   => (float) $transactions->whereIn('type', ['penjualan_tunai', 'penjualan_kredit', 'pembayaran_piutang'])->sum('paid'),
+                'totalOut'  => (float) $transactions->whereIn('type', ['pembelian', 'pembayaran_utang'])->sum('paid'),
                 'transactionCount' => $transactions->count(),
-                'byType'       => $byType,
+                'byType'    => $byType,
             ],
         ]);
     }

@@ -49,8 +49,8 @@ const LaporanHarian = () => {
   const { exportToPdf } = usePdfExport();
 
   const { data, isLoading } = useLaporanHarian(selectedDate);
-  const report = data as { data?: DailyReport } | undefined;
-  const d = report?.data;
+  const report = data?.data as DailyReport | undefined;
+  const d = report;
 
   const summary = useMemo(() => d?.summary ?? { totalPenjualan: 0, totalPembelian: 0, totalBiaya: 0, kasBersih: 0, penjualanTunai: 0, penjualanKredit: 0 }, [d]);
   const displayTx: Transaction[] = useMemo(() => d?.transactions ?? [], [d]);

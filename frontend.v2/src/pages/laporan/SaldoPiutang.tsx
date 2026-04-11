@@ -33,7 +33,7 @@ const SaldoPiutang = () => {
     search: debouncedSearch || undefined,
     status: statusFilter !== 'all' ? statusFilter : undefined,
   });
-  const customers: PiutangCustomer[] = (data as { data?: PiutangCustomer[] })?.data ?? [];
+  const customers: PiutangCustomer[] = (data?.data as PiutangCustomer[]) ?? [];
 
   const withDebt = customers.filter(c => c.balance > 0);
   const total = customers.reduce((s, c) => s + c.balance, 0);
