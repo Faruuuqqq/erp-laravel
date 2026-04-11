@@ -40,6 +40,8 @@ export const useCustomers = (params?: CustomerQueryParams) => {
   return useQuery({
     queryKey: customerKeys.list(params),
     queryFn: () => api.get<PaginatedResponse<Customer>>('/customers', params),
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 };
 

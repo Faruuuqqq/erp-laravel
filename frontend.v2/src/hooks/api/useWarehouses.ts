@@ -67,7 +67,7 @@ export const useWarehouse = (id: string) => {
 export const useCreateWarehouse = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: Record<string, unknown>) => api.post('/warehouses', data),
+    mutationFn: (data: Record<string, unknown>) => api.post('/warehouses', transformToBackend(data)),
     onMutate: async (newWarehouse) => {
       await queryClient.cancelQueries({ queryKey: warehouseKeys.lists() });
       const previousWarehouses = queryClient.getQueryData(warehouseKeys.lists());
@@ -100,7 +100,7 @@ export const useUpdateWarehouse = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: Record<string, unknown> }) =>
-      api.put(`/warehouses/${id}`, data),
+      api.put(`/warehouses/${id}`, transformToBackend(data)),
     onMutate: async ({ id, data }) => {
       await queryClient.cancelQueries({ queryKey: warehouseKeys.detail(id) });
       const previousWarehouse = queryClient.getQueryData(warehouseKeys.detail(id));

@@ -1,0 +1,212 @@
+================================================================================
+         "SELECTED STATUS IS INVALID" ERROR - INVESTIGATION COMPLETE
+================================================================================
+
+Investigation Date: 2026-04-11
+Status: Complete Analysis with Root Cause Identified
+
+================================================================================
+EXECUTIVE SUMMARY
+================================================================================
+
+ERROR: "The selected status is invalid" appears when trying to save Sales or 
+       Gudang records with status selection.
+
+ROOT CAUSE: Frontend sends Indonesian status values ('aktif'/'nonaktif') but 
+            backend validation expects English values ('active'/'inactive').
+
+SEVERITY: High - Blocks core functionality (Sales & Gudang master data management)
+
+SCOPE AFFECTED:
+  - Sales Rep creation/update
+  - Warehouse (Gudang) creation/update
+
+================================================================================
+KEY FINDINGS
+================================================================================
+
+1. BACKEND VALIDATION (CORRECT)
+   ✓ SalesRepController validates: 'in:active,inactive'
+   ✓ WarehouseController validates: 'in:active,inactive'
+   ✓ Database enums defined as: ['active', 'inactive']
+   ✓ All database records store: 'active' or 'inactive'
+
+2. FRONTEND SENDING (WRONG)
+   ✗ Sales.tsx sends: status = 'aktif' (Indonesian)
+   ✗ Gudang.tsx sends: status = 'aktif' (Indonesian)
+   ✗ Types define: 'aktif' | 'nonaktif' (Indonesian)
+   ✗ No transformation layer in API hooks
+
+3. MISMATCH SUMMARY
+   Frontend UI: Indonesian ("Aktif" / "Nonaktif")
+   Frontend Code: Indonesian ('aktif' / 'nonaktif')
+   Backend API: English ('active' / 'inactive')
+   Database: English (ENUM values)
+
+================================================================================
+AFFECTED FILES & LINE NUMBERS
+================================================================================
+
+BACKEND (Correct - No Changes Needed):
+  D:\projectan\erp_laravel\backend\app\Http\Controllers\Api\SalesRepController.php
+    Line 27: 'status' => ['nullable', 'in:active,inactive']
+    Line 45: 'status' => ['nullable', 'in:active,inactive']
+
+  D:\projectan\erp_laravel\backend\app\Http\Controllers\Api\WarehouseController.php
+    Line 25: 'status' => ['nullable', 'in:active,inactive']
+    Line 41: 'status' => ['nullable', 'in:active,inactive']
+
+  D:\projectan\erp_laravel\backend\database\migrations\2026_02_28_000040_create_parties_tables.php
+    Line 42: $table->enum('status', ['active', 'inactive'])->default('active');
+
+  D:\projectan\erp_laravel\backend\database\migrations\2026_02_28_000020_create_warehouses_table.php
+    Line 15: $table->enum('status', ['active', 'inactive'])->default('active');
+
+FRONTEND (Requires Fixes):
+  D:\projectan\erp_laravel\frontend.v2\src\types\api.ts
+    Line 97: status: 'aktif' | 'nonaktif' (Warehouse interface)
+    Line 107: status?: 'aktif' | 'nonaktif' (SalesRep interface)
+
+  D:\projectan\erp_laravel\frontend.v2\src\pages\master\Sales.tsx
+    Line 28: const BLANK_FORM = { status: 'aktif' as 'aktif' | 'nonaktif' }
+    Line 60: const payload = { status: form.status } ← sends 'aktif'
+    Line 212-216: Select options with values "aktif"/"nonaktif"
+
+  D:\projectan\erp_laravel\frontend.v2\src\pages\master\Gudang.tsx
+    Line 29: status: 'aktif' | 'nonaktif' (interface definition)
+    Line 64: status: form.status ← sends 'aktif'
+    Line 207-211: Select options with values "aktif"/"nonaktif"
+
+  D:\projectan\erp_laravel\frontend.v2\src\hooks\api\useSalesReps.ts
+    No status transformation in create/update mutations
+
+  D:\projectan\erp_laravel\frontend.v2\src\hooks/api/useWarehouses.ts
+    No status transformation in create/update mutations
+
+================================================================================
+ERROR REPRODUCTION
+================================================================================
+
+Step 1: Open Frontend → Master → Sales
+Step 2: Click "Tambah Sales" button
+Step 3: Fill form:
+        - Nama Sales: "Test"
+        - Status: Select "Aktif"
+Step 4: Click "Simpan"
+Step 5: Error Toast: "The selected status is invalid."
+
+Network Request Shows:
+  POST /api/sales
+  Body: { status: 'aktif' }  ← Frontend sends 'aktif'
+  Response: Validation Error ← Backend expects 'active'
+
+================================================================================
+DOCUMENTATION CREATED
+================================================================================
+
+The following investigation documents have been generated:
+
+1. STATUS_VALIDATION_MISMATCH.md (Comprehensive technical details)
+2. INVESTIGATION_SUMMARY.txt (Visual overview with ASCII diagrams)
+3. VALIDATION_ERROR_ANALYSIS.md (Error flow and code examples)
+4. QUICK_REFERENCE.md (Quick lookup table with line numbers)
+5. INVESTIGATION_FINDINGS.md (Detailed findings with all context)
+6. INVESTIGATION_COMPLETE.txt (This file)
+
+All files located in: D:\projectan\erp_laravel\
+
+================================================================================
+SOLUTION APPROACH
+================================================================================
+
+RECOMMENDED: Add transformation layer in API hooks
+
+Implementation:
+  1. Create status mapping constants
+  2. Transform status in useCreateSalesRep/useCreateWarehouse
+  3. Transform status in useUpdateSalesRep/useUpdateWarehouse
+  4. Keep frontend UI in Indonesian
+  5. Send English values to backend
+
+Mapping:
+  Outgoing: 'aktif' → 'active', 'nonaktif' → 'inactive'
+  Incoming: 'active' → 'aktif', 'inactive' → 'nonaktif'
+
+Benefits:
+  ✓ Maintains Indonesian user interface
+  ✓ Aligns with backend validation rules
+  ✓ Centralized transformation in hooks
+  ✓ Easy to maintain and extend
+  ✓ No need to change backend
+
+================================================================================
+CURRENT DATABASE STATE (VERIFIED)
+================================================================================
+
+Sales Rep:
+  id: 1
+  name: "Budi Santos"
+  status: "active"    ✓ Correct English value
+  created_at: 2026-04-11 08:38:00
+
+Warehouse:
+  id: 1
+  name: "Gudang Utama CC"
+  status: "active"    ✓ Correct English value
+  created_at: 2026-04-11 08:38:00
+
+Conclusion: Database is correctly storing English enum values.
+
+================================================================================
+VALIDATION RULES (CONFIRMED)
+================================================================================
+
+Backend Accepts:
+  ✓ status: 'active'    - Valid
+  ✓ status: 'inactive'  - Valid
+  ✓ status: null        - Valid (nullable)
+  
+Backend Rejects:
+  ✗ status: 'aktif'     - Invalid (validation error)
+  ✗ status: 'nonaktif'  - Invalid (validation error)
+  ✗ status: 'ACTIVE'    - Invalid (case sensitive)
+  ✗ status: 'Aktif'     - Invalid (wrong value)
+
+Frontend Currently Sends:
+  status: 'aktif'       - WRONG (causes validation error)
+  status: 'nonaktif'    - WRONG (causes validation error)
+
+================================================================================
+NEXT STEPS FOR RESOLUTION
+================================================================================
+
+To fix this issue, follow these steps:
+
+1. IMPLEMENT TRANSFORMATION LAYER
+   - Update useSalesReps.ts with status mapping
+   - Update useWarehouses.ts with status mapping
+
+2. UPDATE TYPE DEFINITIONS
+   - Keep internal types as 'aktif'/'nonaktif' (UI layer)
+   - Or update to 'active'/'inactive' to match backend
+
+3. UPDATE PAGES
+   - Sales.tsx - Use correct status values in payload
+   - Gudang.tsx - Use correct status values in payload
+
+4. TESTING
+   - Test Sales creation with "Aktif" status
+   - Test Sales creation with "Nonaktif" status
+   - Test Sales editing
+   - Repeat for Gudang page
+   - Verify database stores 'active'/'inactive'
+   - Verify UI displays "Aktif"/"Nonaktif"
+
+5. VERIFICATION
+   - No validation errors appear
+   - Records save successfully
+   - Status displays correctly in list
+   - Edit existing records works
+   - Both pages function without errors
+
+==================

@@ -1,0 +1,151 @@
+================================================================================
+                    STATUS VALIDATION MISMATCH INVESTIGATION
+================================================================================
+
+PROBLEM IDENTIFIED: "The selected status is invalid" error in Sales & Gudang pages
+
+================================================================================
+ROOT CAUSE ANALYSIS
+================================================================================
+
+Frontend (Indonesian UI)           →    Backend (English Validation)
+┌─────────────────────────────┐        ┌──────────────────────────────┐
+│ Sales.tsx / Gudang.tsx      │        │ SalesRepController.php       │
+│                             │        │ WarehouseController.php      │
+│ Form Options:               │        │                              │
+│  - "Aktif"                  │   ✗    │ Validation Rule:             │
+│  - "Nonaktif"               │        │ in:active,inactive           │
+│                             │        │                              │
+│ Form Value Sent:            │        │ ❌ Validation Fails          │
+│  status: 'aktif'            │        │ 'aktif' ≠ 'active'           │
+└─────────────────────────────┘        │ 'aktif' ≠ 'inactive'         │
+                                       └──────────────────────────────┘
+
+================================================================================
+EXACT VALIDATION RULES
+================================================================================
+
+SalesRepController.php (Lines 27, 45):
+  'status' => ['nullable', 'in:active,inactive']
+  ✓ Accepts: 'active', 'inactive'
+  ✗ Rejects: 'aktif', 'nonaktif'
+
+WarehouseController.php (Lines 25, 41):
+  'status' => ['nullable', 'in:active,inactive']
+  ✓ Accepts: 'active', 'inactive'
+  ✗ Rejects: 'aktif', 'nonaktif'
+
+================================================================================
+DATABASE SCHEMA CONSTRAINTS
+================================================================================
+
+sales_reps.status:
+  Type: ENUM('active', 'inactive')
+  Default: 'active'
+  File: 2026_02_28_000040_create_parties_tables.php:42
+
+warehouses.status:
+  Type: ENUM('active', 'inactive')
+  Default: 'active'
+  File: 2026_02_28_000020_create_warehouses_table.php:15
+
+Current Database Values (Verified):
+  ✓ sales_reps[1].status = "active"
+  ✓ warehouses[1].status = "active"
+
+================================================================================
+FRONTEND TYPE DEFINITIONS
+================================================================================
+
+File: frontend.v2/src/types/api.ts
+
+Warehouse interface (Line 97):
+  status: 'aktif' | 'nonaktif'
+
+SalesRep interface (Line 107):
+  status?: 'aktif' | 'nonaktif'
+
+Problem: Types specify Indonesian values but backend requires English
+
+================================================================================
+FRONTEND PAGES SENDING WRONG VALUES
+================================================================================
+
+Sales.tsx:
+  Line 28: const BLANK_FORM = { status: 'aktif' as 'aktif' | 'nonaktif' }
+  Line 60: payload = { ...form, status: form.status }  ← Sends 'aktif'
+  Line 212-216: Select options display as "Aktif"/"Nonaktif"
+  
+Gudang.tsx:
+  Line 29: status: 'aktif' | 'nonaktif'
+  Line 64: status: form.status  ← Sends 'aktif'
+  Line 207-211: Select options display as "Aktif"/"Nonaktif"
+
+================================================================================
+REQUEST/RESPONSE MISMATCH
+================================================================================
+
+Creating Sales Rep:
+  Frontend sends:   POST /sales { name: "...", status: "aktif" }
+                                           WRONG VALUE ↑
+  
+  Backend expects:  POST /sales { name: "...", status: "active" }
+                                           REQUIRED VALUE ↑
+  
+  Result:           ❌ Validation Error: "The selected status is invalid"
+
+Receiving from Backend:
+  Backend returns:  { id: 1, name: "...", status: "active" }
+                                                        ↑
+  Frontend expects: { id: 1, name: "...", status: "aktif" }
+                                                        ↑
+  Result:           Frontend type mismatch (TypeScript warning or runtime error)
+
+================================================================================
+FILES INVOLVED IN THE MISMATCH
+================================================================================
+
+Backend Controllers (CORRECT):
+  ✓ D:\projectan\erp_laravel\backend\app\Http\Controllers\Api\SalesRepController.php:27,45
+  ✓ D:\projectan\erp_laravel\backend\app\Http\Controllers\Api\WarehouseController.php:25,41
+
+Backend Models (NO TRANSFORMATION):
+  ✓ D:\projectan\erp_laravel\backend\app\Models\SalesRep.php
+  ✓ D:\projectan\erp_laravel\backend\app\Models\Warehouse.php
+
+Backend Migrations (CORRECT):
+  ✓ D:\projectan\erp_laravel\backend\database\migrations\2026_02_28_000040_create_parties_tables.php:42
+  ✓ D:\projectan\erp_laravel\backend\database\migrations\2026_02_28_000020_create_warehouses_table.php:15
+
+Frontend Types (WRONG):
+  ✗ D:\projectan\erp_laravel\frontend.v2\src\types\api.ts:97,107
+
+Frontend Pages (WRONG):
+  ✗ D:\projectan\erp_laravel\frontend.v2\src\pages\master\Sales.tsx:28,60,212-216
+  ✗ D:\projectan\erp_laravel\frontend.v2\src\pages\master\Gudang.tsx:29,64,207-211
+
+Frontend API Hooks (NO TRANSFORMATION):
+  - D:\projectan\erp_laravel\frontend.v2\src\hooks\api\useSalesReps.ts
+  - D:\projectan\erp_laravel\frontend.v2\src\hooks\api\useWarehouses.ts
+
+================================================================================
+SOLUTION APPROACH
+================================================================================
+
+RECOMMENDED: Add transformation layer in API hooks
+
+Before sending to backend:
+  'aktif' → 'active'
+  'nonaktif' → 'inactive'
+
+After receiving from backend:
+  'active' → 'aktif'
+  'inactive' → 'nonaktif'
+
+This approach:
+  ✓ Maintains Indonesian UI
+  ✓ Matches backend validation
+  ✓ Centralized transformation
+  ✓ Easy to maintain
+
+================================================================================

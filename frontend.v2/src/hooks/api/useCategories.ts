@@ -6,7 +6,9 @@ export const useCategories = () => {
   return useQuery({
     queryKey: ['categories'],
     queryFn: () => api.get<Category[]>('/categories'),
-    staleTime: 5 * 60 * 1000,
+    staleTime: 60 * 60 * 1000, // 1 hour - categories rarely change
+    gcTime: 2 * 60 * 60 * 1000, // 2 hours
+    refetchOnWindowFocus: false,
   });
 };
 

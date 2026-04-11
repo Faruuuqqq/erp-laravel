@@ -16,6 +16,8 @@ export const useSuppliers = (params?: any) => {
   return useQuery({
     queryKey: supplierKeys.list(params),
     queryFn: () => api.get<PaginatedResponse<Supplier>>('/suppliers', params),
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 };
 

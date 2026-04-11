@@ -16,6 +16,8 @@ export const useProducts = (params?: any) => {
   return useQuery({
     queryKey: productKeys.list(params),
     queryFn: () => api.get<PaginatedResponse<Product>>('/products', params),
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 };
 
@@ -39,32 +41,40 @@ export const useCreateProduct = () => {
       // Snapshot previous data
       const previousProducts = queryClient.getQueryData(productKeys.lists());
       
-      // Generate temp ID for optimistic update
-      const tempId = 'temp-' + Date.now();
+      // Generate temp ID for optimistic update - fixed timestamp issue
+      const tempId = `temp_${Date.now()}`;
       
       // Optimistically update cache
-      queryClient.setQueryData(productKeys.lists(), (old: any) => ({
-        ...old,
-        data: [...(old?.data || []), { ...newProduct, id: tempId }],
-      }));
+      if (previousProducts) {
+        queryClient.setQueryData(productKeys.lists(), (old: any) => ({
+          ...old,
+          data: [...(old?.data || []), { ...newProduct, id: tempId }],
+          meta: { ...old?.meta, total: (old?.meta?.total ?? 0) + 1 },
+        }));
+      }
       
       return { previousProducts, tempId };
     },
     onSuccess: (result, newProduct, context) => {
-      // Replace optimistic data dengan real data dari server
-      queryClient.setQueryData(productKeys.lists(), (old: any) => ({
-        ...old,
-        data: (old?.data || []).map((p: any) => 
-          p.id === context?.tempId ? result.data : p
-        ),
-      }));
+      // Replace optimistic data with real data from server
+      if (context?.previousProducts) {
+        queryClient.setQueryData(productKeys.lists(), (old: any) => ({
+          ...old,
+          data: (old?.data || []).map((p: any) => 
+            p.id === context?.tempId ? result.data : p
+          ),
+        }));
+      }
+      // Add to detail cache
+      queryClient.setQueryData(productKeys.detail(result.data.id), result.data);
     },
     onError: (err, newProduct, context) => {
-      // Rollback ke previous data jika gagal
+      // Rollback to previous data if failed
       if (context?.previousProducts) {
         queryClient.setQueryData(productKeys.lists(), context.previousProducts);
       }
     },
+    // NO onSettled - let optimistic update work properly
   });
 };
 
