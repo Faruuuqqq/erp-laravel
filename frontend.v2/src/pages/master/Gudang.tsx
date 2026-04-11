@@ -39,7 +39,7 @@ const Gudang = () => {
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<WarehouseForm>(BLANK_FORM());
 
-  const { data, isLoading } = useWarehouses({ perPage: 100 });
+  const { data, isLoading } = useWarehouses({ perPage: 20 });
   const createWh = useCreateWarehouse();
   const updateWh = useUpdateWarehouse();
   const deleteWh = useDeleteWarehouse();

@@ -43,7 +43,7 @@ const Produk = () => {
   const [form, setForm] = useState(BLANK_FORM);
 
   const debouncedSearch = useDebouncedValue(searchTerm, 300);
-  const { data: productsData, isLoading } = useProducts({ search: debouncedSearch || undefined, perPage: 200 });
+  const { data: productsData, isLoading } = useProducts({ search: debouncedSearch || undefined, perPage: 20 });
   const { data: categoriesData } = useCategories();
   const { data: warehousesData } = useWarehouses();
 

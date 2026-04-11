@@ -36,7 +36,7 @@ const Sales = () => {
   const [form, setForm] = useState(BLANK_FORM);
 
   const debouncedSearch = useDebouncedValue(searchTerm, 300);
-  const { data: salesData, isLoading } = useSalesReps({ search: debouncedSearch || undefined, perPage: 200 });
+  const { data: salesData, isLoading } = useSalesReps({ search: debouncedSearch || undefined, perPage: 20 });
   const createMutation = useCreateSalesRep();
   const updateMutation = useUpdateSalesRep();
   const deleteMutation = useDeleteSalesRep();

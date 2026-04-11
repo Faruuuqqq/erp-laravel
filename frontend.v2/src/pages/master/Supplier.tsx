@@ -1,5 +1,4 @@
 import { useState, useCallback } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { Card, CardContent } from '@/components/ui/card';
@@ -34,10 +33,9 @@ const Supplier = () => {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editItem, setEditItem] = useState<SupplierType | null>(null);
   const [form, setForm] = useState(BLANK_FORM);
-  const queryClient = useQueryClient();
 
   const debouncedSearch = useDebouncedValue(searchTerm, 300);
-  const { data: suppliersData, isLoading } = useSuppliers({ search: debouncedSearch || undefined, perPage: 200 });
+  const { data: suppliersData, isLoading } = useSuppliers({ search: debouncedSearch || undefined, perPage: 20 });
   const createMutation = useCreateSupplier();
   const updateMutation = useUpdateSupplier();
   const deleteMutation = useDeleteSupplier();

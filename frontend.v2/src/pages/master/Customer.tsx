@@ -34,7 +34,7 @@ const CustomerPage = () => {
   const { toast } = useToast();
 
   const debouncedSearch = useDebouncedValue(searchTerm, 300);
-  const { data, isLoading } = useCustomers({ per_page: 100, search: debouncedSearch || undefined });
+  const { data, isLoading } = useCustomers({ per_page: 20, search: debouncedSearch || undefined });
   const createMutation = useCreateCustomer();
   const updateMutation = useUpdateCustomer();
   const deleteMutation = useDeleteCustomer();
