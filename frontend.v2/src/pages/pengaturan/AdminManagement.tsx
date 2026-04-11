@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -117,29 +118,23 @@ const getGroupSummary = (permissions: Record<string, Record<string, boolean>>, g
 const AdminManagement = () => {
   const { isOwner } = useAuth();
   const { toast } = useToast();
-  const [admins, setAdmins] = useState<Admin[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editAdmin, setEditAdmin] = useState<Admin | null>(null);
   const [form, setForm] = useState({ name: '', email: '', password: '' });
   const [newAdminPermissions, setNewAdminPermissions] = useState<Record<string, Record<string, boolean>>>(buildDefaultPermissions());
 
-  const fetchAdmins = useCallback(async () => {
-    try {
-      setIsLoading(true);
+  const { data: adminsData, isLoading } = useQuery({
+    queryKey: ['admins'],
+    queryFn: async () => {
       const res = await apiClient.get('/admins', { params: { perPage: 100 } });
-      setAdmins(res.data.data || []);
-    } catch {
-      toast({ title: 'Error', description: 'Gagal memuat data admin', variant: 'destructive' });
-    } finally {
-      setIsLoading(false);
-    }
-  }, [toast]);
+      return res.data.data as Admin[];
+    },
+    enabled: isOwner,
+  });
 
-  useEffect(() => {
-    if (isOwner) fetchAdmins();
-  }, [isOwner, fetchAdmins]);
+  const admins = adminsData ?? [];
 
   const handleCreate = async () => {
     if (!form.name || !form.email || !form.password) {
@@ -152,7 +147,7 @@ const AdminManagement = () => {
       setForm({ name: '', email: '', password: '' });
       setNewAdminPermissions(buildDefaultPermissions());
       setIsAddOpen(false);
-      fetchAdmins();
+      queryClient.invalidateQueries({ queryKey: ['admins'] });
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Gagal menambahkan admin';
       toast({ title: 'Error', description: msg, variant: 'destructive' });
@@ -163,7 +158,7 @@ const AdminManagement = () => {
     try {
       await apiClient.patch(`/admins/${admin.id}/toggle-active`);
       toast({ title: 'Berhasil', description: `Status ${admin.name} telah diubah` });
-      fetchAdmins();
+      queryClient.invalidateQueries({ queryKey: ['admins'] });
     } catch {
       toast({ title: 'Error', description: 'Gagal mengubah status admin', variant: 'destructive' });
     }
@@ -173,7 +168,7 @@ const AdminManagement = () => {
     try {
       await apiClient.delete(`/admins/${admin.id}`);
       toast({ title: 'Admin dihapus', description: `${admin.name} telah dihapus`, variant: 'destructive' });
-      fetchAdmins();
+      queryClient.invalidateQueries({ queryKey: ['admins'] });
     } catch {
       toast({ title: 'Error', description: 'Gagal menghapus admin', variant: 'destructive' });
     }
@@ -283,7 +278,7 @@ const AdminManagement = () => {
         <PermissionEditorDialog
           admin={editAdmin}
           onClose={() => setEditAdmin(null)}
-          onSaved={() => { setEditAdmin(null); fetchAdmins(); }}
+          onSaved={() => { setEditAdmin(null); queryClient.invalidateQueries({ queryKey: ['admins'] }); }}
         />
       )}
     </MainLayout>

@@ -26,14 +26,14 @@ const KartuStok = () => {
 
   const { data: mutationsData, isLoading } = useQuery({
     queryKey: ['stock-mutations', selectedProduct, fromDate, toDate],
-    queryFn: () => api.get<{ data: Array<{ id: string; productId: string; type: string; quantity: number; balance: number; reference: string; notes: string; createdAt: string }> }>(
-      '/stock-mutations',
-      { productId: selectedProduct, from: fromDate || undefined, to: toDate || undefined } as Record<string, unknown>
+    queryFn: () => api.get<{ data: { product: any, mutations: Array<{ id: string; productId: string; type: string; quantity: number; stockAfter: number; reference: string; notes: string; createdAt: string }> } }>(
+      '/info/kartu-stok',
+      { product_id: selectedProduct, from: fromDate || undefined, to: toDate || undefined } as Record<string, unknown>
     ),
     enabled: !!selectedProduct,
   });
 
-  const mutations = mutationsData?.data ?? [];
+  const mutations = mutationsData?.data?.mutations ?? [];
   const totalMasuk = mutations.filter(m => m.type === 'IN' || m.type === 'in').reduce((s, m) => s + m.quantity, 0);
   const totalKeluar = mutations.filter(m => m.type === 'OUT' || m.type === 'out').reduce((s, m) => s + m.quantity, 0);
 
@@ -43,7 +43,7 @@ const KartuStok = () => {
     referensi: m.reference,
     masuk: (m.type === 'IN' || m.type === 'in') ? m.quantity : 0,
     keluar: (m.type === 'OUT' || m.type === 'out') ? m.quantity : 0,
-    saldo: m.balance,
+    saldo: m.stockAfter,
   }));
 
   return (
@@ -178,7 +178,7 @@ const KartuStok = () => {
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3 font-bold tabular-nums text-base">{m.balance}</td>
+                    <td className="px-4 py-3 font-bold tabular-nums text-base">{m.stockAfter}</td>
                   </tr>
                 ))}
                 <tr className="bg-muted/40 border-t-2">

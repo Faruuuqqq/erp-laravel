@@ -11,10 +11,12 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { Plus, Search, Pencil, Trash2, MapPin, User, Warehouse } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2, Warehouse } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { StatCard } from '@/components/ui/StatCard';
-import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -84,47 +86,11 @@ const Gudang = () => {
     }
   }, [deleteWh, toast]);
 
-  const setField = useCallback(<K extends keyof WarehouseForm>(key: K, val: WarehouseForm[K]) =>
-    setForm(p => ({ ...p, [key]: val })), []);
+   const setField = useCallback(<K extends keyof WarehouseForm>(key: K, val: WarehouseForm[K]) =>
+     setForm(p => ({ ...p, [key]: val })), []);
 
-  const GudangFormDialog = ({ open, onOpenChange, title }: { open: boolean; onOpenChange: (v: boolean) => void; title: string }) => (
-    <Dialog open={open} onOpenChange={v => { onOpenChange(v); if (!v) { setEditId(null); setForm(BLANK_FORM()); } }}>
-      <DialogContent>
-        <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
-        <div className="space-y-4 pt-1">
-          <div className="space-y-1.5"><Label>Nama Gudang *</Label>
-            <Input placeholder="Nama gudang" value={form.name} onChange={e => setField('name', e.target.value)} />
-          </div>
-          <div className="space-y-1.5"><Label>Alamat</Label>
-            <Input placeholder="Alamat gudang" value={form.address} onChange={e => setField('address', e.target.value)} />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5"><Label>Pengelola</Label>
-              <Input placeholder="Nama pengelola" value={form.manager} onChange={e => setField('manager', e.target.value)} />
-            </div>
-            <div className="space-y-1.5"><Label>Status</Label>
-              <Select value={form.status} onValueChange={(v: 'aktif' | 'nonaktif') => setField('status', v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="aktif">Aktif</SelectItem>
-                  <SelectItem value="nonaktif">Nonaktif</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>Batal</Button>
-            <Button onClick={handleSave} disabled={createWh.isPending || updateWh.isPending}>
-              {(createWh.isPending || updateWh.isPending) ? 'Menyimpan...' : 'Simpan'}
-            </Button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-
-  return (
-    <MainLayout title="Gudang" subtitle="Kelola daftar gudang penyimpanan">
+   return (
+     <MainLayout title="Gudang" subtitle="Kelola daftar gudang penyimpanan">
       <div className="mb-5 grid gap-4 sm:grid-cols-3">
         <StatCard title="Total Gudang" value={`${list.length} Gudang`} icon={<Warehouse className="h-5 w-5" />} color="primary" />
         <StatCard title="Gudang Aktif" value={`${activeCount} Aktif`} icon={<Warehouse className="h-5 w-5" />} color="success" />
@@ -143,81 +109,125 @@ const Gudang = () => {
         )}
       </div>
 
-      {isLoading ? (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-44 rounded-lg" />)}
-        </div>
-      ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filtered.length === 0 ? (
-            <div className="col-span-3 py-12 text-center text-muted-foreground">Tidak ada gudang yang sesuai.</div>
-          ) : filtered.map(g => (
-            <Card key={g.id} className="transition-shadow hover:shadow-md">
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 shrink-0">
-                      <Warehouse className="h-5 w-5 text-primary" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-mono text-muted-foreground">{g.code}</span>
-                        <Badge variant={g.status === 'aktif' ? 'default' : 'secondary'} className="text-xs">
-                          {g.status === 'aktif' ? 'Aktif' : 'Nonaktif'}
-                        </Badge>
-                      </div>
-                      <CardTitle className="mt-0.5 text-base">{g.name}</CardTitle>
-                    </div>
-                  </div>
-                  <div className="flex gap-1 shrink-0">
-                    {canEdit('master.warehouses') && (
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(g)}><Pencil className="h-3.5 w-3.5" /></Button>
-                    )}
-                    {canDelete('master.warehouses') && (
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Hapus Gudang</AlertDialogTitle>
-                            <AlertDialogDescription>Hapus <strong>{g.name}</strong>? Tindakan ini tidak dapat dibatalkan.</AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Batal</AlertDialogCancel>
-                            <AlertDialogAction className="bg-destructive hover:bg-destructive/90" onClick={() => handleDelete(g.id, g.name)}>Hapus</AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    )}
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <div className="flex items-start gap-2 text-sm text-muted-foreground">
-                  <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                  <span className="line-clamp-2 text-xs">{g.address || '—'}</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <User className="h-3.5 w-3.5 shrink-0" />
-                  <span className="text-xs">Pengelola: <span className="font-medium text-foreground">{g.manager || '—'}</span></span>
-                </div>
-                {g.productCount !== undefined && (
-                  <div className="border-t pt-2.5 mt-1">
-                    <p className="text-xs text-muted-foreground">Produk tersimpan</p>
-                    <p className="font-bold text-primary">{g.productCount} produk</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+       {isLoading ? (
+         <div className="py-12 text-center text-muted-foreground">Memuat data...</div>
+       ) : (
+         <Card>
+           <CardContent className="p-0">
+             <div className="overflow-x-auto">
+               <Table>
+                 <TableHeader>
+                   <TableRow>
+                     <TableHead>Kode</TableHead>
+                     <TableHead>Nama Gudang</TableHead>
+                     <TableHead>Alamat</TableHead>
+                     <TableHead>Pengelola</TableHead>
+                     <TableHead>Status</TableHead>
+                     {(canEdit('master.warehouses') || canDelete('master.warehouses')) && <TableHead className="text-center">Aksi</TableHead>}
+                   </TableRow>
+                 </TableHeader>
+                 <TableBody>
+                   {filtered.length === 0 ? (
+                     <TableRow>
+                       <TableCell colSpan={(canEdit('master.warehouses') || canDelete('master.warehouses')) ? 6 : 5} className="py-10 text-center text-muted-foreground">Tidak ada gudang yang sesuai.</TableCell>
+                     </TableRow>
+                   ) : filtered.map(g => (
+                     <TableRow key={g.id}>
+                       <TableCell className="font-mono text-xs text-primary">{g.code}</TableCell>
+                       <TableCell className="font-medium">{g.name}</TableCell>
+                       <TableCell className="text-muted-foreground text-sm max-w-48 line-clamp-2">{g.address || '—'}</TableCell>
+                       <TableCell className="text-muted-foreground">{g.manager || '—'}</TableCell>
+                       <TableCell>
+                         <Badge variant={g.status === 'aktif' ? 'default' : 'secondary'} className="text-xs">
+                           {g.status === 'aktif' ? 'Aktif' : 'Nonaktif'}
+                         </Badge>
+                       </TableCell>
+                       {(canEdit('master.warehouses') || canDelete('master.warehouses')) && (
+                         <TableCell>
+                           <div className="flex justify-center gap-1">
+                             {canEdit('master.warehouses') && (
+                               <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(g)}>
+                                 <Pencil className="h-3.5 w-3.5" />
+                               </Button>
+                             )}
+                             {canDelete('master.warehouses') && (
+                               <AlertDialog>
+                                 <AlertDialogTrigger asChild>
+                                   <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive">
+                                     <Trash2 className="h-3.5 w-3.5" />
+                                   </Button>
+                                 </AlertDialogTrigger>
+                                 <AlertDialogContent>
+                                   <AlertDialogHeader>
+                                     <AlertDialogTitle>Hapus Gudang</AlertDialogTitle>
+                                     <AlertDialogDescription>Hapus <strong>{g.name}</strong>? Tindakan ini tidak dapat dibatalkan.</AlertDialogDescription>
+                                   </AlertDialogHeader>
+                                   <AlertDialogFooter>
+                                     <AlertDialogCancel>Batal</AlertDialogCancel>
+                                     <AlertDialogAction className="bg-destructive hover:bg-destructive/90" onClick={() => handleDelete(g.id, g.name)}>Hapus</AlertDialogAction>
+                                   </AlertDialogFooter>
+                                 </AlertDialogContent>
+                               </AlertDialog>
+                             )}
+                           </div>
+                         </TableCell>
+                       )}
+                     </TableRow>
+                   ))}
+                 </TableBody>
+               </Table>
+             </div>
+           </CardContent>
+         </Card>
+       )}
 
-      <GudangFormDialog open={isAddOpen} onOpenChange={setIsAddOpen} title="Tambah Gudang Baru" />
-      <GudangFormDialog open={!!editId} onOpenChange={v => { if (!v) { setEditId(null); setForm(BLANK_FORM()); } }} title="Edit Gudang" />
-    </MainLayout>
-  );
-};
+       <Dialog open={isAddOpen || !!editId} onOpenChange={v => {
+         if (!v) { setIsAddOpen(false); setEditId(null); setForm(BLANK_FORM()); }
+       }}>
+         <DialogContent>
+           <DialogHeader>
+             <DialogTitle>{editId ? 'Edit Gudang' : 'Tambah Gudang Baru'}</DialogTitle>
+           </DialogHeader>
+           <div className="space-y-4 pt-1">
+             <div className="space-y-1.5">
+               <Label>Nama Gudang *</Label>
+               <Input placeholder="Nama gudang" value={form.name} onChange={e => setField('name', e.target.value)} />
+             </div>
+             <div className="space-y-1.5">
+               <Label>Alamat</Label>
+               <Input placeholder="Alamat gudang" value={form.address} onChange={e => setField('address', e.target.value)} />
+             </div>
+             <div className="grid grid-cols-2 gap-4">
+               <div className="space-y-1.5">
+                 <Label>Pengelola</Label>
+                 <Input placeholder="Nama pengelola" value={form.manager} onChange={e => setField('manager', e.target.value)} />
+               </div>
+               <div className="space-y-1.5">
+                 <Label>Status</Label>
+                 <Select value={form.status} onValueChange={(v: 'aktif' | 'nonaktif') => setField('status', v)}>
+                   <SelectTrigger><SelectValue /></SelectTrigger>
+                   <SelectContent>
+                     <SelectItem value="aktif">Aktif</SelectItem>
+                     <SelectItem value="nonaktif">Nonaktif</SelectItem>
+                   </SelectContent>
+                 </Select>
+               </div>
+             </div>
+             <div className="flex justify-end gap-2 pt-2">
+               <Button variant="outline" onClick={() => {
+                 setIsAddOpen(false);
+                 setEditId(null);
+                 setForm(BLANK_FORM());
+               }}>Batal</Button>
+               <Button onClick={handleSave} disabled={createWh.isPending || updateWh.isPending}>
+                 {(createWh.isPending || updateWh.isPending) ? 'Menyimpan...' : 'Simpan'}
+               </Button>
+             </div>
+           </div>
+         </DialogContent>
+       </Dialog>
+     </MainLayout>
+   );
+ };
 
-export default Gudang;
+ export default Gudang;

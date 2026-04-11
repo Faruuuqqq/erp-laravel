@@ -114,61 +114,17 @@ const Produk = () => {
     }
   };
 
-  const handleExport = () => {
-    const rows = [['Kode', 'Nama', 'Kategori', 'Harga Beli', 'Harga Jual', 'Stok', 'Satuan', 'Min Stok'],
-      ...filtered.map(p => [p.code ?? '', p.name, p.categoryName ?? '', formatCurrency(Number(p.buyPrice)), formatCurrency(Number(p.sellPrice)), p.stock, p.unit, p.minimumStock])];
-    const csv = rows.map(r => r.join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = 'produk.csv'; a.click();
-    URL.revokeObjectURL(url);
-  };
+   const handleExport = () => {
+     const rows = [['Kode', 'Nama', 'Kategori', 'Harga Beli', 'Harga Jual', 'Stok', 'Satuan', 'Min Stok'],
+       ...filtered.map(p => [p.code ?? '', p.name, p.categoryName ?? '', formatCurrency(Number(p.buyPrice)), formatCurrency(Number(p.sellPrice)), p.stock, p.unit, p.minimumStock])];
+     const csv = rows.map(r => r.join(',')).join('\n');
+     const blob = new Blob([csv], { type: 'text/csv' });
+     const url = URL.createObjectURL(blob);
+     const a = document.createElement('a'); a.href = url; a.download = 'produk.csv'; a.click();
+     URL.revokeObjectURL(url);
+   };
 
-  const ProdukForm = ({ open, onOpenChange, title }: { open: boolean; onOpenChange: (v: boolean) => void; title: string }) => (
-    <Dialog open={open} onOpenChange={v => { onOpenChange(v); if (!v) setEditItem(null); }}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
-        <div className="space-y-4 pt-1">
-          <div className="space-y-1.5"><Label>Nama Produk *</Label>
-            <Input placeholder="Nama produk" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} /></div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5"><Label>Kategori *</Label>
-              <Select value={form.categoryId} onValueChange={v => setForm(p => ({ ...p, categoryId: v }))}>
-                <SelectTrigger><SelectValue placeholder="Pilih kategori" /></SelectTrigger>
-                <SelectContent>{categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5"><Label>Satuan</Label>
-              <Input placeholder="Pcs, Kg, dll" value={form.unit} onChange={e => setForm(p => ({ ...p, unit: e.target.value }))} /></div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5"><Label>Harga Beli (Rp)</Label>
-              <Input type="number" placeholder="0" value={form.buyPrice} onChange={e => setForm(p => ({ ...p, buyPrice: e.target.value }))} /></div>
-            <div className="space-y-1.5"><Label>Harga Jual (Rp)</Label>
-              <Input type="number" placeholder="0" value={form.sellPrice} onChange={e => setForm(p => ({ ...p, sellPrice: e.target.value }))} /></div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5"><Label>Stok Awal</Label>
-              <Input type="number" placeholder="0" value={form.stock} onChange={e => setForm(p => ({ ...p, stock: e.target.value }))} /></div>
-            <div className="space-y-1.5"><Label>Min. Stok</Label>
-              <Input type="number" placeholder="0" value={form.minimumStock} onChange={e => setForm(p => ({ ...p, minimumStock: e.target.value }))} /></div>
-          </div>
-          <div className="space-y-1.5"><Label>Gudang</Label>
-            <Select value={form.warehouseId} onValueChange={v => setForm(p => ({ ...p, warehouseId: v }))}>
-              <SelectTrigger><SelectValue placeholder="Pilih gudang" /></SelectTrigger>
-              <SelectContent>{warehouses.map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}</SelectContent>
-            </Select>
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>Batal</Button>
-            <Button onClick={handleSave} disabled={createMutation.isPending || updateMutation.isPending}>Simpan</Button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-
-  return (
+   return (
     <MainLayout title="Produk" subtitle="Kelola daftar produk dan kategori">
       <div className="mb-5 grid gap-4 sm:grid-cols-4">
         <StatCard title="Total Produk" value={`${products.length} Produk`} icon={<Package className="h-5 w-5" />} color="primary" />
@@ -293,12 +249,75 @@ const Produk = () => {
             </Table>
           </div>
         </CardContent>
-      </Card>
+       </Card>
 
-      <ProdukForm open={isAddOpen} onOpenChange={setIsAddOpen} title="Tambah Produk Baru" />
-      <ProdukForm open={!!editItem} onOpenChange={v => { if (!v) setEditItem(null); }} title="Edit Produk" />
-    </MainLayout>
-  );
-};
+       <Dialog open={isAddOpen || !!editItem} onOpenChange={v => {
+         if (!v) { setIsAddOpen(false); setEditItem(null); setForm(BLANK_FORM); }
+       }}>
+         <DialogContent className="max-w-lg">
+           <DialogHeader>
+             <DialogTitle>{editItem ? 'Edit Produk' : 'Tambah Produk Baru'}</DialogTitle>
+           </DialogHeader>
+           <div className="space-y-4 pt-1">
+             <div className="space-y-1.5">
+               <Label>Nama Produk *</Label>
+               <Input placeholder="Nama produk" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
+             </div>
+             <div className="grid grid-cols-2 gap-4">
+               <div className="space-y-1.5">
+                 <Label>Kategori *</Label>
+                 <Select value={form.categoryId} onValueChange={v => setForm(p => ({ ...p, categoryId: v }))}>
+                   <SelectTrigger><SelectValue placeholder="Pilih kategori" /></SelectTrigger>
+                   <SelectContent>{categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+                 </Select>
+               </div>
+               <div className="space-y-1.5">
+                 <Label>Satuan</Label>
+                 <Input placeholder="Pcs, Kg, dll" value={form.unit} onChange={e => setForm(p => ({ ...p, unit: e.target.value }))} />
+               </div>
+             </div>
+             <div className="grid grid-cols-2 gap-4">
+               <div className="space-y-1.5">
+                 <Label>Harga Beli (Rp)</Label>
+                 <Input type="number" placeholder="0" value={form.buyPrice} onChange={e => setForm(p => ({ ...p, buyPrice: e.target.value }))} />
+               </div>
+               <div className="space-y-1.5">
+                 <Label>Harga Jual (Rp)</Label>
+                 <Input type="number" placeholder="0" value={form.sellPrice} onChange={e => setForm(p => ({ ...p, sellPrice: e.target.value }))} />
+               </div>
+             </div>
+             <div className="grid grid-cols-2 gap-4">
+               <div className="space-y-1.5">
+                 <Label>Stok Awal</Label>
+                 <Input type="number" placeholder="0" value={form.stock} onChange={e => setForm(p => ({ ...p, stock: e.target.value }))} />
+               </div>
+               <div className="space-y-1.5">
+                 <Label>Min. Stok</Label>
+                 <Input type="number" placeholder="0" value={form.minimumStock} onChange={e => setForm(p => ({ ...p, minimumStock: e.target.value }))} />
+               </div>
+             </div>
+             <div className="space-y-1.5">
+               <Label>Gudang</Label>
+               <Select value={form.warehouseId} onValueChange={v => setForm(p => ({ ...p, warehouseId: v }))}>
+                 <SelectTrigger><SelectValue placeholder="Pilih gudang" /></SelectTrigger>
+                 <SelectContent>{warehouses.map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}</SelectContent>
+               </Select>
+             </div>
+             <div className="flex justify-end gap-2 pt-2">
+               <Button variant="outline" onClick={() => {
+                 setIsAddOpen(false);
+                 setEditItem(null);
+                 setForm(BLANK_FORM);
+               }}>Batal</Button>
+               <Button onClick={handleSave} disabled={createMutation.isPending || updateMutation.isPending}>
+                 {createMutation.isPending || updateMutation.isPending ? 'Menyimpan...' : 'Simpan'}
+               </Button>
+             </div>
+           </div>
+         </DialogContent>
+       </Dialog>
+     </MainLayout>
+   );
+ };
 
-export default Produk;
+ export default Produk;

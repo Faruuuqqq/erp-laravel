@@ -21,7 +21,6 @@ const Login = () => {
   const handleRoleChange = (role: 'owner' | 'admin') => {
     setSelectedRole(role);
     setEmail(role === 'owner' ? 'owner@tokosync.id' : 'admin@tokosync.id');
-    setPassword('');
     setError('');
   };
 

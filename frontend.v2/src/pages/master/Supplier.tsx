@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { Card, CardContent } from '@/components/ui/card';
@@ -33,6 +34,7 @@ const Supplier = () => {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editItem, setEditItem] = useState<SupplierType | null>(null);
   const [form, setForm] = useState(BLANK_FORM);
+  const queryClient = useQueryClient();
 
   const debouncedSearch = useDebouncedValue(searchTerm, 300);
   const { data: suppliersData, isLoading } = useSuppliers({ search: debouncedSearch || undefined, perPage: 200 });
@@ -63,6 +65,7 @@ const Supplier = () => {
         setIsAddOpen(false);
       }
       setForm(BLANK_FORM);
+      queryClient.invalidateQueries({ queryKey: ['suppliers'] });
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Gagal menyimpan supplier';
       toast({ title: 'Error', description: msg, variant: 'destructive' });
@@ -73,46 +76,21 @@ const Supplier = () => {
     try {
       await deleteMutation.mutateAsync(id);
       toast({ title: 'Supplier dihapus', description: `${name} telah dihapus.`, variant: 'destructive' });
+      queryClient.invalidateQueries({ queryKey: ['suppliers'] });
     } catch {
       toast({ title: 'Error', description: 'Gagal menghapus supplier', variant: 'destructive' });
     }
   };
 
-  const handleExport = () => {
-    const rows = [['Kode', 'Nama', 'Telepon', 'Email', 'Alamat', 'Total Utang'],
-      ...suppliers.map(s => [s.code ?? '', s.name, s.phone ?? '', s.email ?? '', s.address ?? '', formatCurrency(Number(s.balance ?? 0))])];
-    const csv = rows.map(r => r.join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = 'supplier.csv'; a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const FormDialog = ({ open, onOpenChange, title }: { open: boolean; onOpenChange: (v: boolean) => void; title: string }) => (
-    <Dialog open={open} onOpenChange={v => { onOpenChange(v); if (!v) setEditItem(null); }}>
-      <DialogContent>
-        <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
-        <div className="space-y-4 pt-1">
-          <div className="space-y-1.5"><Label>Nama Supplier *</Label>
-            <Input placeholder="Nama supplier" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} /></div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5"><Label>No. Telepon</Label>
-              <Input placeholder="021-..." value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} /></div>
-            <div className="space-y-1.5"><Label>Email</Label>
-              <Input type="email" placeholder="email@..." value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} /></div>
-          </div>
-          <div className="space-y-1.5"><Label>Alamat</Label>
-            <Input placeholder="Alamat lengkap" value={form.address} onChange={e => setForm(p => ({ ...p, address: e.target.value }))} /></div>
-          <div className="space-y-1.5"><Label>No. Rekening</Label>
-            <Input placeholder="Bank — No. Rek" value={form.noRekening} onChange={e => setForm(p => ({ ...p, noRekening: e.target.value }))} /></div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => { onOpenChange(false); setEditItem(null); setForm(BLANK_FORM); }}>Batal</Button>
-            <Button onClick={handleSave} disabled={createMutation.isPending || updateMutation.isPending}>Simpan</Button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
+   const handleExport = () => {
+     const rows = [['Kode', 'Nama', 'Telepon', 'Email', 'Alamat', 'Total Utang'],
+       ...suppliers.map(s => [s.code ?? '', s.name, s.phone ?? '', s.email ?? '', s.address ?? '', formatCurrency(Number(s.balance ?? 0))])];
+     const csv = rows.map(r => r.join(',')).join('\n');
+     const blob = new Blob([csv], { type: 'text/csv' });
+     const url = URL.createObjectURL(blob);
+     const a = document.createElement('a'); a.href = url; a.download = 'supplier.csv'; a.click();
+     URL.revokeObjectURL(url);
+   };
 
   return (
     <MainLayout title="Supplier" subtitle="Kelola data supplier toko Anda">
@@ -210,8 +188,47 @@ const Supplier = () => {
         </CardContent>
       </Card>
 
-      <FormDialog open={isAddOpen} onOpenChange={setIsAddOpen} title="Tambah Supplier Baru" />
-      <FormDialog open={!!editItem} onOpenChange={v => { if (!v) setEditItem(null); }} title="Edit Supplier" />
+      <Dialog open={isAddOpen || !!editItem} onOpenChange={v => {
+        if (!v) { setIsAddOpen(false); setEditItem(null); setForm(BLANK_FORM); }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editItem ? 'Edit Supplier' : 'Tambah Supplier Baru'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">Nama Supplier *</Label>
+              <Input id="name" placeholder="Masukkan nama supplier" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="phone">Telepon</Label>
+              <Input id="phone" placeholder="08xxxxxxxxxx" value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input id="email" type="email" placeholder="supplier@example.com" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="address">Alamat</Label>
+              <Input id="address" placeholder="Masukkan alamat supplier" value={form.address} onChange={e => setForm(p => ({ ...p, address: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="noRekening">No. Rekening</Label>
+              <Input id="noRekening" placeholder="Masukkan nomor rekening" value={form.noRekening} onChange={e => setForm(p => ({ ...p, noRekening: e.target.value }))} />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-4">
+            <Button variant="outline" onClick={() => {
+              setIsAddOpen(false);
+              setEditItem(null);
+              setForm(BLANK_FORM);
+            }}>Batal</Button>
+            <Button onClick={handleSave} disabled={createMutation.isPending || updateMutation.isPending}>
+              {createMutation.isPending || updateMutation.isPending ? 'Menyimpan...' : 'Simpan'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </MainLayout>
   );
 };

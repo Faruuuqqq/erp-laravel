@@ -7,7 +7,7 @@ export const useLogin = () => {
     mutationFn: (credentials: LoginRequest) =>
       api.post<LoginResponse>('/login', credentials),
     onSuccess: (response) => {
-      const { token, user } = response.data;
+      const { token, user } = response;
       localStorage.setItem('auth_token', token);
       localStorage.setItem('user', JSON.stringify(user));
     },

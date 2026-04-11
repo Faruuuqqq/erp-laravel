@@ -34,12 +34,12 @@ const CustomerPage = () => {
   const { toast } = useToast();
 
   const debouncedSearch = useDebouncedValue(searchTerm, 300);
-  const { data, isLoading, refetch } = useCustomers({ per_page: 100, search: debouncedSearch });
+  const { data, isLoading } = useCustomers({ per_page: 100, search: debouncedSearch || undefined });
   const createMutation = useCreateCustomer();
   const updateMutation = useUpdateCustomer();
   const deleteMutation = useDeleteCustomer();
 
-  const customers = (data?.data?.data ?? []) as Customer[];
+  const customers = (data?.data ?? []) as Customer[];
 
   const totalPiutang = customers.reduce((s, c) => s + (c.balance || 0), 0);
   const overLimit = customers.filter(c => (c.creditLimit || 0) > 0 && (c.balance || 0) > (c.creditLimit || 0)).length;
@@ -65,58 +65,30 @@ const CustomerPage = () => {
         setIsAddOpen(false);
       }
       setForm({ name: '', phone: '', email: '', address: '', credit_limit: '10000000' });
-      refetch();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Gagal menyimpan customer';
       toast({ title: 'Error', description: msg, variant: 'destructive' });
     }
   };
 
-  const handleDelete = async (id: string, name: string) => {
-    try {
-      await deleteMutation.mutateAsync(id);
-      toast({ title: 'Customer dihapus', description: `${name} telah dihapus.`, variant: 'destructive' });
-      refetch();
-    } catch {
-      toast({ title: 'Error', description: 'Gagal menghapus customer', variant: 'destructive' });
-    }
-  };
-
-   const handleExport = () => {
-     const rows = [['Kode', 'Nama', 'Telepon', 'Email', 'Alamat', 'Total Piutang', 'Limit Kredit'],
-     ...customers.map(c => [`CUS-${c.id}`, c.name, c.phone, c.email || '', c.address || '', formatCurrency(c.balance), formatCurrency(c.creditLimit || 0)])];
-     const csv = rows.map(r => r.join(',')).join('\n');
-     const blob = new Blob([csv], { type: 'text/csv' });
-     const url = URL.createObjectURL(blob);
-     const a = document.createElement('a'); a.href = url; a.download = 'customer.csv'; a.click();
-     URL.revokeObjectURL(url);
+   const handleDelete = async (id: string, name: string) => {
+     try {
+       await deleteMutation.mutateAsync(id);
+       toast({ title: 'Customer dihapus', description: `${name} telah dihapus.`, variant: 'destructive' });
+     } catch {
+       toast({ title: 'Error', description: 'Gagal menghapus customer', variant: 'destructive' });
+     }
    };
 
-  const FormDialog = ({ open, onOpenChange, title }: { open: boolean; onOpenChange: (v: boolean) => void; title: string }) => (
-    <Dialog open={open} onOpenChange={v => { onOpenChange(v); if (!v) setEditItem(null); }}>
-      <DialogContent>
-        <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
-        <div className="space-y-4 pt-1">
-          <div className="space-y-1.5"><Label>Nama Customer *</Label>
-            <Input placeholder="Nama customer" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} /></div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5"><Label>No. Telepon</Label>
-              <Input placeholder="08..." value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} /></div>
-            <div className="space-y-1.5"><Label>Email</Label>
-              <Input type="email" placeholder="email@..." value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} /></div>
-          </div>
-          <div className="space-y-1.5"><Label>Alamat</Label>
-            <Input placeholder="Alamat lengkap" value={form.address} onChange={e => setForm(p => ({ ...p, address: e.target.value }))} /></div>
-          <div className="space-y-1.5"><Label>Limit Kredit (Rp)</Label>
-            <Input type="number" placeholder="10000000" value={form.credit_limit} onChange={e => setForm(p => ({ ...p, credit_limit: e.target.value }))} /></div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>Batal</Button>
-            <Button onClick={handleSave} disabled={createMutation.isPending || updateMutation.isPending}>Simpan</Button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
+   const handleExport = () => {
+      const rows = [['Kode', 'Nama', 'Telepon', 'Email', 'Alamat', 'Total Piutang', 'Limit Kredit'],
+      ...customers.map(c => [`CUS-${c.id}`, c.name, c.phone, c.email || '', c.address || '', formatCurrency(c.balance), formatCurrency(c.creditLimit || 0)])];
+      const csv = rows.map(r => r.join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = 'customer.csv'; a.click();
+      URL.revokeObjectURL(url);
+    };
 
   return (
     <MainLayout title="Customer" subtitle="Kelola data customer toko Anda">
@@ -240,8 +212,86 @@ const CustomerPage = () => {
         </Card>
       )}
 
-      <FormDialog open={isAddOpen} onOpenChange={setIsAddOpen} title="Tambah Customer Baru" />
-      <FormDialog open={!!editItem} onOpenChange={v => { if (!v) setEditItem(null); }} title="Edit Customer" />
+      {/* ✅ BEST PRACTICE: Dialog inline JSX (not nested function) */}
+      <Dialog open={isAddOpen || !!editItem} onOpenChange={v => {
+        if (!v) {
+          setIsAddOpen(false);
+          setEditItem(null);
+          setForm({ name: '', phone: '', email: '', address: '', credit_limit: '10000000' });
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {editItem ? 'Edit Customer' : 'Tambah Customer Baru'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-1">
+            <div className="space-y-1.5">
+              <Label>Nama Customer *</Label>
+              <Input 
+                placeholder="Nama customer" 
+                value={form.name} 
+                onChange={e => setForm(p => ({ ...p, name: e.target.value }))} 
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>No. Telepon</Label>
+                <Input 
+                  placeholder="08..." 
+                  value={form.phone} 
+                  onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} 
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Email</Label>
+                <Input 
+                  type="email" 
+                  placeholder="email@..." 
+                  value={form.email} 
+                  onChange={e => setForm(p => ({ ...p, email: e.target.value }))} 
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Alamat</Label>
+              <Input 
+                placeholder="Alamat lengkap" 
+                value={form.address} 
+                onChange={e => setForm(p => ({ ...p, address: e.target.value }))} 
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Limit Kredit (Rp)</Label>
+              <Input 
+                type="number" 
+                placeholder="10000000" 
+                value={form.credit_limit} 
+                onChange={e => setForm(p => ({ ...p, credit_limit: e.target.value }))} 
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setIsAddOpen(false);
+                  setEditItem(null);
+                  setForm({ name: '', phone: '', email: '', address: '', credit_limit: '10000000' });
+                }}
+              >
+                Batal
+              </Button>
+              <Button 
+                onClick={handleSave} 
+                disabled={createMutation.isPending || updateMutation.isPending}
+              >
+                {createMutation.isPending || updateMutation.isPending ? 'Menyimpan...' : 'Simpan'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </MainLayout>
   );
 };

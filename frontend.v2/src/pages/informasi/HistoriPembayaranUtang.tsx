@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
+import { usePdfExport } from '@/hooks/usePdfExport';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,9 +24,11 @@ const HistoriPembayaranUtang = () => {
   const [page, setPage] = useState(1);
   const [selectedTrx, setSelectedTrx] = useState<Transaction | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
 
   const toggleHideMutation = useToggleHideTransaction();
 
+  const { exportToPdf } = usePdfExport();
   const { data, isLoading } = useTransactions({
     type: 'pembayaran_utang',
     search: searchTerm || undefined,
@@ -58,7 +61,69 @@ const HistoriPembayaranUtang = () => {
     } finally {
       setTogglingId(null);
     }
-  }, [toggleHideMutation, toast]);
+}, [toggleHideMutation, toast]);
+
+  const handleExport = useCallback(async () => {
+    setIsExporting(true);
+    try {
+      const htmlContent = `
+        <div style="background: white; padding: 24px; font-family: Arial, sans-serif; font-size: 12px;">
+          <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+              <tr style="border-bottom: 2px solid #333;">
+                <th style="padding: 8px; text-align: left; font-weight: bold;">No. Bukti</th>
+                <th style="padding: 8px; text-align: left; font-weight: bold;">Tanggal</th>
+                <th style="padding: 8px; text-align: left; font-weight: bold;">Supplier</th>
+                <th style="padding: 8px; text-align: right; font-weight: bold;">Nilai</th>
+                <th style="padding: 8px; text-align: left; font-weight: bold;">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${filtered.map(t => `
+                <tr style="border-bottom: 1px solid #ddd;">
+                  <td style="padding: 8px; text-align: left; font-family: monospace;">${t.invoiceNumber}</td>
+                  <td style="padding: 8px; text-align: left;">${t.date}</td>
+                  <td style="padding: 8px; text-align: left;">${t.supplier || '-'}</td>
+                  <td style="padding: 8px; text-align: right;">${formatCurrency(t.paid)}</td>
+                  <td style="padding: 8px; text-align: left;">${t.isHidden ? 'Tersembunyi' : 'Ditampilkan'}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+            <tfoot>
+              <tr style="border-top: 2px solid #333; font-weight: bold;">
+                <td colspan="3" style="padding: 8px; text-align: right;">TOTAL:</td>
+                <td style="padding: 8px; text-align: right;">${formatCurrency(totalNilai)}</td>
+                <td colspan="2"></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      `;
+
+      const tempDiv = document.createElement('div');
+      tempDiv.id = 'pdf-export-content';
+      tempDiv.innerHTML = htmlContent;
+      document.body.appendChild(tempDiv);
+
+      const dateRange = dateFrom || dateTo ? ` (${dateFrom || '-'} s/d ${dateTo || '-'})` : '';
+      await exportToPdf('pdf-export-content', {
+        filename: `histori-pembayaran-utang-${new Date().toISOString().slice(0, 10)}.pdf`,
+        title: 'Histori Pembayaran Utang',
+        subtitle: `${filtered.length} transaksi${dateRange}`,
+        companyName: 'Toko ABC',
+        companyPhone: '(021) 1234-5678',
+        companyAddress: 'Jl. Jalan Raya No. 123, Jakarta 12345',
+      });
+
+      document.body.removeChild(tempDiv);
+      toast({ title: 'Export berhasil', description: `${filtered.length} transaksi diekspor ke PDF` });
+    } catch (error) {
+      toast({ title: 'Error', description: 'Gagal mengekspor ke PDF', variant: 'destructive' });
+      console.error(error);
+    } finally {
+      setIsExporting(false);
+    }
+  }, [filtered, totalNilai, dateFrom, dateTo, exportToPdf, toast]);
 
   return (
     <MainLayout title="Histori Pembayaran Utang" subtitle="Riwayat pembayaran utang ke supplier">
@@ -76,7 +141,7 @@ const HistoriPembayaranUtang = () => {
           <Input type="date" className="text-xs h-8 w-36" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setPage(1); }} />
           <Input type="date" className="text-xs h-8 w-36" value={dateTo} onChange={e => { setDateTo(e.target.value); setPage(1); }} />
         </div>
-        <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={handleExport}><FileDown className="h-3.5 w-3.5" />Export PDF</Button>
+        <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={handleExport} disabled={isExporting}><FileDown className="h-3.5 w-3.5" />{isExporting ? 'Exporting...' : 'Export PDF'}</Button>
       </div>
 
       <Card>
