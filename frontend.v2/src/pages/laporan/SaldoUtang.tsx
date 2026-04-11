@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useSaldoUtang } from '@/hooks/api/useInfo';
+import { usePermissions } from '@/hooks/usePermissions';
 import { formatCurrency } from '@/lib/utils';
 
 interface UtangSupplier {
@@ -25,6 +26,7 @@ interface UtangSupplier {
 const SaldoUtang = () => {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
+  const { canPrint } = usePermissions();
 
   const { data, isLoading } = useSaldoUtang();
   const suppliers: UtangSupplier[] = (data as { data?: UtangSupplier[] })?.data ?? [];
@@ -56,7 +58,9 @@ const SaldoUtang = () => {
         description="Ringkasan outstanding utang per supplier"
         actions={
           <>
-            <Button variant="outline" size="sm" onClick={() => window.print()}><Printer className="h-4 w-4 mr-1.5" />Cetak</Button>
+            {canPrint('__owner_only__') && (
+              <Button variant="outline" size="sm" onClick={() => window.print()}><Printer className="h-4 w-4 mr-1.5" />Cetak</Button>
+            )}
             <Button variant="outline" size="sm" onClick={handleExportPDF}><Download className="h-4 w-4 mr-1.5" />Export</Button>
           </>
         }

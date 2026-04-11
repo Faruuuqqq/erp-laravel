@@ -18,6 +18,8 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { useProducts } from '@/hooks/api/useProducts';
 import { useSuppliers } from '@/hooks/api/useSuppliers';
 import { useTransactions, useCreateTransaction } from '@/hooks/api/useTransactions';
+import { usePrint } from '@/contexts/PrintContext';
+import { ReturPembelianPrint } from '@/components/print/ReturPembelianPrint';
 import { formatCurrency } from '@/lib/utils';
 import type { Transaction } from '@/types';
 
@@ -40,8 +42,9 @@ const ALASAN_OPTIONS = [
 
 const ReturPembelian = () => {
   const { toast } = useToast();
-  const { canCreate } = usePermissions();
+  const { canCreate, canPrint } = usePermissions();
   const createTx = useCreateTransaction();
+  const { printDocument } = usePrint();
 
   const [items, setItems] = useState<ReturItem[]>([]);
   const [selectedSupplier, setSelectedSupplier] = useState('');
@@ -54,6 +57,7 @@ const ReturPembelian = () => {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [saved, setSaved] = useState(false);
   const [savedInvoice, setSavedInvoice] = useState('');
+  const [savedTransaction, setSavedTransaction] = useState<Transaction | null>(null);
 
   const { data: suppliersData } = useSuppliers({ perPage: 200 });
   const { data: productsData } = useProducts({ perPage: 500 });
@@ -108,6 +112,7 @@ const ReturPembelian = () => {
         items: items.map(i => ({ productId: i.productId, quantity: i.qty, price: i.harga, discount: 0 })),
       });
       setSavedInvoice((result as Transaction).invoiceNumber ?? '');
+      setSavedTransaction(result as Transaction);
       setSaved(true);
       toast({ title: 'Retur pembelian berhasil', description: (result as Transaction).invoiceNumber });
     } catch (err: unknown) {
@@ -135,7 +140,11 @@ const ReturPembelian = () => {
             <p className="text-sm text-muted-foreground">Nilai retur dikurangi dari utang</p>
           </div>
           <div className="flex gap-3">
-            <Button variant="outline" onClick={() => toast({ title: 'Mengekspor PDF...' })}><FileDown className="mr-2 h-4 w-4" />Export PDF</Button>
+            {canPrint('transactions.return_purchase') && savedTransaction && (
+              <Button variant="outline" onClick={() => printDocument(<ReturPembelianPrint transaction={savedTransaction} />)}>
+                <FileDown className="mr-2 h-4 w-4" />Cetak Surat Retur
+              </Button>
+            )}
             <Button onClick={reset}>Retur Baru</Button>
           </div>
         </div>

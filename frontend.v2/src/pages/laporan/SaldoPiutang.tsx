@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useSaldoPiutang } from '@/hooks/api/useInfo';
+import { usePermissions } from '@/hooks/usePermissions';
 import { formatCurrency } from '@/lib/utils';
 
 interface PiutangCustomer {
@@ -24,6 +25,7 @@ interface PiutangCustomer {
 const SaldoPiutang = () => {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const { canPrint } = usePermissions();
 
   const { data, isLoading } = useSaldoPiutang();
   const customers: PiutangCustomer[] = (data as { data?: PiutangCustomer[] })?.data ?? [];
@@ -57,7 +59,9 @@ const SaldoPiutang = () => {
         description="Ringkasan outstanding piutang per customer"
         actions={
           <>
-            <Button variant="outline" size="sm" onClick={() => window.print()}><Printer className="h-4 w-4 mr-1.5" />Cetak</Button>
+            {canPrint('__owner_only__') && (
+              <Button variant="outline" size="sm" onClick={() => window.print()}><Printer className="h-4 w-4 mr-1.5" />Cetak</Button>
+            )}
             <Button variant="outline" size="sm" onClick={handleExportPDF}><Download className="h-4 w-4 mr-1.5" />Export</Button>
           </>
         }

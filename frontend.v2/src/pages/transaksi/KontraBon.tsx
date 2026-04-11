@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,13 +10,20 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Skeleton } from '@/components/ui/skeleton';
 import { Search, ClipboardList, FileDown, Printer } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { usePermissions } from '@/hooks/usePermissions';
+import { useAuth } from '@/contexts/AuthContext';
+import { usePrint } from '@/contexts/PrintContext';
 import { useCustomers } from '@/hooks/api/useCustomers';
 import { useTransactions } from '@/hooks/api/useTransactions';
+import { KontraBonPrint } from '@/components/print/KontraBonPrint';
 import { formatCurrency } from '@/lib/utils';
 import type { Transaction } from '@/types';
 
 const KontraBon = () => {
   const { toast } = useToast();
+  const { canPrint } = usePermissions();
+  const { user } = useAuth();
+  const { printDocument } = usePrint();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCustomer, setFilterCustomer] = useState('all');
 
@@ -48,6 +55,61 @@ const KontraBon = () => {
 
   const totalNilai = allPiutang.reduce((s, t) => s + (t.remaining ?? 0), 0);
   const uniqueCustomers = Object.keys(grouped).length;
+
+  // Print all filtered kontra bon (per-customer)
+  const handlePrintAll = useCallback(() => {
+    // If filtering to one customer, print just that customer's kontra bon
+    const entries = filteredGrouped;
+    if (entries.length === 0) return toast({ title: 'Tidak ada data untuk dicetak', variant: 'destructive' });
+    printDocument(
+      <div>
+        {entries.map(([cid, group]) => (
+          <KontraBonPrint
+            key={cid}
+            customerName={group.name}
+            printedBy={user?.name}
+            items={group.items.map(t => ({
+              invoiceNumber: t.invoiceNumber,
+              date: t.date,
+              total: t.total,
+              paid: t.paid,
+              remaining: t.remaining ?? 0,
+            }))}
+          />
+        ))}
+      </div>
+    );
+  }, [filteredGrouped, printDocument, user?.name, toast]);
+
+  // Per-customer print
+  const handlePrintCustomer = useCallback((cid: string, group: { name: string; items: Transaction[] }) => {
+    printDocument(
+      <KontraBonPrint
+        customerName={group.name}
+        printedBy={user?.name}
+        items={group.items.map(t => ({
+          invoiceNumber: t.invoiceNumber,
+          date: t.date,
+          total: t.total,
+          paid: t.paid,
+          remaining: t.remaining ?? 0,
+        }))}
+      />
+    );
+  }, [printDocument, user?.name]);
+
+  // Export CSV
+  const handleExport = useCallback(() => {
+    const rows = allPiutang.map(t =>
+      `${t.customer}\t${t.invoiceNumber}\t${t.date}\t${formatCurrency(t.total)}\t${formatCurrency(t.paid)}\t${formatCurrency(t.remaining ?? 0)}`
+    );
+    const content = `KONTRA BON\nTotal Outstanding: ${formatCurrency(totalNilai)}\n${'='.repeat(70)}\nCustomer\tFaktur\tTanggal\tTotal\tTerbayar\tSisa\n${rows.join('\n')}`;
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob); const a = document.createElement('a');
+    a.href = url; a.download = `kontra-bon-${new Date().toISOString().slice(0,10)}.txt`; a.click();
+    URL.revokeObjectURL(url);
+    toast({ title: 'Export berhasil', description: `${allPiutang.length} bon diekspor` });
+  }, [allPiutang, totalNilai, toast]);
 
   return (
     <MainLayout title="Kontra Bon" subtitle="Bon yang belum dilunasi per customer">
@@ -84,12 +146,16 @@ const KontraBon = () => {
           </Select>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={() => toast({ title: 'Mengekspor PDF...' })}>
-            <FileDown className="h-3.5 w-3.5" />Export PDF
-          </Button>
-          <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={() => window.print()}>
-            <Printer className="h-3.5 w-3.5" />Cetak
-          </Button>
+          {canPrint('transactions.kontra_bon') && (
+            <>
+              <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={handleExport}>
+                <FileDown className="h-3.5 w-3.5" />Export
+              </Button>
+              <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={handlePrintAll}>
+                <Printer className="h-3.5 w-3.5" />Cetak Semua
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
@@ -173,6 +239,13 @@ const KontraBon = () => {
                           ))}
                         </TableBody>
                       </Table>
+                      {canPrint('transactions.kontra_bon') && (
+                        <div className="flex justify-end mt-3">
+                          <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5" onClick={() => handlePrintCustomer(cid, group)}>
+                            <Printer className="h-3 w-3" />Cetak Kontra Bon
+                          </Button>
+                        </div>
+                      )}
                     </AccordionContent>
                   </AccordionItem>
                 );

@@ -6,7 +6,11 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { TrendingUp, TrendingDown, Banknote, ShoppingCart, Printer, Download, Calendar, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { usePrint } from '@/contexts/PrintContext';
+import { usePermissions } from '@/hooks/usePermissions';
+import { useAuth } from '@/contexts/AuthContext';
 import { useLaporanHarian } from '@/hooks/api/useInfo';
+import { LaporanHarianPrint } from '@/components/print/LaporanHarianPrint';
 import { formatCurrency } from '@/lib/utils';
 import type { Transaction } from '@/types';
 
@@ -37,6 +41,9 @@ const TIPE_LABELS: Record<string, string> = {
 const LaporanHarian = () => {
   const today = new Date().toISOString().split('T')[0];
   const [selectedDate, setSelectedDate] = useState(today);
+  const { isOwner, canPrint } = usePermissions();
+  const { user } = useAuth();
+  const { printDocument } = usePrint();
 
   const { data, isLoading } = useLaporanHarian(selectedDate);
   const report = data as { data?: DailyReport } | undefined;
@@ -45,6 +52,25 @@ const LaporanHarian = () => {
   const summary = useMemo(() => d?.summary ?? { totalPenjualan: 0, totalPembelian: 0, totalBiaya: 0, kasBersih: 0, penjualanTunai: 0, penjualanKredit: 0 }, [d]);
   const displayTx: Transaction[] = useMemo(() => d?.transactions ?? [], [d]);
   const displayExp = useMemo(() => d?.expenses ?? [], [d]);
+
+  const handlePrint = useCallback(() => {
+    printDocument(
+      <LaporanHarianPrint
+        date={selectedDate}
+        printedBy={user?.name}
+        summary={{
+          penjualanTunai: summary.penjualanTunai,
+          penjualanKredit: summary.penjualanKredit,
+          penerimaanPiutang: 0, // populated from pembayaran_piutang if available
+          totalPembelian: summary.totalPembelian,
+          pembayaranUtang: 0,
+          biayaJasa: summary.totalBiaya,
+          saldoKas: summary.kasBersih,
+        }}
+        transactions={displayTx.map(t => ({ invoiceNumber: t.invoiceNumber, type: t.type, description: t.customer || t.supplier || '-', amount: t.total }))}
+      />
+    );
+  }, [printDocument, selectedDate, user?.name, summary, displayTx]);
 
   const handleExportPDF = useCallback(() => {
     const content = `LAPORAN HARIAN - TOKOSYNC ERP\nTanggal: ${selectedDate}\n${'='.repeat(70)}\nTotal Penjualan  : ${formatCurrency(summary.totalPenjualan)}\nTotal Pembelian  : ${formatCurrency(summary.totalPembelian)}\nBiaya Operasional: ${formatCurrency(summary.totalBiaya)}\nKas Bersih       : ${formatCurrency(summary.kasBersih)}\n${'='.repeat(70)}\n${displayTx.map(tx => `${tx.invoiceNumber}\t${tx.type}\t${tx.customer || tx.supplier || '-'}\t${formatCurrency(tx.total)}`).join('\n')}`;
@@ -72,7 +98,9 @@ const LaporanHarian = () => {
                 onChange={e => setSelectedDate(e.target.value)}
               />
             </div>
-            <Button variant="outline" size="sm" onClick={() => window.print()}><Printer className="h-4 w-4 mr-1.5" />Cetak</Button>
+            {canPrint('__owner_only__') && (
+              <Button variant="outline" size="sm" onClick={handlePrint}><Printer className="h-4 w-4 mr-1.5" />Cetak</Button>
+            )}
             <Button variant="outline" size="sm" onClick={handleExportPDF}><Download className="h-4 w-4 mr-1.5" />Export</Button>
           </>
         }
