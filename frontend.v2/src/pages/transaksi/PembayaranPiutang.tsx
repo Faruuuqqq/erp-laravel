@@ -7,18 +7,20 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Search, Wallet, Check, FileDown } from 'lucide-react';
+import { Search, Wallet, Check, FileDown, Printer } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useCustomers } from '@/hooks/api/useCustomers';
 import { useTransactions, useCreateTransaction } from '@/hooks/api/useTransactions';
+import { usePrint } from '@/contexts/PrintContext';
 import { formatCurrency } from '@/lib/utils';
 import type { Transaction } from '@/types';
 
 const PembayaranPiutang = () => {
   const { toast } = useToast();
-  const { canCreate } = usePermissions();
+  const { canCreate, canPrint } = usePermissions();
+  const { printDocument } = usePrint();
 
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -82,6 +84,44 @@ const PembayaranPiutang = () => {
     setSelectedItems([]); setSaved(false); setJumlahDiterima(''); setMetodePembayaran(''); setCatatan('');
   }, []);
 
+  const paidItems = piutangList.filter(p => selectedItems.includes(p.id));
+
+  const handlePrint = useCallback(() => {
+    const tanggalCetak = new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' });
+    const node = (
+      <div style={{ fontFamily: 'monospace', padding: 24, fontSize: 13 }}>
+        <h2 style={{ textAlign: 'center', marginBottom: 4 }}>BUKTI PEMBAYARAN PIUTANG</h2>
+        <p style={{ textAlign: 'center', color: '#555' }}>Tanggal: {tanggalCetak}</p>
+        <hr style={{ margin: '8px 0' }} />
+        <p>Metode Pembayaran : {metodePembayaran}</p>
+        <p>Jumlah Diterima  : <strong>{formatCurrency(jumlahDiterimaNum)}</strong></p>
+        <hr style={{ margin: '8px 0' }} />
+        <p style={{ fontWeight: 'bold', marginBottom: 4 }}>Faktur yang Dilunasi ({paidItems.length}):</p>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              <th style={{ textAlign: 'left', paddingBottom: 4 }}>No. Faktur</th>
+              <th style={{ textAlign: 'left' }}>Customer</th>
+              <th style={{ textAlign: 'right' }}>Sisa Piutang</th>
+            </tr>
+          </thead>
+          <tbody>
+            {paidItems.map((p, i) => (
+              <tr key={i}>
+                <td style={{ paddingTop: 2 }}>{p.invoiceNumber}</td>
+                <td>{p.customer ?? '-'}</td>
+                <td style={{ textAlign: 'right' }}>{formatCurrency(p.remaining ?? 0)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <hr style={{ margin: '8px 0' }} />
+        <p style={{ textAlign: 'right', fontWeight: 'bold' }}>TOTAL DILUNASI: {formatCurrency(jumlahDiterimaNum)}</p>
+      </div>
+    );
+    printDocument(node);
+  }, [paidItems, metodePembayaran, jumlahDiterimaNum, printDocument]);
+
   if (saved) {
     return (
       <MainLayout title="Pembayaran Piutang" subtitle="Pembayaran berhasil dicatat">
@@ -95,7 +135,12 @@ const PembayaranPiutang = () => {
             <p className="text-sm text-muted-foreground mt-1">{selectedItems.length} faktur diselesaikan</p>
           </div>
           <div className="flex gap-3">
-            <Button variant="outline" onClick={() => window.print()}><FileDown className="mr-2 h-4 w-4" />Export PDF</Button>
+            {canPrint('transactions.payment') && (
+              <>
+                <Button variant="outline" onClick={handlePrint}><Printer className="mr-2 h-4 w-4" />Cetak Bukti</Button>
+                <Button variant="outline" onClick={handlePrint}><FileDown className="mr-2 h-4 w-4" />Export PDF</Button>
+              </>
+            )}
             <Button onClick={reset}>Input Baru</Button>
           </div>
         </div>

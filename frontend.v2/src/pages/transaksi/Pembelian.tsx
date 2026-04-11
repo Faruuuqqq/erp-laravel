@@ -8,13 +8,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Plus, Trash2, ShoppingCart, Calculator, FileDown, CheckCircle2, Search } from 'lucide-react';
+import { Plus, Trash2, ShoppingCart, Calculator, FileDown, CheckCircle2, Search, Printer } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useProducts } from '@/hooks/api/useProducts';
 import { useSuppliers } from '@/hooks/api/useSuppliers';
 import { useWarehouses } from '@/hooks/api/useWarehouses';
 import { useCreateTransaction } from '@/hooks/api/useTransactions';
+import { usePrint } from '@/contexts/PrintContext';
 import { formatCurrency } from '@/lib/utils';
 import type { Transaction } from '@/types';
 
@@ -50,6 +51,41 @@ const Pembelian = () => {
   const [saved, setSaved] = useState(false);
   const [savedInvoice, setSavedInvoice] = useState('');
   const [savedTotal, setSavedTotal] = useState(0);
+  const [savedTrx, setSavedTrx] = useState<Transaction | null>(null);
+  const { printDocument } = usePrint();
+  const { canPrint } = usePermissions();
+
+  const handlePrint = useCallback(() => {
+    if (!savedTrx) return;
+    const node = (
+      <div style={{ fontFamily: 'monospace', padding: 24, fontSize: 13 }}>
+        <h2 style={{ textAlign: 'center', marginBottom: 8 }}>FAKTUR PEMBELIAN</h2>
+        <p>No. Faktur : {savedTrx.invoiceNumber}</p>
+        <p>Tanggal   : {savedTrx.date}</p>
+        <p>Supplier  : {savedTrx.supplier ?? '-'}</p>
+        <hr />
+        <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 8 }}>
+          <thead>
+            <tr><th style={{ textAlign: 'left' }}>Produk</th><th>Qty</th><th style={{ textAlign: 'right' }}>Harga</th><th style={{ textAlign: 'right' }}>Subtotal</th></tr>
+          </thead>
+          <tbody>
+            {(savedTrx.items ?? []).map((it, i) => (
+              <tr key={i}>
+                <td>{it.productName ?? it.productId}</td>
+                <td style={{ textAlign: 'center' }}>{it.quantity}</td>
+                <td style={{ textAlign: 'right' }}>{formatCurrency(Number(it.price))}</td>
+                <td style={{ textAlign: 'right' }}>{formatCurrency(Number(it.subtotal))}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <hr />
+        <p style={{ textAlign: 'right', fontWeight: 'bold', fontSize: 15 }}>TOTAL: {formatCurrency(savedTrx.total)}</p>
+        {savedTrx.status === 'kredit' && <p style={{ textAlign: 'right', color: 'orange' }}>Dicatat sebagai Utang</p>}
+      </div>
+    );
+    printDocument(node);
+  }, [savedTrx, printDocument]);
 
   const { data: productsData } = useProducts({ perPage: 500 });
   const { data: suppliersData } = useSuppliers({ perPage: 200 });
@@ -74,7 +110,7 @@ const Pembelian = () => {
     const product = products.find(p => p.id === state.selectedProduct);
     if (!product) return toast({ title: 'Pilih produk terlebih dahulu', variant: 'destructive' });
     const qtyNum = parseInt(state.qty) || 1;
-    const hargaNum = parseFloat(state.harga) || product.buyPrice ?? 0;
+    const hargaNum = parseFloat(state.harga) || (product.buyPrice ?? 0);
     if (qtyNum <= 0) return toast({ title: 'Qty harus lebih dari 0', variant: 'destructive' });
     setState(prev => {
       const existing = prev.cart.findIndex(c => c.productId === state.selectedProduct);
@@ -114,6 +150,7 @@ const Pembelian = () => {
       });
       setSavedInvoice((result as Transaction).invoiceNumber ?? '');
       setSavedTotal(grandTotal);
+      setSavedTrx(result as Transaction);
       setSaved(true);
       toast({ title: 'Pembelian berhasil disimpan', description: (result as Transaction).invoiceNumber });
     } catch (err: unknown) {
@@ -138,7 +175,12 @@ const Pembelian = () => {
             {isKredit && <Badge variant="outline" className="mt-2 text-warning border-warning">Dicatat sebagai Utang</Badge>}
           </div>
           <div className="flex gap-3">
-            <Button variant="outline" onClick={() => window.print()}><FileDown className="mr-2 h-4 w-4" />Export PDF</Button>
+            {canPrint('transactions.purchase') && (
+              <>
+                <Button variant="outline" onClick={handlePrint}><Printer className="mr-2 h-4 w-4" />Cetak Faktur</Button>
+                <Button variant="outline" onClick={handlePrint}><FileDown className="mr-2 h-4 w-4" />Export PDF</Button>
+              </>
+            )}
             <Button onClick={reset}>Pembelian Baru</Button>
           </div>
         </div>

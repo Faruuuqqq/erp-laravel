@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useSaldoPiutang } from '@/hooks/api/useInfo';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { formatCurrency } from '@/lib/utils';
 
 interface PiutangCustomer {
@@ -27,20 +28,23 @@ const SaldoPiutang = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const { canPrint } = usePermissions();
 
-  const { data, isLoading } = useSaldoPiutang();
+  const debouncedSearch = useDebouncedValue(search, 400);
+  const { data, isLoading } = useSaldoPiutang({
+    search: debouncedSearch || undefined,
+    status: statusFilter !== 'all' ? statusFilter : undefined,
+  });
   const customers: PiutangCustomer[] = (data as { data?: PiutangCustomer[] })?.data ?? [];
 
   const withDebt = customers.filter(c => c.balance > 0);
   const total = customers.reduce((s, c) => s + c.balance, 0);
   const overLimit = customers.filter(c => c.creditLimit > 0 && c.balance > c.creditLimit);
 
+  // Client-side filter only as fallback if API doesn't support status filter
   const filtered = customers.filter(c => {
-    const matchSearch = c.name.toLowerCase().includes(search.toLowerCase()) ||
-      c.code.toLowerCase().includes(search.toLowerCase());
-    if (statusFilter === 'piutang') return matchSearch && c.balance > 0;
-    if (statusFilter === 'overlimit') return matchSearch && c.creditLimit > 0 && c.balance > c.creditLimit;
-    if (statusFilter === 'lunas') return matchSearch && c.balance === 0;
-    return matchSearch;
+    if (statusFilter === 'piutang') return c.balance > 0;
+    if (statusFilter === 'overlimit') return c.creditLimit > 0 && c.balance > c.creditLimit;
+    if (statusFilter === 'lunas') return c.balance === 0;
+    return true;
   });
 
   const handleExportPDF = useCallback(() => {

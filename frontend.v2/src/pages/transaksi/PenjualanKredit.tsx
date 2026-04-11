@@ -17,6 +17,8 @@ import { useCustomers } from '@/hooks/api/useCustomers';
 import { useSalesReps } from '@/hooks/api/useSalesReps';
 import { useWarehouses } from '@/hooks/api/useWarehouses';
 import { useCreateTransaction } from '@/hooks/api/useTransactions';
+import { usePrint } from '@/contexts/PrintContext';
+import { FakturPenjualan } from '@/components/print/FakturPenjualan';
 import { formatCurrency } from '@/lib/utils';
 import type { Transaction } from '@/types';
 
@@ -54,6 +56,11 @@ const PenjualanKredit = () => {
   const [state, setState] = useState(BLANK());
   const [saved, setSaved] = useState(false);
   const [savedTrx, setSavedTrx] = useState<Transaction | null>(null);
+  const { printDocument } = usePrint();
+
+  const handlePrint = useCallback(() => {
+    if (savedTrx) printDocument(<FakturPenjualan transaction={savedTrx} />);
+  }, [savedTrx, printDocument]);
 
   const { data: productsData } = useProducts({ perPage: 500 });
   const { data: customersData } = useCustomers({ perPage: 500 });
@@ -150,8 +157,12 @@ const PenjualanKredit = () => {
             <p className="text-sm text-muted-foreground">Total Piutang Ditambahkan</p>
           </div>
           <div className="flex gap-3">
-            <Button variant="outline" onClick={() => window.print()}><Printer className="mr-2 h-4 w-4" />Cetak Faktur</Button>
-            <Button variant="outline" onClick={() => window.print()}><FileDown className="mr-2 h-4 w-4" />Export PDF</Button>
+            {canPrint('transactions.credit_sale') && (
+              <>
+                <Button variant="outline" onClick={handlePrint}><Printer className="mr-2 h-4 w-4" />Cetak Faktur</Button>
+                <Button variant="outline" onClick={handlePrint}><FileDown className="mr-2 h-4 w-4" />Export PDF</Button>
+              </>
+            )}
             <Button onClick={reset}>Transaksi Baru</Button>
           </div>
         </div>
@@ -337,8 +348,8 @@ const PenjualanKredit = () => {
               )}
               {canPrint('transactions.credit_sale') && (
                 <div className="grid grid-cols-2 gap-2">
-                  <Button variant="outline" className="h-8 text-xs" onClick={() => window.print()}><Printer className="mr-1.5 h-3.5 w-3.5" />Cetak</Button>
-                  <Button variant="outline" className="h-8 text-xs"><FileDown className="mr-1.5 h-3.5 w-3.5" />PDF</Button>
+                  <Button variant="outline" className="h-8 text-xs" onClick={handlePrint}><Printer className="mr-1.5 h-3.5 w-3.5" />Cetak</Button>
+                  <Button variant="outline" className="h-8 text-xs" onClick={handlePrint}><FileDown className="mr-1.5 h-3.5 w-3.5" />PDF</Button>
                 </div>
               )}
             </CardContent>

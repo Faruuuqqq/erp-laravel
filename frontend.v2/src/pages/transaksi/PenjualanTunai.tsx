@@ -147,9 +147,11 @@ const PenjualanTunai = () => {
           </div>
           <div className="flex gap-3">
             {canPrint('transactions.cash_sale') && (
-              <Button variant="outline" onClick={handlePrint}><Printer className="mr-2 h-4 w-4" />Cetak Struk</Button>
+              <>
+                <Button variant="outline" onClick={handlePrint}><Printer className="mr-2 h-4 w-4" />Cetak Struk</Button>
+                <Button variant="outline" onClick={handlePrint}><FileDown className="mr-2 h-4 w-4" />Export PDF</Button>
+              </>
             )}
-            <Button variant="outline" onClick={() => window.print()}><FileDown className="mr-2 h-4 w-4" />Export PDF</Button>
             <Button onClick={reset}>Transaksi Baru</Button>
           </div>
         </div>

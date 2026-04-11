@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useSaldoUtang } from '@/hooks/api/useInfo';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { formatCurrency } from '@/lib/utils';
 
 interface UtangSupplier {
@@ -28,18 +29,21 @@ const SaldoUtang = () => {
   const [filter, setFilter] = useState('all');
   const { canPrint } = usePermissions();
 
-  const { data, isLoading } = useSaldoUtang();
+  const debouncedSearch = useDebouncedValue(search, 400);
+  const { data, isLoading } = useSaldoUtang({
+    search: debouncedSearch || undefined,
+    status: filter !== 'all' ? filter : undefined,
+  });
   const suppliers: UtangSupplier[] = (data as { data?: UtangSupplier[] })?.data ?? [];
 
   const withDebt = suppliers.filter(s => s.balance > 0);
   const total = suppliers.reduce((s, sup) => s + sup.balance, 0);
 
+  // Client-side filter as fallback if API doesn't support status
   const filtered = suppliers.filter(s => {
-    const matchSearch = s.name.toLowerCase().includes(search.toLowerCase()) ||
-      s.code.toLowerCase().includes(search.toLowerCase());
-    if (filter === 'utang') return matchSearch && s.balance > 0;
-    if (filter === 'lunas') return matchSearch && s.balance === 0;
-    return matchSearch;
+    if (filter === 'utang') return s.balance > 0;
+    if (filter === 'lunas') return s.balance === 0;
+    return true;
   });
 
   const handleExportPDF = useCallback(() => {
