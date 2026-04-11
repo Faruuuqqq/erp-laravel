@@ -48,38 +48,38 @@ const FULL_MENU: MenuItem[] = [
     title: 'Data Utama',
     icon: Users,
     children: [
-      { title: 'Supplier', icon: Package,      path: '/supplier',  module: 'suppliers' },
-      { title: 'Customer', icon: UserCheck,    path: '/customer',  module: 'customers' },
-      { title: 'Produk',   icon: Package,      path: '/produk',    module: 'products' },
-      { title: 'Gudang',   icon: Warehouse,    path: '/gudang',    module: 'warehouses' },
-      { title: 'Sales',    icon: BadgePercent, path: '/sales',     module: 'sales_reps' },
+      { title: 'Supplier', icon: Package, path: '/supplier', module: 'suppliers' },
+      { title: 'Customer', icon: UserCheck, path: '/customer', module: 'customers' },
+      { title: 'Produk', icon: Package, path: '/produk', module: 'products' },
+      { title: 'Gudang', icon: Warehouse, path: '/gudang', module: 'warehouses' },
+      { title: 'Sales', icon: BadgePercent, path: '/sales', module: 'sales_reps' },
     ],
   },
   {
     title: 'Transaksi',
     icon: ShoppingCart,
     children: [
-      { title: 'Pembelian',         icon: ShoppingCart, path: '/transaksi/pembelian',         module: 'transactions.purchase' },
-      { title: 'Penjualan Tunai',   icon: Banknote,     path: '/transaksi/penjualan-tunai',   module: 'transactions.cash_sale' },
-      { title: 'Penjualan Kredit',  icon: CreditCard,   path: '/transaksi/penjualan-kredit',  module: 'transactions.credit_sale' },
-      { title: 'Pembayaran Utang',  icon: Receipt,      path: '/transaksi/pembayaran-utang',  module: 'transactions.payable' },
-      { title: 'Pembayaran Piutang',icon: Receipt,      path: '/transaksi/pembayaran-piutang',module: 'transactions.receivable' },
-      { title: 'Retur Pembelian',   icon: RotateCcw,    path: '/transaksi/retur-pembelian',   module: 'transactions.return_purchase' },
-      { title: 'Retur Penjualan',   icon: RotateCcw,    path: '/transaksi/retur-penjualan',   module: 'transactions.return_sale' },
-      { title: 'Surat Jalan',       icon: FileText,     path: '/transaksi/surat-jalan',       module: 'transactions.delivery_note' },
-      { title: 'Kontra Bon',        icon: ClipboardList,path: '/transaksi/kontra-bon',        module: 'transactions.kontra_bon' },
+      { title: 'Pembelian', icon: ShoppingCart, path: '/transaksi/pembelian', module: 'transactions.purchase' },
+      { title: 'Penjualan Tunai', icon: Banknote, path: '/transaksi/penjualan-tunai', module: 'transactions.cash_sale' },
+      { title: 'Penjualan Kredit', icon: CreditCard, path: '/transaksi/penjualan-kredit', module: 'transactions.credit_sale' },
+      { title: 'Pembayaran Utang', icon: Receipt, path: '/transaksi/pembayaran-utang', module: 'transactions.payable' },
+      { title: 'Pembayaran Piutang', icon: Receipt, path: '/transaksi/pembayaran-piutang', module: 'transactions.receivable' },
+      { title: 'Retur Pembelian', icon: RotateCcw, path: '/transaksi/retur-pembelian', module: 'transactions.return_purchase' },
+      { title: 'Retur Penjualan', icon: RotateCcw, path: '/transaksi/retur-penjualan', module: 'transactions.return_sale' },
+      { title: 'Surat Jalan', icon: FileText, path: '/transaksi/surat-jalan', module: 'transactions.delivery_note' },
+      { title: 'Kontra Bon', icon: ClipboardList, path: '/transaksi/kontra-bon', module: 'transactions.kontra_bon' },
     ],
   },
   {
     title: 'Informasi',
     icon: History,
     children: [
-      { title: 'Histori Pembelian',          icon: History, path: '/informasi/pembelian',          module: 'transactions.purchase' },
-      { title: 'Histori Penjualan',          icon: History, path: '/informasi/penjualan',          module: 'transactions.cash_sale' },
-      { title: 'Histori Retur Pembelian',    icon: History, path: '/informasi/retur-pembelian',    module: 'transactions.return_purchase' },
-      { title: 'Histori Retur Penjualan',    icon: History, path: '/informasi/retur-penjualan',    module: 'transactions.return_sale' },
-      { title: 'Biaya/Jasa',                 icon: Wallet,  path: '/informasi/biaya-jasa' },
-      { title: 'Histori Pembayaran Utang',   icon: History, path: '/informasi/pembayaran-utang',   module: 'transactions.payable' },
+      { title: 'Histori Pembelian', icon: History, path: '/informasi/pembelian', module: 'transactions.purchase' },
+      { title: 'Histori Penjualan', icon: History, path: '/informasi/penjualan', module: 'transactions.cash_sale' },
+      { title: 'Histori Retur Pembelian', icon: History, path: '/informasi/retur-pembelian', module: 'transactions.return_purchase' },
+      { title: 'Histori Retur Penjualan', icon: History, path: '/informasi/retur-penjualan', module: 'transactions.return_sale' },
+      { title: 'Biaya/Jasa', icon: Wallet, path: '/informasi/biaya-jasa' },
+      { title: 'Histori Pembayaran Utang', icon: History, path: '/informasi/pembayaran-utang', module: 'transactions.payable' },
       { title: 'Histori Pembayaran Piutang', icon: History, path: '/informasi/pembayaran-piutang', module: 'transactions.receivable' },
     ],
   },
@@ -87,11 +87,11 @@ const FULL_MENU: MenuItem[] = [
     title: 'Laporan',
     icon: BarChart3,
     children: [
-      { title: 'Saldo Piutang',  icon: Wallet,        path: '/laporan/saldo-piutang' },
-      { title: 'Saldo Utang',    icon: Wallet,        path: '/laporan/saldo-utang' },
-      { title: 'Saldo Stok',     icon: Package,       path: '/laporan/saldo-stok', module: '__owner_only__' as PermissionModule },
-      { title: 'Kartu Stok',     icon: ClipboardList, path: '/laporan/kartu-stok' },
-      { title: 'Laporan Harian', icon: BarChart3,     path: '/laporan/laporan-harian', module: '__owner_only__' as PermissionModule },
+      { title: 'Saldo Piutang', icon: Wallet, path: '/laporan/saldo-piutang' },
+      { title: 'Saldo Utang', icon: Wallet, path: '/laporan/saldo-utang' },
+      { title: 'Saldo Stok', icon: Package, path: '/laporan/saldo-stok', module: '__owner_only__' as PermissionModule },
+      { title: 'Kartu Stok', icon: ClipboardList, path: '/laporan/kartu-stok' },
+      { title: 'Laporan Harian', icon: BarChart3, path: '/laporan/laporan-harian', module: '__owner_only__' as PermissionModule },
     ],
   },
   { title: 'Pengaturan', icon: Settings, path: '/pengaturan', module: 'settings' },
@@ -228,8 +228,8 @@ export const AppSidebar = ({ collapsed, onToggle }: { collapsed: boolean; onTogg
           </div>
           {!collapsed && (
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-bold text-sidebar-foreground leading-tight">StoreMate Genie</p>
-              <p className="text-[10px] text-sidebar-muted">ERP v2.0</p>
+              <p className="text-sm font-bold text-sidebar-foreground leading-tight">Inventaris Toko</p>
+              <p className="text-[10px] text-sidebar-muted">ERP</p>
             </div>
           )}
         </div>

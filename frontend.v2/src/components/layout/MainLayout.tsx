@@ -80,7 +80,7 @@ export const MainLayout = ({ children, title, subtitle, actions }: MainLayoutPro
               <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-destructive pulse-dot" />
             </Button>
 
-            <div className="hidden md:flex items-center gap-2 pl-2 border-l border-border">
+            {/* <div className="hidden md:flex items-center gap-2 pl-2 border-l border-border">
               <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
                 {user?.name?.charAt(0) || 'U'}
               </div>
@@ -89,7 +89,7 @@ export const MainLayout = ({ children, title, subtitle, actions }: MainLayoutPro
                 <p className="text-muted-foreground capitalize">{user?.role}</p>
               </div>
               {isOwner && <Badge variant="outline" className="text-[10px] h-4 px-1 text-warning border-warning">OWNER</Badge>}
-            </div>
+            </div> */}
           </div>
         </header>
 

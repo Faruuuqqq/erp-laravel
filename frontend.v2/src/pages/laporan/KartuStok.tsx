@@ -19,7 +19,7 @@ const KartuStok = () => {
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
 
-  const { data: productsData } = useProducts({ perPage: 999 });
+  const { data: productsData } = useProducts({ per_page: 999 });
   const products = productsData?.data ?? [];
 
   const product = products.find(p => p.id === selectedProduct);
