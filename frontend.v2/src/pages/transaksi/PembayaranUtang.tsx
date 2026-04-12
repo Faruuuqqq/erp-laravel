@@ -30,6 +30,7 @@ const PembayaranUtang = () => {
   const [catatan, setCatatan] = useState('');
   const [tanggal] = useState(new Date().toISOString().split('T')[0]);
   const [saved, setSaved] = useState(false);
+  const [savedCount, setSavedCount] = useState(0);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [savedTransaction, setSavedTransaction] = useState<Transaction | null>(null);
 
@@ -79,6 +80,7 @@ const PembayaranUtang = () => {
         notes: catatan || `Bayar utang: ${selectedItems.join(', ')}`,
         items: [], // payment transaction — no items
       });
+      setSavedCount(selectedItems.length); // Save count BEFORE clearing
       setSavedTransaction(result as Transaction);
       setSelectedItems([]); // Clear selected items after successful save
       setSaved(true);
@@ -90,7 +92,7 @@ const PembayaranUtang = () => {
   }, [selectedItems, metodePembayaran, jumlahBayarNum, utangList, tanggal, catatan, createTx, toast]);
 
   const reset = useCallback(() => {
-    setSelectedItems([]); setSaved(false); setJumlahBayar(''); setMetodePembayaran(''); setCatatan(''); setSavedTransaction(null);
+    setSelectedItems([]); setSaved(false); setSavedCount(0); setJumlahBayar(''); setMetodePembayaran(''); setCatatan(''); setSavedTransaction(null);
   }, []);
 
   if (saved) {
@@ -103,7 +105,7 @@ const PembayaranUtang = () => {
           <div className="text-center">
             <h2 className="text-2xl font-bold">Pembayaran Berhasil</h2>
             <p className="text-3xl font-bold text-primary mt-3">{formatCurrency(jumlahBayarNum)}</p>
-            <p className="text-sm text-muted-foreground mt-1">{selectedItems.length} faktur utang diselesaikan</p>
+            <p className="text-sm text-muted-foreground mt-1">{savedCount} faktur utang diselesaikan</p>
           </div>
            <div className="flex gap-3">
              {savedTransaction && (

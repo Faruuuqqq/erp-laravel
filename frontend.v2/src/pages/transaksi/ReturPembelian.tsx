@@ -12,13 +12,13 @@ import {
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Plus, Trash2, RotateCcw, FileDown, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Plus, Trash2, RotateCcw, Eye, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useProducts } from '@/hooks/api/useProducts';
 import { useSuppliers } from '@/hooks/api/useSuppliers';
 import { useTransactions, useCreateTransaction } from '@/hooks/api/useTransactions';
-import { usePrint } from '@/contexts/PrintContext';
+import { PrintPreviewDialog } from '@/components/dialogs/PrintPreviewDialog';
 import { ReturPembelianPrint } from '@/components/print/ReturPembelianPrint';
 import { formatCurrency } from '@/lib/utils';
 import type { Transaction } from '@/types';
@@ -44,7 +44,6 @@ const ReturPembelian = () => {
   const { toast } = useToast();
   const { canCreate, canPrint } = usePermissions();
   const createTx = useCreateTransaction();
-  const { printDocument } = usePrint();
 
   const [items, setItems] = useState<ReturItem[]>([]);
   const [selectedSupplier, setSelectedSupplier] = useState('');
@@ -53,11 +52,12 @@ const ReturPembelian = () => {
   const [qty, setQty] = useState('1');
   const [alasan, setAlasan] = useState('');
   const [catatan, setCatatan] = useState('');
-  const [tanggal] = useState(new Date().toISOString().split('T')[0]);
+  const [tanggal, setTanggal] = useState(new Date().toISOString().split('T')[0]);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [saved, setSaved] = useState(false);
   const [savedInvoice, setSavedInvoice] = useState('');
   const [savedTransaction, setSavedTransaction] = useState<Transaction | null>(null);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
   const { data: suppliersData } = useSuppliers({ perPage: 200 });
   const { data: productsData } = useProducts({ perPage: 500 });
@@ -65,7 +65,7 @@ const ReturPembelian = () => {
   const { data: pembelianData } = useTransactions({
     type: 'pembelian',
     perPage: 100,
-    ...(selectedSupplier ? { search: selectedSupplier } : {}),
+    ...(selectedSupplier ? { supplier_id: selectedSupplier } : {}),
   });
 
   const suppliers = suppliersData?.data ?? [];
@@ -84,12 +84,14 @@ const ReturPembelian = () => {
   const addItem = useCallback(() => {
     const prod = availableProducts.find(p => p.id === selectedProduct);
     if (!prod) return toast({ title: 'Pilih produk dahulu', variant: 'destructive' });
+    const existing = items.find(i => i.productId === selectedProduct);
+    if (existing) return toast({ title: 'Produk sudah ada di list', variant: 'destructive' });
     const qtyNum = parseInt(qty) || 1;
     if (qtyNum <= 0) return toast({ title: 'Qty harus > 0', variant: 'destructive' });
     setItems(prev => [...prev, { productId: prod.id, nama: prod.name, qty: qtyNum, harga: prod.price, satuan: prod.unit, subtotal: prod.price * qtyNum }]);
     setSelectedProduct(''); setQty('1');
     toast({ title: `${prod.name} ditambahkan ke retur` });
-  }, [availableProducts, selectedProduct, qty, toast]);
+  }, [availableProducts, selectedProduct, qty, items, toast]);
 
   const removeItem = useCallback((idx: number) => setItems(prev => prev.filter((_, i) => i !== idx)), []);
   const totalNilai = items.reduce((s, i) => s + i.subtotal, 0);
@@ -139,14 +141,14 @@ const ReturPembelian = () => {
             <p className="text-3xl font-bold text-destructive mt-3">{formatCurrency(totalNilai)}</p>
             <p className="text-sm text-muted-foreground">Nilai retur dikurangi dari utang</p>
           </div>
-          <div className="flex gap-3">
-            {canPrint('transactions.return_purchase') && savedTransaction && (
-              <Button variant="outline" onClick={() => printDocument(<ReturPembelianPrint transaction={savedTransaction} />)}>
-                <FileDown className="mr-2 h-4 w-4" />Cetak Surat Retur
-              </Button>
-            )}
-            <Button onClick={reset}>Retur Baru</Button>
-          </div>
+           <div className="flex gap-3">
+             {canPrint('transactions.return_purchase') && savedTransaction && (
+               <Button variant="outline" onClick={() => setIsPreviewOpen(true)}>
+                 <Eye className="mr-2 h-4 w-4" />Preview & Cetak
+               </Button>
+             )}
+             <Button onClick={reset}>Retur Baru</Button>
+           </div>
         </div>
       </MainLayout>
     );
@@ -170,7 +172,7 @@ const ReturPembelian = () => {
               <div className="grid gap-3 md:grid-cols-3">
                 <div className="space-y-1.5">
                   <Label className="text-xs">Tanggal</Label>
-                  <Input type="date" defaultValue={tanggal} className="text-xs" />
+                  <Input type="date" value={tanggal} onChange={e => setTanggal(e.target.value)} className="text-xs" />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">Supplier *</Label>
@@ -274,15 +276,15 @@ const ReturPembelian = () => {
                 <Label className="text-xs">Catatan</Label>
                 <Input value={catatan} onChange={e => setCatatan(e.target.value)} placeholder="Catatan retur..." className="text-xs h-8" />
               </div>
-              {canCreate('transactions.return_purchase') && (
-                <div className="flex gap-2 pt-1">
-                  <Button variant="outline" className="flex-1 h-9 text-sm" onClick={() => { setItems([]); setSelectedFakturId(''); setAlasan(''); }}>Reset</Button>
-                  <Button className="flex-1 h-9 text-sm" onClick={handleSave} disabled={items.length === 0 || createTx.isPending}>
-                    {createTx.isPending ? 'Menyimpan...' : 'Simpan'}
-                  </Button>
-                </div>
-              )}
-              <Button variant="outline" className="w-full h-8 text-xs" onClick={() => toast({ title: 'Mengekspor PDF...' })}><FileDown className="mr-1.5 h-3.5 w-3.5" />Export PDF</Button>
+               {canCreate('transactions.return_purchase') && (
+                 <div className="flex gap-2 pt-1">
+                   <Button variant="outline" className="flex-1 h-9 text-sm" onClick={() => { setItems([]); setSelectedFakturId(''); setAlasan(''); }}>Reset</Button>
+                   <Button className="flex-1 h-9 text-sm" onClick={handleSave} disabled={items.length === 0 || createTx.isPending}>
+                     {createTx.isPending ? 'Menyimpan...' : 'Simpan'}
+                   </Button>
+                 </div>
+               )}
+               <Button variant="outline" className="w-full h-8 text-xs" onClick={() => setIsPreviewOpen(true)}><Eye className="mr-1.5 h-3.5 w-3.5" />Preview & Cetak</Button>
             </CardContent>
           </Card>
         </div>
@@ -303,6 +305,20 @@ const ReturPembelian = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {savedTransaction && (
+        <PrintPreviewDialog
+          isOpen={isPreviewOpen}
+          onClose={() => setIsPreviewOpen(false)}
+          title="Surat Retur Pembelian"
+          documentId="retur-pembelian-print"
+          filename={`retur-pembelian-${savedInvoice}`}
+        >
+          <div id="retur-pembelian-print">
+            <ReturPembelianPrint transaction={savedTransaction} />
+          </div>
+        </PrintPreviewDialog>
+      )}
     </MainLayout>
   );
 };

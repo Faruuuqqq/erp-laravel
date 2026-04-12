@@ -38,6 +38,7 @@ const ReturPenjualan = () => {
   const [alasan, setAlasan] = useState('');
   const [metodeKembalian, setMetodeKembalian] = useState('');
   const [catatan, setCatatan] = useState('');
+  const [tanggal, setTanggal] = useState(new Date().toISOString().split('T')[0]);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [saved, setSaved] = useState(false);
   const [savedTrx, setSavedTrx] = useState<Transaction | null>(null);
@@ -147,7 +148,7 @@ const ReturPenjualan = () => {
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">Tanggal</Label>
-                  <Input type="date" defaultValue={new Date().toISOString().split('T')[0]} className="text-xs" />
+                  <Input type="date" value={tanggal} onChange={e => setTanggal(e.target.value)} className="text-xs" />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">Customer</Label>
