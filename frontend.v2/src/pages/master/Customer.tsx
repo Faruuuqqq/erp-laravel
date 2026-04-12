@@ -20,7 +20,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { usePermissions } from '@/hooks/usePermissions';
 import { formatCurrency } from '@/lib/utils';
 import type { Customer } from '@/types';
-import { exportToXlsx, type ColumnConfig } from '@/lib/xlsx-export';
+import { exportToXlsx, type ColumnConfig, getFilenameWithDate } from '@/lib/xlsx-export';
 
 const CustomerPage = () => {
   const { isOwner } = useAuth();
@@ -103,48 +103,62 @@ const CustomerPage = () => {
        );
      };
 
-    const handleExport = useCallback(() => {
-      try {
-        const columns: ColumnConfig<Customer>[] = [
-          { header: 'Kode', key: 'id', format: (v) => `CUS-${v}`, width: 12 },
-          { header: 'Nama', key: 'name', width: 30 },
-          { header: 'Telepon', key: 'phone', width: 15 },
-          { header: 'Email', key: 'email', width: 25 },
-          { header: 'Alamat', key: 'address', width: 35 },
-          {
-            header: 'Total Piutang',
-            key: 'balance',
-            format: (value) => typeof value === 'number' ? value : Number(value) || 0,
-            width: 15,
-          },
-          {
-            header: 'Limit Kredit',
-            key: 'creditLimit',
-            format: (value) => typeof value === 'number' ? value : Number(value) || 0,
-            width: 15,
-          },
-        ];
+     const handleExport = useCallback(() => {
+       try {
+         const columns: ColumnConfig<Customer>[] = [
+           { header: 'ID Customer', key: 'id', format: (v) => `CUS-${v}`, width: 12 },
+           { header: 'Nama Customer', key: 'name', width: 30 },
+           { header: 'Alamat', key: 'address', width: 35 },
+           { header: 'Kota', key: 'city', width: 15 },
+           { header: 'Telepon 1', key: 'phone', width: 15 },
+           { header: 'Telepon 2', key: 'phone2', width: 15 },
+           { header: 'Email', key: 'email', width: 25 },
+           {
+             header: 'Limit Kredit',
+             key: 'creditLimit',
+             format: (value) => typeof value === 'number' ? value : Number(value) || 0,
+             width: 15,
+           },
+           {
+             header: 'Discount',
+             key: 'discount',
+             format: (value) => typeof value === 'number' ? value : Number(value) || 0,
+             width: 12,
+           },
+           { header: 'Gudang', key: 'warehouse', width: 20 },
+           { header: 'Price List', key: 'priceList', width: 20 },
+           { header: 'Daerah', key: 'area', width: 15 },
+           { header: 'Keterangan', key: 'notes', width: 30 },
+           { header: 'NPWP', key: 'npwp', width: 20 },
+           {
+             header: 'Total Piutang',
+             key: 'balance',
+             format: (value) => typeof value === 'number' ? value : Number(value) || 0,
+             width: 15,
+           },
+         ];
 
-        exportToXlsx(
-          customers,
-          'customer.xlsx',
-          columns,
-          { sheetName: 'Customer', autoWidth: true }
-        );
+         const filename = getFilenameWithDate('Customer');
+         exportToXlsx(
+           customers,
+           filename,
+           columns,
+           { sheetName: 'Customer', autoWidth: true }
+         );
 
-        toast({
-          title: 'Berhasil',
-          description: `${customers.length} data customer diunduh dalam format XLSX.`,
-        });
-      } catch (error) {
-        console.error('Export error:', error);
-        toast({
-          title: 'Gagal',
-          description: 'Gagal mengunduh data customer.',
-          variant: 'destructive',
-        });
-      }
-    }, [customers, toast]);
+         toast({
+           title: 'Berhasil',
+           description: `${customers.length} data customer diunduh dalam format XLSX.`,
+         });
+       } catch (error) {
+         console.error('Export error:', error);
+         toast({
+           title: 'Gagal',
+           description: 'Gagal mengunduh data customer.',
+           variant: 'destructive',
+         });
+       }
+     }, [customers, toast]);
 
   return (
     <MainLayout title="Customer" subtitle="Kelola data customer toko Anda">

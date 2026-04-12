@@ -21,7 +21,7 @@ import { DeleteConfirmDialog } from '@/components/dialogs/DeleteConfirmDialog';
 import { formatCurrency } from '@/lib/utils';
 import { useSuppliers, useCreateSupplier, useUpdateSupplier, useDeleteSupplier } from '@/hooks/api/useSuppliers';
 import type { Supplier as SupplierType } from '@/types';
-import { exportToXlsx, type ColumnConfig } from '@/lib/xlsx-export';
+import { exportToXlsx, type ColumnConfig, getFilenameWithDate } from '@/lib/xlsx-export';
 
 const BLANK_FORM = { name: '', phone: '', email: '', address: '', noRekening: '' };
 
@@ -106,22 +106,20 @@ const Supplier = () => {
     const handleExport = useCallback(() => {
       try {
         const columns: ColumnConfig<SupplierType>[] = [
-          { header: 'Kode', key: 'code', width: 12 },
-          { header: 'Nama', key: 'name', width: 30 },
-          { header: 'Telepon', key: 'phone', width: 15 },
-          { header: 'Email', key: 'email', width: 25 },
+          { header: 'ID Supplier', key: 'id', width: 12 },
+          { header: 'Nama Supplier', key: 'name', width: 30 },
           { header: 'Alamat', key: 'address', width: 35 },
-          {
-            header: 'Total Utang',
-            key: 'balance',
-            format: (value) => typeof value === 'number' ? value : Number(value) || 0,
-            width: 15,
-          },
+          { header: 'Kota', key: 'city', width: 15 },
+          { header: 'Telepon 1', key: 'phone', width: 15 },
+          { header: 'Telepon 2', key: 'phone2', width: 15 },
+          { header: 'Email', key: 'email', width: 25 },
+          { header: 'No Rekening', key: 'noRekening', width: 20 },
         ];
 
+        const filename = getFilenameWithDate('Supplier');
         exportToXlsx(
           suppliers,
-          'supplier.xlsx',
+          filename,
           columns,
           { sheetName: 'Supplier', autoWidth: true }
         );

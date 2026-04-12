@@ -127,6 +127,22 @@ export const formatNumber = (value: unknown): string => {
 };
 
 /**
+ * Generate filename with date suffix (YYYYMMDD format)
+ * @example getFilenameWithDate('supplier') => 'supplier_20260412.xlsx'
+ */
+export function getFilenameWithDate(baseName: string): string {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const dateStr = `${year}${month}${day}`;
+  
+  // Remove .xlsx if already present
+  const name = baseName.replace(/\.xlsx$/i, '');
+  return `${name}_${dateStr}.xlsx`;
+}
+
+/**
  * Helper function to trigger download
  * Useful for testing or custom implementations
  */

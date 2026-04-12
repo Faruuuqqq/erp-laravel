@@ -65,11 +65,19 @@ export interface Product {
 export interface Customer {
   id: string;
   name: string;
-  phone: string;
-  email?: string;
   address?: string;
-  balance: number;
+  city?: string;
+  phone: string;
+  phone2?: string;
+  email?: string;
   creditLimit: number;
+  discount?: number;
+  warehouse?: string;
+  priceList?: string;
+  area?: string;
+  notes?: string;
+  npwp?: string;
+  balance: number;
   totalTransactions?: number;
   createdAt?: string;
   updatedAt?: string;
@@ -79,11 +87,13 @@ export interface Supplier {
   id: string;
   code?: string;
   name: string;
-  phone?: string;
-  email?: string;
   address?: string;
-  balance?: number;
+  city?: string;
+  phone?: string;
+  phone2?: string;
+  email?: string;
   noRekening?: string;
+  balance?: number;
   totalTransactions?: number;
   createdAt?: string;
 }
