@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, ReactNode } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,9 +12,9 @@ import { Search, ClipboardList, Eye, Printer } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useAuth } from '@/contexts/AuthContext';
-import { usePrint } from '@/contexts/usePrint';
 import { useCustomers } from '@/hooks/api/useCustomers';
 import { useTransactions } from '@/hooks/api/useTransactions';
+import { PrintPreviewDialog } from '@/components/dialogs/PrintPreviewDialog';
 import { KontraBonPrint } from '@/components/print/KontraBonPrint';
 import { formatCurrency } from '@/lib/utils';
 import type { Transaction } from '@/types';
@@ -23,9 +23,10 @@ const KontraBon = () => {
   const { toast } = useToast();
   const { canPrint } = usePermissions();
   const { user } = useAuth();
-  const { printDocument } = usePrint();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCustomer, setFilterCustomer] = useState('all');
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [previewContent, setPreviewContent] = useState<ReactNode>(null);
 
   const { data: customersData } = useCustomers({ perPage: 200 });
   // Load all outstanding penjualan_kredit (remaining > 0)
@@ -72,8 +73,11 @@ const KontraBon = () => {
   const handlePrintAll = useCallback(() => {
     // If filtering to one customer, print just that customer's kontra bon
     const entries = filteredGrouped;
-    if (entries.length === 0) return toast({ title: 'Tidak ada data untuk dicetak', variant: 'destructive' });
-    printDocument(
+    if (entries.length === 0) {
+      toast({ title: 'Tidak ada data untuk dicetak', variant: 'destructive' });
+      return;
+    }
+    setPreviewContent(
       <div>
         {entries.map(([cid, group]) => (
           <KontraBonPrint
@@ -91,11 +95,12 @@ const KontraBon = () => {
         ))}
       </div>
     );
-  }, [filteredGrouped, printDocument, user?.name, toast]);
+    setIsPreviewOpen(true);
+  }, [filteredGrouped, user?.name, toast]);
 
   // Per-customer print
   const handlePrintCustomer = useCallback((cid: string, group: { name: string; items: Transaction[] }) => {
-    printDocument(
+    setPreviewContent(
       <KontraBonPrint
         customerName={group.name}
         printedBy={user?.name}
@@ -108,7 +113,8 @@ const KontraBon = () => {
         }))}
       />
     );
-   }, [printDocument, user?.name]);
+    setIsPreviewOpen(true);
+   }, [user?.name]);
 
    return (
     <MainLayout title="Kontra Bon" subtitle="Bon yang belum dilunasi per customer">
@@ -144,18 +150,18 @@ const KontraBon = () => {
             </SelectContent>
           </Select>
         </div>
-          <div className="flex gap-2">
-             {canPrint('transactions.kontra_bon') && (
-               <>
-                 <Button variant="outline" className="h-8 text-xs gap-1.5" disabled title="Gunakan tombol 'Cetak Kontra Bon' di masing-masing customer untuk export PDF">
-                   <Eye className="h-3.5 w-3.5" />Lihat PDF
-                 </Button>
-                 <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={handlePrintAll}>
-                   <Printer className="h-3.5 w-3.5" />Cetak Semua
-                 </Button>
-               </>
-             )}
-          </div>
+           <div className="flex gap-2">
+              {canPrint('transactions.kontra_bon') && (
+                <>
+                  <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={() => setIsPreviewOpen(true)}>
+                    <Eye className="h-3.5 w-3.5" />Lihat PDF
+                  </Button>
+                  <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={handlePrintAll}>
+                    <Printer className="h-3.5 w-3.5" />Cetak Semua
+                  </Button>
+                </>
+              )}
+           </div>
       </div>
 
       <Card>
@@ -253,6 +259,16 @@ const KontraBon = () => {
           )}
         </CardContent>
       </Card>
+
+      <PrintPreviewDialog
+        isOpen={isPreviewOpen}
+        onClose={() => setIsPreviewOpen(false)}
+        title="Kontra Bon"
+        documentId="kontra-bon-preview"
+        filename="Kontra Bon"
+      >
+        {previewContent}
+      </PrintPreviewDialog>
     </MainLayout>
   );
 };

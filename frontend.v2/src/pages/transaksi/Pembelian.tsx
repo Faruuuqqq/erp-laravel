@@ -402,17 +402,23 @@ const Pembelian = () => {
                 </div>
               )}
 
-              <div className="space-y-1.5">
-                <Label className="text-xs">Catatan</Label>
-                <Input value={state.catatan} onChange={e => set('catatan', e.target.value)} placeholder="Catatan..." className="text-xs h-8" />
-              </div>
+               <div className="space-y-1.5">
+                 <Label className="text-xs">Catatan</Label>
+                 <Input value={state.catatan} onChange={e => set('catatan', e.target.value)} placeholder="Catatan..." className="text-xs h-8" />
+               </div>
 
-              <div className="flex gap-2 pt-2">
-                <Button variant="outline" className="flex-1 h-9 text-sm" onClick={reset}>Reset</Button>
-                <Button className="flex-1 h-9 text-sm" onClick={handleSave} disabled={state.cart.length === 0 || createTx.isPending}>
-                  {createTx.isPending ? 'Menyimpan...' : 'Simpan'}
-                </Button>
-              </div>
+               {canPrint('transactions.pembelian') && savedTrx && (
+                 <Button variant="outline" className="w-full h-8 text-xs" onClick={() => setIsPreviewOpen(true)}>
+                   <Eye className="mr-1.5 h-3.5 w-3.5" />Preview & Cetak
+                 </Button>
+               )}
+
+               <div className="flex gap-2 pt-2">
+                 <Button variant="outline" className="flex-1 h-9 text-sm" onClick={reset}>Reset</Button>
+                 <Button className="flex-1 h-9 text-sm" onClick={handleSave} disabled={state.cart.length === 0 || createTx.isPending}>
+                   {createTx.isPending ? 'Menyimpan...' : 'Simpan'}
+                 </Button>
+               </div>
             </CardContent>
           </Card>
         </div>
