@@ -19,3 +19,38 @@ export function formatCurrency(value: number | string | null | undefined): strin
     maximumFractionDigits: 0,
   }).format(num);
 }
+
+/**
+ * Extract error message from API response with runtime safety
+ * Handles nested error responses from Laravel API
+ */
+export function extractApiError(
+  error: unknown,
+  fallback: string = 'Terjadi kesalahan'
+): string {
+  try {
+    const err = error as {
+      response?: {
+        data?: {
+          message?: string;
+          errors?: Record<string, string[]>;
+        };
+      };
+    };
+
+    // Try to get first validation error
+    if (err.response?.data?.errors) {
+      const firstError = Object.values(err.response.data.errors)[0];
+      if (firstError?.[0]) return firstError[0];
+    }
+
+    // Fallback to message field
+    if (err.response?.data?.message) {
+      return err.response.data.message;
+    }
+
+    return fallback;
+  } catch {
+    return fallback;
+  }
+}

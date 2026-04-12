@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/contexts/AuthContext';
-import { Settings, User, Store, Lock, Bell, Shield, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import { Settings, User, Store, Lock, Bell, Shield, CheckCircle2, Loader2, Eye, EyeOff } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useSettings } from '@/hooks/api/useSettings';
 import { useUpdateProfile } from '@/hooks/api/useSettings';
@@ -15,6 +15,7 @@ import { useUpdateStore } from '@/hooks/api/useSettings';
 import { useUpdatePassword } from '@/hooks/api/useSettings';
 import { useUpdateNotifications } from '@/hooks/api/useSettings';
 import { useToast } from '@/hooks/use-toast';
+import { extractApiError } from '@/lib/utils';
 
 interface ProfileForm {
   name: string;
@@ -62,81 +63,82 @@ interface SettingsData {
 }
 
 const Pengaturan = () => {
-  const { user, updateUser } = useAuth();
-  const { data: settingsData } = useSettings();
-  const updateProfileMutation = useUpdateProfile();
-  const updateStoreMutation = useUpdateStore();
-  const updatePasswordMutation = useUpdatePassword();
-  const updateNotificationsMutation = useUpdateNotifications();
-  const { toast } = useToast();
+   const { user, updateUser } = useAuth();
+   const { data: settingsData, isLoading: settingsLoading, isError: settingsError } = useSettings();
+   const updateProfileMutation = useUpdateProfile();
+   const updateStoreMutation = useUpdateStore();
+   const updatePasswordMutation = useUpdatePassword();
+   const updateNotificationsMutation = useUpdateNotifications();
+   const { toast } = useToast();
 
-  // Profile Form State
-  const [profileForm, setProfileForm] = useState<ProfileForm>({
-    name: '',
-    email: '',
-  });
-  const [profileLoading, setProfileLoading] = useState(false);
+   // Profile Form State
+   const [profileForm, setProfileForm] = useState<ProfileForm>({
+     name: '',
+     email: '',
+   });
 
-  // Store Form State
-  const [storeForm, setStoreForm] = useState<StoreForm>({
-    store_name: '',
-    phone: '',
-    address: '',
-    npwp: '',
-    siup: '',
-  });
-  const [storeLoading, setStoreLoading] = useState(false);
+   // Store Form State
+   const [storeForm, setStoreForm] = useState<StoreForm>({
+     store_name: '',
+     phone: '',
+     address: '',
+     npwp: '',
+     siup: '',
+   });
 
-  // Password Form State
-  const [passwordForm, setPasswordForm] = useState<PasswordForm>({
-    current_password: '',
-    password: '',
-    password_confirmation: '',
-  });
-  const [passwordLoading, setPasswordLoading] = useState(false);
+   // Password Form State
+   const [passwordForm, setPasswordForm] = useState<PasswordForm>({
+     current_password: '',
+     password: '',
+     password_confirmation: '',
+   });
+   const [showPassword, setShowPassword] = useState(false);
+   const [showPasswordConfirm, setShowPasswordConfirm] = useState(false);
 
-  // Notifications Form State
-  const [notifications, setNotifications] = useState<NotificationsForm>({
-    low_stock_alert: true,
-    receivable_due_alert: true,
-    daily_report: false,
-  });
-  const [notificationsLoading, setNotificationsLoading] = useState(false);
+   // Notifications Form State
+   const [notifications, setNotifications] = useState<NotificationsForm>({
+     low_stock_alert: true,
+     receivable_due_alert: true,
+     daily_report: false,
+   });
+   const [isInitialized, setIsInitialized] = useState(false);
 
-  // Load settings data when fetched
-  useEffect(() => {
-    if (settingsData?.data) {
-      const data = settingsData.data as SettingsData;
-      
-      // Load profile
-      if (data.profile) {
-        setProfileForm({
-          name: data.profile.name || '',
-          email: data.profile.email || '',
-        });
-      }
-      
-      // Load store
-      if (data.store) {
-        setStoreForm({
-          store_name: data.store.store_name || '',
-          phone: data.store.phone || '',
-          address: data.store.address || '',
-          npwp: data.store.npwp || '',
-          siup: data.store.siup || '',
-        });
-      }
-      
-      // Load notifications
-      if (data.notifications) {
-        setNotifications({
-          low_stock_alert: data.notifications.low_stock_alert ?? true,
-          receivable_due_alert: data.notifications.receivable_due_alert ?? true,
-          daily_report: data.notifications.daily_report ?? false,
-        });
-      }
-    }
-  }, [settingsData]);
+   // Load settings data when fetched - only once to prevent overwriting user changes
+   useEffect(() => {
+     if (settingsData?.data && !isInitialized) {
+       const data = settingsData.data as SettingsData;
+       
+       // Load profile
+       if (data.profile) {
+         setProfileForm({
+           name: data.profile.name || '',
+           email: data.profile.email || '',
+         });
+       }
+       
+       // Load store
+       if (data.store) {
+         setStoreForm({
+           store_name: data.store.store_name || '',
+           phone: data.store.phone || '',
+           address: data.store.address || '',
+           npwp: data.store.npwp || '',
+           siup: data.store.siup || '',
+         });
+       }
+       
+       // Load notifications
+       if (data.notifications) {
+         setNotifications({
+           low_stock_alert: data.notifications.low_stock_alert ?? true,
+           receivable_due_alert: data.notifications.receivable_due_alert ?? true,
+           daily_report: data.notifications.daily_report ?? false,
+         });
+       }
+       
+       setIsInitialized(true);
+     }
+   }, [settingsData, isInitialized]);
 
   // Validation Functions
   const validateProfile = (): boolean => {
@@ -183,138 +185,217 @@ const Pengaturan = () => {
     return true;
   };
 
-  // Submit Handlers
-  const handleProfileSave = async () => {
-    if (!validateProfile()) return;
-    
-    setProfileLoading(true);
-    try {
-      await updateProfileMutation.mutateAsync({
-        name: profileForm.name,
-        email: profileForm.email,
-      });
-      
-      toast({ 
-        title: 'Profil berhasil diperbarui',
-        description: `Nama: ${profileForm.name}, Email: ${profileForm.email}`,
-        variant: 'default',
-      });
-      
-      // Update user context
-      if (updateUser && user) {
-        updateUser({ ...user, name: profileForm.name, email: profileForm.email });
-      }
-    } catch (error: unknown) {
-      const err = error as { response?: { data?: { errors?: { email?: string[] }; message?: string } } };
-      const message = err.response?.data?.errors?.email?.[0] 
-        || err.response?.data?.message 
-        || 'Gagal memperbarui profil';
-      
-      toast({ 
-        title: 'Gagal memperbarui profil',
-        description: message,
-        variant: 'destructive',
-      });
-    } finally {
-      setProfileLoading(false);
-    }
-  };
+   // Submit Handlers
+   const handleProfileSave = () => {
+     if (!validateProfile()) return;
 
-  const handleStoreSave = async () => {
-    if (!validateStore()) return;
-    
-    setStoreLoading(true);
-    try {
-      await updateStoreMutation.mutateAsync(storeForm);
-      
-      toast({ 
-        title: 'Informasi toko berhasil diperbarui',
-        description: `Nama: ${storeForm.store_name}`,
-        variant: 'default',
-      });
-    } catch (error: unknown) {
-      const err = error as { response?: { data?: { message?: string } } };
-      const message = err.response?.data?.message || 'Gagal memperbarui informasi toko';
-      
-      toast({ 
-        title: 'Gagal memperbarui toko',
-        description: message,
-        variant: 'destructive',
-      });
-    } finally {
-      setStoreLoading(false);
-    }
-  };
+     // Check if data has changed
+     const originalData = settingsData?.data?.profile;
+     if (
+       originalData &&
+       originalData.name === profileForm.name &&
+       originalData.email === profileForm.email
+     ) {
+       toast({ title: 'Tidak ada perubahan pada profil' });
+       return;
+     }
 
-  const handlePasswordSave = async () => {
-    if (!validatePassword()) return;
-    
-    setPasswordLoading(true);
-    try {
-      await updatePasswordMutation.mutateAsync({
-        current_password: passwordForm.current_password,
-        password: passwordForm.password,
-      });
-      
-      toast({ 
-        title: 'Password berhasil diubah',
-        description: 'Silakan login dengan password baru',
-        variant: 'default',
-      });
-      
-      // Reset form
-      setPasswordForm({
-        current_password: '',
-        password: '',
-        password_confirmation: '',
-      });
-    } catch (error: unknown) {
-      const err = error as { response?: { data?: { errors?: { current_password?: string[]; password?: string[] }; message?: string } } };
-      const message = err.response?.data?.errors?.current_password?.[0]
-        || err.response?.data?.errors?.password?.[0]
-        || err.response?.data?.message
-        || 'Gagal mengubah password';
-      
-      toast({ 
-        title: 'Gagal mengubah password',
-        description: message,
-        variant: 'destructive',
-      });
-    } finally {
-      setPasswordLoading(false);
-    }
-  };
+     updateProfileMutation.mutate(
+       { name: profileForm.name, email: profileForm.email },
+       {
+         onSuccess: () => {
+           toast({
+             title: 'Profil berhasil diperbarui',
+             description: `Nama: ${profileForm.name}, Email: ${profileForm.email}`,
+             variant: 'default',
+           });
 
-  const handleNotificationsSave = async () => {
-    setNotificationsLoading(true);
-    try {
-      await updateNotificationsMutation.mutateAsync(notifications);
-      
-      toast({ 
-        title: 'Pengaturan notifikasi berhasil diperbarui',
-        description: 'Preferensi notifikasi Anda telah disimpan',
-        variant: 'default',
-      });
-    } catch (error: unknown) {
-      const err = error as { response?: { data?: { message?: string } } };
-      const message = err.response?.data?.message || 'Gagal memperbarui notifikasi';
-      
-      toast({ 
-        title: 'Gagal memperbarui notifikasi',
-        description: message,
-        variant: 'destructive',
-      });
-    } finally {
-      setNotificationsLoading(false);
-    }
-  };
+           // Update user context
+           if (updateUser && user) {
+             updateUser({ ...user, name: profileForm.name, email: profileForm.email });
+           }
+         },
+         onError: (error) => {
+           const message = extractApiError(error, 'Gagal memperbarui profil');
+           toast({
+             title: 'Gagal memperbarui profil',
+             description: message,
+             variant: 'destructive',
+           });
+         },
+       }
+     );
+   };
 
-  return (
-    <MainLayout title="Pengaturan" subtitle="Kelola pengaturan aplikasi">
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2 space-y-6">
-          {/* Profile Settings */}
-          <Card>
+   const handleStoreSave = () => {
+     if (!validateStore()) return;
+
+     // Check if data has changed
+     const originalData = settingsData?.data?.store;
+     if (
+       originalData &&
+       originalData.store_name === storeForm.store_name &&
+       originalData.phone === storeForm.phone &&
+       originalData.address === storeForm.address &&
+       originalData.npwp === storeForm.npwp &&
+       originalData.siup === storeForm.siup
+     ) {
+       toast({ title: 'Tidak ada perubahan pada informasi toko' });
+       return;
+     }
+
+     updateStoreMutation.mutate(storeForm, {
+       onSuccess: () => {
+         toast({
+           title: 'Informasi toko berhasil diperbarui',
+           description: `Nama: ${storeForm.store_name}`,
+           variant: 'default',
+         });
+       },
+       onError: (error) => {
+         const message = extractApiError(error, 'Gagal memperbarui informasi toko');
+         toast({
+           title: 'Gagal memperbarui toko',
+           description: message,
+           variant: 'destructive',
+         });
+       },
+     });
+   };
+
+   const handlePasswordSave = () => {
+     if (!validatePassword()) return;
+
+     updatePasswordMutation.mutate(
+       {
+         current_password: passwordForm.current_password,
+         password: passwordForm.password,
+         password_confirmation: passwordForm.password_confirmation,
+       },
+       {
+         onSuccess: () => {
+           toast({
+             title: 'Password berhasil diubah',
+             description: 'Silakan login dengan password baru',
+             variant: 'default',
+           });
+
+           // Reset form
+           setPasswordForm({
+             current_password: '',
+             password: '',
+             password_confirmation: '',
+           });
+           setShowPassword(false);
+           setShowPasswordConfirm(false);
+         },
+         onError: (error) => {
+           const message = extractApiError(error, 'Gagal mengubah password');
+           toast({
+             title: 'Gagal mengubah password',
+             description: message,
+             variant: 'destructive',
+           });
+         },
+       }
+     );
+   };
+
+   const handleNotificationsSave = () => {
+     // Check if data has changed
+     const originalData = settingsData?.data?.notifications;
+     if (
+       originalData &&
+       originalData.low_stock_alert === notifications.low_stock_alert &&
+       originalData.receivable_due_alert === notifications.receivable_due_alert &&
+       originalData.daily_report === notifications.daily_report
+     ) {
+       toast({ title: 'Tidak ada perubahan pada notifikasi' });
+       return;
+     }
+
+     updateNotificationsMutation.mutate(notifications, {
+       onSuccess: () => {
+         toast({
+           title: 'Pengaturan notifikasi berhasil diperbarui',
+           description: 'Preferensi notifikasi Anda telah disimpan',
+           variant: 'default',
+         });
+       },
+       onError: (error) => {
+         const message = extractApiError(error, 'Gagal memperbarui notifikasi');
+         toast({
+           title: 'Gagal memperbarui notifikasi',
+           description: message,
+           variant: 'destructive',
+         });
+       },
+     });
+   };
+
+   return (
+     <MainLayout title="Pengaturan" subtitle="Kelola pengaturan aplikasi">
+       {settingsLoading && (
+         <div className="grid gap-6 lg:grid-cols-3">
+           <div className="lg:col-span-2 space-y-6">
+             <Card>
+               <CardHeader className="pb-4">
+                 <div className="h-6 w-40 animate-pulse rounded bg-muted" />
+               </CardHeader>
+               <CardContent className="space-y-4">
+                 <div className="space-y-2">
+                   <div className="h-4 w-24 animate-pulse rounded bg-muted" />
+                   <div className="h-10 w-full animate-pulse rounded bg-muted" />
+                 </div>
+                 <div className="space-y-2">
+                   <div className="h-4 w-24 animate-pulse rounded bg-muted" />
+                   <div className="h-10 w-full animate-pulse rounded bg-muted" />
+                 </div>
+                 <div className="h-10 w-full animate-pulse rounded bg-muted" />
+               </CardContent>
+             </Card>
+             <Card>
+               <CardHeader className="pb-4">
+                 <div className="h-6 w-40 animate-pulse rounded bg-muted" />
+               </CardHeader>
+               <CardContent className="space-y-4">
+                 <div className="space-y-2">
+                   <div className="h-4 w-24 animate-pulse rounded bg-muted" />
+                   <div className="h-10 w-full animate-pulse rounded bg-muted" />
+                 </div>
+               </CardContent>
+             </Card>
+           </div>
+           <div>
+             <Card>
+               <CardHeader className="pb-4">
+                 <div className="h-6 w-32 animate-pulse rounded bg-muted" />
+               </CardHeader>
+               <CardContent>
+                 <div className="space-y-4">
+                   <div className="h-10 w-full animate-pulse rounded bg-muted" />
+                   <div className="h-10 w-full animate-pulse rounded bg-muted" />
+                 </div>
+               </CardContent>
+             </Card>
+           </div>
+         </div>
+       )}
+
+       {settingsError && (
+         <Card className="border-destructive/50 bg-destructive/10">
+           <CardContent className="py-10 text-center text-destructive">
+             <p className="font-medium mb-2">Gagal memuat pengaturan</p>
+             <p className="text-sm text-muted-foreground">Silakan refresh halaman untuk mencoba lagi</p>
+           </CardContent>
+         </Card>
+       )}
+
+        {!settingsLoading && !settingsError && (
+         <div className="grid gap-6 lg:grid-cols-3">
+           <div className="lg:col-span-2 space-y-6">
+           {/* Profile Settings */}
+           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <User className="h-5 w-5" />
@@ -355,24 +436,26 @@ const Pengaturan = () => {
                     placeholder="email@contoh.com"
                   />
                 </div>
-              </div>
-              <Button 
-                onClick={handleProfileSave}
-                disabled={profileLoading}
-                className="w-full"
-              >
-                {profileLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Menyimpan...
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="mr-2 h-4 w-4" />
-                    Simpan Perubahan
-                  </>
-                )}
-              </Button>
+               </div>
+               <form onSubmit={(e) => { e.preventDefault(); handleProfileSave(); }}>
+                 <Button 
+                   type="submit"
+                   disabled={updateProfileMutation.isPending}
+                   className="w-full"
+                 >
+                   {updateProfileMutation.isPending ? (
+                     <>
+                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                       Menyimpan...
+                     </>
+                   ) : (
+                     <>
+                       <CheckCircle2 className="mr-2 h-4 w-4" />
+                       Simpan Perubahan
+                     </>
+                   )}
+                 </Button>
+               </form>
             </CardContent>
           </Card>
           
@@ -434,24 +517,26 @@ const Pengaturan = () => {
                     placeholder="Masukkan No. SIUP"
                   />
                 </div>
-              </div>
-              <Button 
-                onClick={handleStoreSave}
-                disabled={storeLoading}
-                className="w-full"
-              >
-                {storeLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Menyimpan...
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="mr-2 h-4 w-4" />
-                    Simpan Perubahan
-                  </>
-                )}
-              </Button>
+               </div>
+               <form onSubmit={(e) => { e.preventDefault(); handleStoreSave(); }}>
+                 <Button 
+                   type="submit"
+                   disabled={updateStoreMutation.isPending}
+                   className="w-full"
+                 >
+                   {updateStoreMutation.isPending ? (
+                     <>
+                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                       Menyimpan...
+                     </>
+                   ) : (
+                     <>
+                       <CheckCircle2 className="mr-2 h-4 w-4" />
+                       Simpan Perubahan
+                     </>
+                   )}
+                 </Button>
+               </form>
             </CardContent>
           </Card>
           
@@ -463,60 +548,86 @@ const Pengaturan = () => {
                 Keamanan
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="current_password">Password Saat Ini *</Label>
-                <Input
-                  id="current_password"
-                  type="password"
-                  value={passwordForm.current_password}
-                  onChange={(e) => setPasswordForm({ ...passwordForm, current_password: e.target.value })}
-                  placeholder="Masukkan password saat ini"
-                />
-              </div>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="password">Password Baru *</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    value={passwordForm.password}
-                    onChange={(e) => setPasswordForm({ ...passwordForm, password: e.target.value })}
-                    placeholder="Minimal 8 karakter"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="password_confirmation">Konfirmasi Password *</Label>
-                  <Input
-                    id="password_confirmation"
-                    type="password"
-                    value={passwordForm.password_confirmation}
-                    onChange={(e) => setPasswordForm({ ...passwordForm, password_confirmation: e.target.value })}
-                    placeholder="Ulangi password baru"
-                  />
-                </div>
-              </div>
-              <div className="text-sm text-muted-foreground">
-                <p>Info: Password harus minimal 8 karakter untuk keamanan akun Anda.</p>
-              </div>
-              <Button 
-                onClick={handlePasswordSave}
-                disabled={passwordLoading}
-                className="w-full"
-                variant={passwordForm.current_password ? "default" : "secondary"}
-              >
-                {passwordLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Mengubah...
-                  </>
-                ) : (
-                  <>
-                    <Lock className="mr-2 h-4 w-4" />
-                    Ubah Password
-                  </>
-                )}
-              </Button>
+             <CardContent className="space-y-4">
+               <form onSubmit={(e) => { e.preventDefault(); handlePasswordSave(); }} className="space-y-4">
+                 <div className="space-y-2">
+                   <Label htmlFor="current_password">Password Saat Ini *</Label>
+                   <Input
+                     id="current_password"
+                     type="password"
+                     autoComplete="current-password"
+                     aria-label="Password saat ini"
+                     value={passwordForm.current_password}
+                     onChange={(e) => setPasswordForm({ ...passwordForm, current_password: e.target.value })}
+                     placeholder="Masukkan password saat ini"
+                   />
+                 </div>
+                 <div className="grid gap-4 md:grid-cols-2">
+                   <div className="space-y-2">
+                     <Label htmlFor="password">Password Baru *</Label>
+                     <div className="relative">
+                       <Input
+                         id="password"
+                         type={showPassword ? 'text' : 'password'}
+                         autoComplete="new-password"
+                         aria-label="Password baru"
+                         value={passwordForm.password}
+                         onChange={(e) => setPasswordForm({ ...passwordForm, password: e.target.value })}
+                         placeholder="Minimal 8 karakter"
+                       />
+                       <button
+                         type="button"
+                         className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                         onClick={() => setShowPassword(!showPassword)}
+                       >
+                         {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                       </button>
+                     </div>
+                   </div>
+                   <div className="space-y-2">
+                     <Label htmlFor="password_confirmation">Konfirmasi Password *</Label>
+                     <div className="relative">
+                       <Input
+                         id="password_confirmation"
+                         type={showPasswordConfirm ? 'text' : 'password'}
+                         autoComplete="new-password"
+                         aria-label="Konfirmasi password baru"
+                         value={passwordForm.password_confirmation}
+                         onChange={(e) => setPasswordForm({ ...passwordForm, password_confirmation: e.target.value })}
+                         placeholder="Ulangi password baru"
+                       />
+                       <button
+                         type="button"
+                         className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                         onClick={() => setShowPasswordConfirm(!showPasswordConfirm)}
+                       >
+                         {showPasswordConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
+                       </button>
+                     </div>
+                   </div>
+                 </div>
+                 <div className="text-sm text-muted-foreground">
+                   <p>Info: Password harus minimal 8 karakter untuk keamanan akun Anda.</p>
+                 </div>
+                 <Button 
+                   type="submit"
+                   disabled={updatePasswordMutation.isPending}
+                   className="w-full"
+                   variant={passwordForm.current_password ? "default" : "secondary"}
+                 >
+                   {updatePasswordMutation.isPending ? (
+                     <>
+                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                       Mengubah...
+                     </>
+                   ) : (
+                     <>
+                       <Lock className="mr-2 h-4 w-4" />
+                       Ubah Password
+                     </>
+                   )}
+                 </Button>
+               </form>
             </CardContent>
           </Card>
         </div>
@@ -531,59 +642,59 @@ const Pengaturan = () => {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">Stok Menipis</p>
-                  <p className="text-sm text-muted-foreground">Peringatan saat stok rendah</p>
-                </div>
-                <Switch
-                  checked={notifications.low_stock_alert}
-                  onCheckedChange={(checked) => setNotifications({ ...notifications, low_stock_alert: checked })}
-                  disabled={notificationsLoading}
-                />
-              </div>
-              <Separator />
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">Piutang Jatuh Tempo</p>
-                  <p className="text-sm text-muted-foreground">Peringatan piutang</p>
-                </div>
-                <Switch
-                  checked={notifications.receivable_due_alert}
-                  onCheckedChange={(checked) => setNotifications({ ...notifications, receivable_due_alert: checked })}
-                  disabled={notificationsLoading}
-                />
-              </div>
-              <Separator />
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">Laporan Harian</p>
-                  <p className="text-sm text-muted-foreground">Kirim laporan via email</p>
-                </div>
-                <Switch
-                  checked={notifications.daily_report}
-                  onCheckedChange={(checked) => setNotifications({ ...notifications, daily_report: checked })}
-                  disabled={notificationsLoading}
-                />
-              </div>
-              <Separator />
-              <Button 
-                onClick={handleNotificationsSave}
-                disabled={notificationsLoading}
-                className="w-full"
-              >
-                {notificationsLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Menyimpan...
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="mr-2 h-4 w-4" />
-                    Simpan Perubahan
-                  </>
-                )}
-              </Button>
+               <div className="flex items-center justify-between">
+                 <div>
+                   <p className="font-medium">Stok Menipis</p>
+                   <p className="text-sm text-muted-foreground">Peringatan saat stok rendah</p>
+                 </div>
+                 <Switch
+                   checked={notifications.low_stock_alert}
+                   onCheckedChange={(checked) => setNotifications({ ...notifications, low_stock_alert: checked })}
+                   disabled={updateNotificationsMutation.isPending}
+                 />
+               </div>
+               <Separator />
+               <div className="flex items-center justify-between">
+                 <div>
+                   <p className="font-medium">Piutang Jatuh Tempo</p>
+                   <p className="text-sm text-muted-foreground">Peringatan piutang</p>
+                 </div>
+                 <Switch
+                   checked={notifications.receivable_due_alert}
+                   onCheckedChange={(checked) => setNotifications({ ...notifications, receivable_due_alert: checked })}
+                   disabled={updateNotificationsMutation.isPending}
+                 />
+               </div>
+               <Separator />
+               <div className="flex items-center justify-between">
+                 <div>
+                   <p className="font-medium">Laporan Harian</p>
+                   <p className="text-sm text-muted-foreground">Kirim laporan via email</p>
+                 </div>
+                 <Switch
+                   checked={notifications.daily_report}
+                   onCheckedChange={(checked) => setNotifications({ ...notifications, daily_report: checked })}
+                   disabled={updateNotificationsMutation.isPending}
+                 />
+               </div>
+               <Separator />
+               <Button 
+                 onClick={handleNotificationsSave}
+                 disabled={updateNotificationsMutation.isPending}
+                 className="w-full"
+               >
+                 {updateNotificationsMutation.isPending ? (
+                   <>
+                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                     Menyimpan...
+                   </>
+                 ) : (
+                   <>
+                     <CheckCircle2 className="mr-2 h-4 w-4" />
+                     Simpan Perubahan
+                   </>
+                 )}
+               </Button>
             </CardContent>
           </Card>
           
@@ -649,9 +760,10 @@ const Pengaturan = () => {
               </div>
             </CardContent>
           </Card>
-        </div>
-      </div>
-    </MainLayout>
+         </div>
+       </div>
+       )}
+     </MainLayout>
   );
 };
 
