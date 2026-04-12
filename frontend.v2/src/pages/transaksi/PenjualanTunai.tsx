@@ -50,10 +50,11 @@ const PenjualanTunai = () => {
   const { canCreate, canPrint } = usePermissions();
   const createTx = useCreateTransaction();
 
-  const [state, setState] = useState(BLANK());
-  const [saved, setSaved] = useState(false);
-  const [savedTrx, setSavedTrx] = useState<Transaction | null>(null);
-  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+   const [state, setState] = useState(BLANK());
+   const [saved, setSaved] = useState(false);
+   const [savedTrx, setSavedTrx] = useState<Transaction | null>(null);
+   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+   const [isDraftPreviewOpen, setIsDraftPreviewOpen] = useState(false);
 
    const { data: productsData } = useProducts({ perPage: 500 });
    const { data: customersData } = useCustomers({ perPage: 500 });
@@ -286,40 +287,194 @@ const PenjualanTunai = () => {
                 </div>
               )}
 
-              <div className="space-y-1.5">
-                <Label className="text-xs">Catatan</Label>
-                <Input value={state.catatan} onChange={e => set('catatan', e.target.value)} placeholder="Catatan..." className="text-xs h-8" />
-              </div>
+               <div className="space-y-1.5">
+                 <Label className="text-xs">Catatan</Label>
+                 <Input value={state.catatan} onChange={e => set('catatan', e.target.value)} placeholder="Catatan..." className="text-xs h-8" />
+               </div>
 
-               {canCreate('transactions.cash_sale') && (
-                 <div className="flex gap-2 pt-2">
-                   <Button variant="outline" className="flex-1 h-9 text-sm" onClick={reset}>Reset</Button>
-                   <Button className="flex-1 h-9 text-sm" onClick={handleSave} disabled={state.cart.length === 0 || createTx.isPending}>
-                     {createTx.isPending ? 'Menyimpan...' : 'Simpan'}
-                   </Button>
-                 </div>
+               {state.cart.length > 0 && (
+                 <Button variant="outline" className="w-full h-8 text-xs" onClick={() => setIsDraftPreviewOpen(true)}>
+                   <Eye className="mr-1.5 h-3.5 w-3.5" />Lihat Preview
+                 </Button>
                )}
-               {savedTrx && canPrint('transactions.cash_sale') && (
-                 <Button variant="outline" className="w-full h-8 text-xs" onClick={() => setIsPreviewOpen(true)}><Eye className="mr-1.5 h-3.5 w-3.5" />Preview & Cetak</Button>
-               )}
+
+                {canCreate('transactions.cash_sale') && (
+                  <div className="flex gap-2 pt-2">
+                    <Button variant="outline" className="flex-1 h-9 text-sm" onClick={reset}>Reset</Button>
+                    <Button className="flex-1 h-9 text-sm" onClick={handleSave} disabled={state.cart.length === 0 || createTx.isPending}>
+                      {createTx.isPending ? 'Menyimpan...' : 'Simpan'}
+                    </Button>
+                  </div>
+                )}
+                {savedTrx && canPrint('transactions.cash_sale') && (
+                  <Button variant="outline" className="w-full h-8 text-xs" onClick={() => setIsPreviewOpen(true)}><Eye className="mr-1.5 h-3.5 w-3.5" />Preview & Cetak</Button>
+                )}
             </CardContent>
           </Card>
         </div>
       </div>
 
-      {savedTrx && (
-        <PrintPreviewDialog
-          isOpen={isPreviewOpen}
-          onClose={() => setIsPreviewOpen(false)}
-          title="Faktur Penjualan Tunai"
-          documentId="faktur-penjualan-tunai-print"
-          filename={`faktur-penjualan-tunai-${savedTrx.invoiceNumber}`}
-        >
-          <div id="faktur-penjualan-tunai-print">
-            <FakturPenjualan transaction={savedTrx} />
-          </div>
-        </PrintPreviewDialog>
-      )}
+       {savedTrx && (
+         <PrintPreviewDialog
+           isOpen={isPreviewOpen}
+           onClose={() => setIsPreviewOpen(false)}
+           title="Faktur Penjualan Tunai"
+           documentId="faktur-penjualan-tunai-print"
+           filename={`faktur-penjualan-tunai-${savedTrx.invoiceNumber}`}
+         >
+           <div id="faktur-penjualan-tunai-print">
+             <FakturPenjualan transaction={savedTrx} />
+           </div>
+         </PrintPreviewDialog>
+       )}
+
+       {/* Draft Preview Dialog */}
+       <PrintPreviewDialog
+         isOpen={isDraftPreviewOpen}
+         onClose={() => setIsDraftPreviewOpen(false)}
+         title="Preview Penjualan Tunai (Draft)"
+         documentId="faktur-penjualan-tunai-draft-print"
+         filename="Penjualan-Tunai-Draft"
+         printContent={
+           <div className="w-full text-sm space-y-4 p-4">
+             <div className="border-b pb-4">
+               <p className="font-semibold text-lg">Penjualan Tunai (Draft)</p>
+               <p className="text-xs text-muted-foreground">Belum disimpan</p>
+             </div>
+             <div className="space-y-1 text-xs">
+               <div className="flex justify-between">
+                 <span>Tanggal:</span>
+                 <span className="font-semibold">{state.tanggal}</span>
+               </div>
+               {state.catatan && (
+                 <div className="flex justify-between">
+                   <span>Catatan:</span>
+                   <span className="font-semibold">{state.catatan}</span>
+                 </div>
+               )}
+             </div>
+             <table className="w-full text-xs">
+               <thead className="border-b bg-muted/50">
+                 <tr>
+                   <th className="text-left py-2">Produk</th>
+                   <th className="text-right py-2">Qty</th>
+                   <th className="text-right py-2">Harga</th>
+                   <th className="text-right py-2">Diskon</th>
+                   <th className="text-right py-2">Subtotal</th>
+                 </tr>
+               </thead>
+               <tbody>
+                 {state.cart.map(item => (
+                   <tr key={item.productId} className="border-b">
+                     <td className="py-2">{item.nama}</td>
+                     <td className="text-right">{item.qty}</td>
+                     <td className="text-right">{formatCurrency(item.harga)}</td>
+                     <td className="text-right">{item.diskon}%</td>
+                     <td className="text-right font-semibold">{formatCurrency(item.subtotal)}</td>
+                   </tr>
+                 ))}
+               </tbody>
+             </table>
+             <div className="space-y-1 text-xs border-t pt-4">
+               <div className="flex justify-between">
+                 <span>Subtotal:</span>
+                 <span>{formatCurrency(subtotal)}</span>
+               </div>
+               {diskonTotalNum > 0 && (
+                 <div className="flex justify-between text-warning">
+                   <span>Diskon:</span>
+                   <span>-{formatCurrency(diskonTotalNum)}</span>
+                 </div>
+               )}
+               <div className="flex justify-between font-semibold text-base border-t pt-2">
+                 <span>Total:</span>
+                 <span>{formatCurrency(grandTotal)}</span>
+               </div>
+               {bayarNum > 0 && (
+                 <>
+                   <div className="flex justify-between">
+                     <span>Dibayar:</span>
+                     <span>{formatCurrency(bayarNum)}</span>
+                   </div>
+                   <div className={`flex justify-between ${kembalian >= 0 ? 'text-success' : 'text-destructive'}`}>
+                     <span>{kembalian >= 0 ? 'Kembalian' : 'Kurang'}:</span>
+                     <span className="font-semibold">{formatCurrency(Math.abs(kembalian))}</span>
+                   </div>
+                 </>
+               )}
+             </div>
+           </div>
+         }
+       >
+         <div className="w-full text-sm space-y-4 p-4">
+           <div className="border-b pb-4">
+             <p className="font-semibold text-lg">Penjualan Tunai (Draft)</p>
+             <p className="text-xs text-muted-foreground">Belum disimpan</p>
+           </div>
+           <div className="space-y-1 text-xs">
+             <div className="flex justify-between">
+               <span>Tanggal:</span>
+               <span className="font-semibold">{state.tanggal}</span>
+             </div>
+             {state.catatan && (
+               <div className="flex justify-between">
+                 <span>Catatan:</span>
+                 <span className="font-semibold">{state.catatan}</span>
+               </div>
+             )}
+           </div>
+           <table className="w-full text-xs">
+             <thead className="border-b bg-muted/50">
+               <tr>
+                 <th className="text-left py-2">Produk</th>
+                 <th className="text-right py-2">Qty</th>
+                 <th className="text-right py-2">Harga</th>
+                 <th className="text-right py-2">Diskon</th>
+                 <th className="text-right py-2">Subtotal</th>
+               </tr>
+             </thead>
+             <tbody>
+               {state.cart.map(item => (
+                 <tr key={item.productId} className="border-b">
+                   <td className="py-2">{item.nama}</td>
+                   <td className="text-right">{item.qty}</td>
+                   <td className="text-right">{formatCurrency(item.harga)}</td>
+                   <td className="text-right">{item.diskon}%</td>
+                   <td className="text-right font-semibold">{formatCurrency(item.subtotal)}</td>
+                 </tr>
+               ))}
+             </tbody>
+           </table>
+           <div className="space-y-1 text-xs border-t pt-4">
+             <div className="flex justify-between">
+               <span>Subtotal:</span>
+               <span>{formatCurrency(subtotal)}</span>
+             </div>
+             {diskonTotalNum > 0 && (
+               <div className="flex justify-between text-warning">
+                 <span>Diskon:</span>
+                 <span>-{formatCurrency(diskonTotalNum)}</span>
+               </div>
+             )}
+             <div className="flex justify-between font-semibold text-base border-t pt-2">
+               <span>Total:</span>
+               <span>{formatCurrency(grandTotal)}</span>
+             </div>
+             {bayarNum > 0 && (
+               <>
+                 <div className="flex justify-between">
+                   <span>Dibayar:</span>
+                   <span>{formatCurrency(bayarNum)}</span>
+                 </div>
+                 <div className={`flex justify-between ${kembalian >= 0 ? 'text-success' : 'text-destructive'}`}>
+                   <span>{kembalian >= 0 ? 'Kembalian' : 'Kurang'}:</span>
+                   <span className="font-semibold">{formatCurrency(Math.abs(kembalian))}</span>
+                 </div>
+               </>
+             )}
+           </div>
+         </div>
+       </PrintPreviewDialog>
     </MainLayout>
   );
 };
