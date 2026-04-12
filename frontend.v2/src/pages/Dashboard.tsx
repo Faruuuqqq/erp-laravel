@@ -53,17 +53,7 @@ const DASHBOARD_ROUTES = {
   EXPENSES: '/informasi/biaya-jasa',
 } as const;
 
-// --- Utility functions -------------------------------------------------------
-/**
- * Type-safe data extraction from API response
- */
-function extractData<T>(response: unknown, fallback: T): T {
-  if (response && typeof response === 'object' && 'data' in response) {
-    const data = (response as { data?: unknown }).data;
-    return data ?? fallback;
-  }
-  return fallback;
-}
+
 
 // --- Skeleton Components -------------------------------------------------------
 const StatCardSkeleton = () => (
@@ -201,20 +191,21 @@ const Dashboard = () => {
   } = useFinancialSummary('today');
 
   // --- Type-safe data extraction -----------------------------------------------
-  const stats: DashboardStats = extractData(statsData, {});
-  const recentTx: Transaction[] = extractData(recentData, []);
-  const lowStock: LowStockItem[] = extractData(lowStockData, []);
-  const chartData: SalesTrendItem[] = extractData(trendData, []);
-  const expensesStats: ExpenseStats = extractData(expensesData, {
+  // Hooks already return unwrapped data from response.data
+  const stats: DashboardStats = statsData ?? {};
+  const recentTx: Transaction[] = recentData ?? [];
+  const lowStock: LowStockItem[] = lowStockData ?? [];
+  const chartData: SalesTrendItem[] = trendData ?? [];
+  const expensesStats: ExpenseStats = expensesData ?? {
     totalExpensesToday: 0,
     totalExpensesMonth: 0,
-  });
-  const financial: FinancialSummary = extractData(financialData, {
+  };
+  const financial: FinancialSummary = financialData ?? {
     totalReceivables: 0,
     overdueReceivables: 0,
     totalPayables: 0,
     pendingPayments: 0,
-  });
+  };
 
   // --- Callbacks -------------------------------------------------------
   const handleRefreshAll = useCallback(() => {
@@ -271,25 +262,25 @@ const Dashboard = () => {
            Array.from({ length: 4 }).map((_, i) => <StatCardSkeleton key={i} />)
          ) : (
            <>
-             <StatCard
-               title="Penjualan Hari Ini"
-               value={stats.penjualanHariIni ?? 0}
-               subValue={`${stats.totalTransaksiHariIni ?? 0} transaksi`}
-               icon={<TrendingUp className="h-5 w-5" />}
-               color="success"
-               trend={stats.trendPenjualan != null ? (stats.trendPenjualan >= 0 ? 'up' : 'down') : undefined}
-               trendValue={stats.trendPenjualan != null ? `${stats.trendPenjualan > 0 ? '+' : ''}${stats.trendPenjualan}%` : undefined}
-               onClick={() => navigate(DASHBOARD_ROUTES.SALES)}
-             />
-             <StatCard
-               title="Pembelian Hari Ini"
-               value={stats.pembelianHariIni ?? 0}
-               icon={<ShoppingCart className="h-5 w-5" />}
-               color="primary"
-               trend={stats.trendPembelian != null ? (stats.trendPembelian >= 0 ? 'up' : 'down') : undefined}
-               trendValue={stats.trendPembelian != null ? `${stats.trendPembelian > 0 ? '+' : ''}${stats.trendPembelian}%` : undefined}
-               onClick={() => navigate(DASHBOARD_ROUTES.PURCHASES)}
-             />
+              <StatCard
+                title="Penjualan Hari Ini"
+                value={stats.totalSalesToday ?? 0}
+                subValue={`${stats.totalTransactionsToday ?? 0} transaksi`}
+                icon={<TrendingUp className="h-5 w-5" />}
+                color="success"
+                trend={stats.salesGrowth != null ? (stats.salesGrowth >= 0 ? 'up' : 'down') : undefined}
+                trendValue={stats.salesGrowth != null ? `${stats.salesGrowth > 0 ? '+' : ''}${stats.salesGrowth}%` : undefined}
+                onClick={() => navigate(DASHBOARD_ROUTES.SALES)}
+              />
+              <StatCard
+                title="Pembelian Hari Ini"
+                value={stats.totalPurchasesToday ?? 0}
+                icon={<ShoppingCart className="h-5 w-5" />}
+                color="primary"
+                trend={stats.purchasesGrowth != null ? (stats.purchasesGrowth >= 0 ? 'up' : 'down') : undefined}
+                trendValue={stats.purchasesGrowth != null ? `${stats.purchasesGrowth > 0 ? '+' : ''}${stats.purchasesGrowth}%` : undefined}
+                onClick={() => navigate(DASHBOARD_ROUTES.PURCHASES)}
+              />
              <StatCard
                title="Total Piutang"
                value={financial.totalReceivables ?? 0}
@@ -317,12 +308,12 @@ const Dashboard = () => {
             Array.from({ length: 3 }).map((_, i) => <StatCardSkeletonSmall key={i} />)
           ) : (
             <>
-              <StatCard
-                title="Kas Masuk Hari Ini"
-                value={stats.kasHariIni ?? 0}
-                icon={<Wallet className="h-5 w-5" />}
-                color="info"
-              />
+               <StatCard
+                 title="Kas Masuk Hari Ini"
+                 value={stats.totalSalesToday ?? 0}
+                 icon={<Wallet className="h-5 w-5" />}
+                 color="info"
+               />
               <StatCard
                 title="Stok Rendah"
                 value={lowStockLoading ? '...' : `${lowStock.length} Produk`}
@@ -330,13 +321,13 @@ const Dashboard = () => {
                 color={lowStock.length > 0 ? 'warning' : 'success'}
                 onClick={() => navigate(DASHBOARD_ROUTES.LOW_STOCK)}
               />
-              <StatCard
-                title="Total Nilai Stok"
-                value={stats.totalNilaiStok ?? 0}
-                icon={<BarChart3 className="h-5 w-5" />}
-                color="primary"
-                onClick={() => navigate(DASHBOARD_ROUTES.LOW_STOCK)}
-              />
+               <StatCard
+                 title="Total Nilai Stok"
+                 value={stats.stockValue ?? 0}
+                 icon={<BarChart3 className="h-5 w-5" />}
+                 color="primary"
+                 onClick={() => navigate(DASHBOARD_ROUTES.LOW_STOCK)}
+               />
             </>
           )}
         </div>
