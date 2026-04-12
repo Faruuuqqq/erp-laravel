@@ -10,6 +10,7 @@ interface UpdateProfileRequest {
 interface UpdatePasswordRequest {
   current_password: string;
   password: string;
+  password_confirmation: string;
 }
 
 interface UpdateNotificationsRequest {

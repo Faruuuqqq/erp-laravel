@@ -87,58 +87,71 @@ const Pengaturan = () => {
    });
 
    // Password Form State
-   const [passwordForm, setPasswordForm] = useState<PasswordForm>({
-     current_password: '',
-     password: '',
-     password_confirmation: '',
-   });
-   const [showPassword, setShowPassword] = useState(false);
-   const [showPasswordConfirm, setShowPasswordConfirm] = useState(false);
+    const [passwordForm, setPasswordForm] = useState<PasswordForm>({
+      current_password: '',
+      password: '',
+      password_confirmation: '',
+    });
+    const [showPassword, setShowPassword] = useState(false);
+    const [showPasswordConfirm, setShowPasswordConfirm] = useState(false);
 
-   // Notifications Form State
-   const [notifications, setNotifications] = useState<NotificationsForm>({
-     low_stock_alert: true,
-     receivable_due_alert: true,
-     daily_report: false,
-   });
-   const [isInitialized, setIsInitialized] = useState(false);
+    // Notifications Form State
+    const [notifications, setNotifications] = useState<NotificationsForm>({
+      low_stock_alert: true,
+      receivable_due_alert: true,
+      daily_report: false,
+    });
+    const [isInitialized, setIsInitialized] = useState(false);
 
-   // Load settings data when fetched - only once to prevent overwriting user changes
-   useEffect(() => {
-     if (settingsData?.data && !isInitialized) {
-       const data = settingsData.data as SettingsData;
-       
-       // Load profile
-       if (data.profile) {
-         setProfileForm({
-           name: data.profile.name || '',
-           email: data.profile.email || '',
-         });
-       }
-       
-       // Load store
-       if (data.store) {
-         setStoreForm({
-           store_name: data.store.store_name || '',
-           phone: data.store.phone || '',
-           address: data.store.address || '',
-           npwp: data.store.npwp || '',
-           siup: data.store.siup || '',
-         });
-       }
-       
-       // Load notifications
-       if (data.notifications) {
-         setNotifications({
-           low_stock_alert: data.notifications.low_stock_alert ?? true,
-           receivable_due_alert: data.notifications.receivable_due_alert ?? true,
-           daily_report: data.notifications.daily_report ?? false,
-         });
-       }
-       
-       setIsInitialized(true);
-     }
-   }, [settingsData, isInitialized]);
+    // Dirty state tracking
+    const isProfileDirty = settingsData?.data?.profile && (
+      settingsData.data.profile.name !== profileForm.name ||
+      settingsData.data.profile.email !== profileForm.email
+    );
+    const isStoreDirty = settingsData?.data?.store && (
+      settingsData.data.store.store_name !== storeForm.store_name ||
+      settingsData.data.store.phone !== storeForm.phone ||
+      settingsData.data.store.address !== storeForm.address ||
+      settingsData.data.store.npwp !== storeForm.npwp ||
+      settingsData.data.store.siup !== storeForm.siup
+    );
+
+    // Load settings data when fetched - only once to prevent overwriting user changes
+    useEffect(() => {
+      if (settingsData?.data && !isInitialized) {
+        const data = settingsData.data as SettingsData;
+        
+        // Load profile
+        if (data.profile) {
+          setProfileForm({
+            name: data.profile.name || '',
+            email: data.profile.email || '',
+          });
+        }
+        
+        // Load store
+        if (data.store) {
+          setStoreForm({
+            store_name: data.store.store_name || '',
+            phone: data.store.phone || '',
+            address: data.store.address || '',
+            npwp: data.store.npwp || '',
+            siup: data.store.siup || '',
+          });
+        }
+        
+        // Load notifications with explicit boolean casting
+        if (data.notifications) {
+          setNotifications({
+            low_stock_alert: Boolean(data.notifications.low_stock_alert ?? true),
+            receivable_due_alert: Boolean(data.notifications.receivable_due_alert ?? true),
+            daily_report: Boolean(data.notifications.daily_report ?? false),
+          });
+        }
+        
+        setIsInitialized(true);
+      }
+    }, [settingsData, isInitialized]);
 
   // Validation Functions
   const validateProfile = (): boolean => {
@@ -186,46 +199,46 @@ const Pengaturan = () => {
   };
 
    // Submit Handlers
-   const handleProfileSave = () => {
-     if (!validateProfile()) return;
+    const handleProfileSave = () => {
+      if (!validateProfile()) return;
 
-     // Check if data has changed
-     const originalData = settingsData?.data?.profile;
-     if (
-       originalData &&
-       originalData.name === profileForm.name &&
-       originalData.email === profileForm.email
-     ) {
-       toast({ title: 'Tidak ada perubahan pada profil' });
-       return;
-     }
+      // Check if data has changed
+      const originalData = settingsData?.data?.profile;
+      if (
+        originalData &&
+        originalData.name === profileForm.name &&
+        originalData.email === profileForm.email
+      ) {
+        toast({ title: 'Tidak ada perubahan pada profil', variant: 'default' });
+        return;
+      }
 
-     updateProfileMutation.mutate(
-       { name: profileForm.name, email: profileForm.email },
-       {
-         onSuccess: () => {
-           toast({
-             title: 'Profil berhasil diperbarui',
-             description: `Nama: ${profileForm.name}, Email: ${profileForm.email}`,
-             variant: 'default',
-           });
+      updateProfileMutation.mutate(
+        { name: profileForm.name, email: profileForm.email },
+        {
+          onSuccess: () => {
+            toast({
+              title: 'Profil berhasil diperbarui',
+              description: `Nama: ${profileForm.name}, Email: ${profileForm.email}`,
+              variant: 'default',
+            });
 
-           // Update user context
-           if (updateUser && user) {
-             updateUser({ ...user, name: profileForm.name, email: profileForm.email });
-           }
-         },
-         onError: (error) => {
-           const message = extractApiError(error, 'Gagal memperbarui profil');
-           toast({
-             title: 'Gagal memperbarui profil',
-             description: message,
-             variant: 'destructive',
-           });
-         },
-       }
-     );
-   };
+            // Update user context
+            if (updateUser && user) {
+              updateUser({ ...user, name: profileForm.name, email: profileForm.email });
+            }
+          },
+          onError: (error) => {
+            const message = extractApiError(error, 'Gagal memperbarui profil');
+            toast({
+              title: 'Gagal memperbarui profil',
+              description: message,
+              variant: 'destructive',
+            });
+          },
+        }
+      );
+    };
 
    const handleStoreSave = () => {
      if (!validateStore()) return;
@@ -263,75 +276,79 @@ const Pengaturan = () => {
      });
    };
 
-   const handlePasswordSave = () => {
-     if (!validatePassword()) return;
+    const handlePasswordSave = () => {
+      if (!validatePassword()) return;
 
-     updatePasswordMutation.mutate(
-       {
-         current_password: passwordForm.current_password,
-         password: passwordForm.password,
-         password_confirmation: passwordForm.password_confirmation,
-       },
-       {
-         onSuccess: () => {
-           toast({
-             title: 'Password berhasil diubah',
-             description: 'Silakan login dengan password baru',
-             variant: 'default',
-           });
+      updatePasswordMutation.mutate(
+        {
+          current_password: passwordForm.current_password,
+          password: passwordForm.password,
+          password_confirmation: passwordForm.password_confirmation,
+        },
+        {
+          onSuccess: () => {
+            toast({
+              title: 'Password berhasil diubah',
+              description: 'Silakan login dengan password baru',
+              variant: 'default',
+            });
 
-           // Reset form
-           setPasswordForm({
-             current_password: '',
-             password: '',
-             password_confirmation: '',
-           });
-           setShowPassword(false);
-           setShowPasswordConfirm(false);
-         },
-         onError: (error) => {
-           const message = extractApiError(error, 'Gagal mengubah password');
-           toast({
-             title: 'Gagal mengubah password',
-             description: message,
-             variant: 'destructive',
-           });
-         },
-       }
-     );
-   };
+            // Reset form
+            setPasswordForm({
+              current_password: '',
+              password: '',
+              password_confirmation: '',
+            });
+            setShowPassword(false);
+            setShowPasswordConfirm(false);
+          },
+          onError: (error: unknown) => {
+            const apiError = error as { response?: { data?: { errors?: { current_password?: string[] }; message?: string } } };
+            const errorMsg = apiError?.response?.data?.errors?.current_password?.[0] ||
+                           apiError?.response?.data?.message ||
+                           'Gagal mengubah password';
+            toast({
+              title: 'Gagal mengubah password',
+              description: errorMsg,
+              variant: 'destructive',
+            });
+          },
+        }
+      );
+    };
 
-   const handleNotificationsSave = () => {
-     // Check if data has changed
-     const originalData = settingsData?.data?.notifications;
-     if (
-       originalData &&
-       originalData.low_stock_alert === notifications.low_stock_alert &&
-       originalData.receivable_due_alert === notifications.receivable_due_alert &&
-       originalData.daily_report === notifications.daily_report
-     ) {
-       toast({ title: 'Tidak ada perubahan pada notifikasi' });
-       return;
-     }
+    const handleNotificationsSave = () => {
+      // Check if data has changed
+      const originalData = settingsData?.data?.notifications;
+      if (
+        originalData &&
+        Boolean(originalData.low_stock_alert ?? true) === notifications.low_stock_alert &&
+        Boolean(originalData.receivable_due_alert ?? true) === notifications.receivable_due_alert &&
+        Boolean(originalData.daily_report ?? false) === notifications.daily_report
+      ) {
+        toast({ title: 'Tidak ada perubahan pada notifikasi', variant: 'default' });
+        return;
+      }
 
-     updateNotificationsMutation.mutate(notifications, {
-       onSuccess: () => {
-         toast({
-           title: 'Pengaturan notifikasi berhasil diperbarui',
-           description: 'Preferensi notifikasi Anda telah disimpan',
-           variant: 'default',
-         });
-       },
-       onError: (error) => {
-         const message = extractApiError(error, 'Gagal memperbarui notifikasi');
-         toast({
-           title: 'Gagal memperbarui notifikasi',
-           description: message,
-           variant: 'destructive',
-         });
-       },
-     });
-   };
+      updateNotificationsMutation.mutate(notifications, {
+        onSuccess: () => {
+          toast({
+            title: 'Pengaturan notifikasi berhasil diperbarui',
+            description: 'Preferensi notifikasi Anda telah disimpan',
+            variant: 'default',
+          });
+        },
+        onError: (error: unknown) => {
+          const apiError = error as { response?: { data?: { message?: string } } };
+          const errorMsg = apiError?.response?.data?.message || 'Gagal memperbarui notifikasi';
+          toast({
+            title: 'Gagal memperbarui notifikasi',
+            description: errorMsg,
+            variant: 'destructive',
+          });
+        },
+      });
+    };
 
    return (
      <MainLayout title="Pengaturan" subtitle="Kelola pengaturan aplikasi">
@@ -416,46 +433,48 @@ const Pengaturan = () => {
                 </div>
               </div>
               <Separator />
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Nama Lengkap</Label>
-                  <Input
-                    id="name"
-                    value={profileForm.name}
-                    onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
-                    placeholder="Masukkan nama lengkap"
-                  />
+               <div className="grid gap-4 md:grid-cols-2">
+                 <div className="space-y-2">
+                   <Label htmlFor="name">Nama Lengkap</Label>
+                   <Input
+                     id="name"
+                     aria-label="Nama lengkap pengguna"
+                     value={profileForm.name}
+                     onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
+                     placeholder="Masukkan nama lengkap"
+                   />
+                 </div>
+                 <div className="space-y-2">
+                   <Label htmlFor="email">Email</Label>
+                   <Input
+                     id="email"
+                     type="email"
+                     aria-label="Email pengguna"
+                     value={profileForm.email}
+                     onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
+                     placeholder="email@contoh.com"
+                   />
+                 </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={profileForm.email}
-                    onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
-                    placeholder="email@contoh.com"
-                  />
-                </div>
-               </div>
-               <form onSubmit={(e) => { e.preventDefault(); handleProfileSave(); }}>
-                 <Button 
-                   type="submit"
-                   disabled={updateProfileMutation.isPending}
-                   className="w-full"
-                 >
-                   {updateProfileMutation.isPending ? (
-                     <>
-                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                       Menyimpan...
-                     </>
-                   ) : (
-                     <>
-                       <CheckCircle2 className="mr-2 h-4 w-4" />
-                       Simpan Perubahan
-                     </>
-                   )}
-                 </Button>
-               </form>
+                <form onSubmit={(e) => { e.preventDefault(); handleProfileSave(); }}>
+                  <Button 
+                    type="submit"
+                    disabled={updateProfileMutation.isPending || !isProfileDirty}
+                    className="w-full"
+                  >
+                    {updateProfileMutation.isPending ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Menyimpan...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="mr-2 h-4 w-4" />
+                        {isProfileDirty ? 'Simpan Perubahan' : 'Tidak Ada Perubahan'}
+                      </>
+                    )}
+                  </Button>
+                </form>
             </CardContent>
           </Card>
           
@@ -469,74 +488,79 @@ const Pengaturan = () => {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="store_name">Nama Toko *</Label>
-                  <Input
-                    id="store_name"
-                    value={storeForm.store_name}
-                    onChange={(e) => setStoreForm({ ...storeForm, store_name: e.target.value })}
-                    placeholder="Nama toko Anda"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="phone">No. Telepon</Label>
-                  <Input
-                    id="phone"
-                    type="tel"
-                    value={storeForm.phone}
-                    onChange={(e) => setStoreForm({ ...storeForm, phone: e.target.value })}
-                    placeholder="021-1234567"
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="address">Alamat</Label>
-                <Input
-                  id="address"
-                  value={storeForm.address}
-                  onChange={(e) => setStoreForm({ ...storeForm, address: e.target.value })}
-                  placeholder="Jl. Raya No. 123, Jakarta"
-                />
-              </div>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="npwp">NPWP</Label>
-                  <Input
-                    id="npwp"
-                    value={storeForm.npwp}
-                    onChange={(e) => setStoreForm({ ...storeForm, npwp: e.target.value })}
-                    placeholder="Masukkan NPWP"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="siup">No. Izin Usaha (SIUP)</Label>
-                  <Input
-                    id="siup"
-                    value={storeForm.siup}
-                    onChange={(e) => setStoreForm({ ...storeForm, siup: e.target.value })}
-                    placeholder="Masukkan No. SIUP"
-                  />
-                </div>
+                 <div className="space-y-2">
+                   <Label htmlFor="store_name">Nama Toko *</Label>
+                   <Input
+                     id="store_name"
+                     aria-label="Nama toko"
+                     value={storeForm.store_name}
+                     onChange={(e) => setStoreForm({ ...storeForm, store_name: e.target.value })}
+                     placeholder="Nama toko Anda"
+                   />
+                 </div>
+                 <div className="space-y-2">
+                   <Label htmlFor="phone">No. Telepon</Label>
+                   <Input
+                     id="phone"
+                     type="tel"
+                     aria-label="Nomor telepon toko"
+                     value={storeForm.phone}
+                     onChange={(e) => setStoreForm({ ...storeForm, phone: e.target.value })}
+                     placeholder="021-1234567"
+                   />
+                 </div>
                </div>
-               <form onSubmit={(e) => { e.preventDefault(); handleStoreSave(); }}>
-                 <Button 
-                   type="submit"
-                   disabled={updateStoreMutation.isPending}
-                   className="w-full"
-                 >
-                   {updateStoreMutation.isPending ? (
-                     <>
-                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                       Menyimpan...
-                     </>
-                   ) : (
-                     <>
-                       <CheckCircle2 className="mr-2 h-4 w-4" />
-                       Simpan Perubahan
-                     </>
-                   )}
-                 </Button>
-               </form>
+               <div className="space-y-2">
+                 <Label htmlFor="address">Alamat</Label>
+                 <Input
+                   id="address"
+                   aria-label="Alamat toko"
+                   value={storeForm.address}
+                   onChange={(e) => setStoreForm({ ...storeForm, address: e.target.value })}
+                   placeholder="Jl. Raya No. 123, Jakarta"
+                 />
+               </div>
+               <div className="grid gap-4 md:grid-cols-2">
+                 <div className="space-y-2">
+                   <Label htmlFor="npwp">NPWP</Label>
+                   <Input
+                     id="npwp"
+                     aria-label="Nomor NPWP"
+                     value={storeForm.npwp}
+                     onChange={(e) => setStoreForm({ ...storeForm, npwp: e.target.value })}
+                     placeholder="Masukkan NPWP"
+                   />
+                 </div>
+                 <div className="space-y-2">
+                   <Label htmlFor="siup">No. Izin Usaha (SIUP)</Label>
+                   <Input
+                     id="siup"
+                     aria-label="Nomor SIUP"
+                     value={storeForm.siup}
+                     onChange={(e) => setStoreForm({ ...storeForm, siup: e.target.value })}
+                     placeholder="Masukkan No. SIUP"
+                   />
+                 </div>
+                </div>
+                <form onSubmit={(e) => { e.preventDefault(); handleStoreSave(); }}>
+                  <Button 
+                    type="submit"
+                    disabled={updateStoreMutation.isPending || !isStoreDirty}
+                    className="w-full"
+                  >
+                    {updateStoreMutation.isPending ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Menyimpan...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="mr-2 h-4 w-4" />
+                        {isStoreDirty ? 'Simpan Perubahan' : 'Tidak Ada Perubahan'}
+                      </>
+                    )}
+                  </Button>
+                </form>
             </CardContent>
           </Card>
           
@@ -550,62 +574,64 @@ const Pengaturan = () => {
             </CardHeader>
              <CardContent className="space-y-4">
                <form onSubmit={(e) => { e.preventDefault(); handlePasswordSave(); }} className="space-y-4">
-                 <div className="space-y-2">
-                   <Label htmlFor="current_password">Password Saat Ini *</Label>
-                   <Input
-                     id="current_password"
-                     type="password"
-                     autoComplete="current-password"
-                     aria-label="Password saat ini"
-                     value={passwordForm.current_password}
-                     onChange={(e) => setPasswordForm({ ...passwordForm, current_password: e.target.value })}
-                     placeholder="Masukkan password saat ini"
-                   />
-                 </div>
-                 <div className="grid gap-4 md:grid-cols-2">
-                   <div className="space-y-2">
-                     <Label htmlFor="password">Password Baru *</Label>
-                     <div className="relative">
-                       <Input
-                         id="password"
-                         type={showPassword ? 'text' : 'password'}
-                         autoComplete="new-password"
-                         aria-label="Password baru"
-                         value={passwordForm.password}
-                         onChange={(e) => setPasswordForm({ ...passwordForm, password: e.target.value })}
-                         placeholder="Minimal 8 karakter"
-                       />
-                       <button
-                         type="button"
-                         className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                         onClick={() => setShowPassword(!showPassword)}
-                       >
-                         {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                       </button>
-                     </div>
-                   </div>
-                   <div className="space-y-2">
-                     <Label htmlFor="password_confirmation">Konfirmasi Password *</Label>
-                     <div className="relative">
-                       <Input
-                         id="password_confirmation"
-                         type={showPasswordConfirm ? 'text' : 'password'}
-                         autoComplete="new-password"
-                         aria-label="Konfirmasi password baru"
-                         value={passwordForm.password_confirmation}
-                         onChange={(e) => setPasswordForm({ ...passwordForm, password_confirmation: e.target.value })}
-                         placeholder="Ulangi password baru"
-                       />
-                       <button
-                         type="button"
-                         className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                         onClick={() => setShowPasswordConfirm(!showPasswordConfirm)}
-                       >
-                         {showPasswordConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
-                       </button>
-                     </div>
-                   </div>
-                 </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="current_password">Password Saat Ini *</Label>
+                    <Input
+                      id="current_password"
+                      type="password"
+                      autoComplete="current-password"
+                      aria-label="Password saat ini untuk verifikasi"
+                      value={passwordForm.current_password}
+                      onChange={(e) => setPasswordForm({ ...passwordForm, current_password: e.target.value })}
+                      placeholder="Masukkan password saat ini"
+                    />
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="password">Password Baru *</Label>
+                      <div className="relative">
+                        <Input
+                          id="password"
+                          type={showPassword ? 'text' : 'password'}
+                          autoComplete="new-password"
+                          aria-label="Password baru - minimal 8 karakter"
+                          value={passwordForm.password}
+                          onChange={(e) => setPasswordForm({ ...passwordForm, password: e.target.value })}
+                          placeholder="Minimal 8 karakter"
+                        />
+                        <button
+                          type="button"
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          onClick={() => setShowPassword(!showPassword)}
+                          aria-label={showPassword ? 'Sembunyikan password' : 'Tampilkan password'}
+                        >
+                          {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="password_confirmation">Konfirmasi Password *</Label>
+                      <div className="relative">
+                        <Input
+                          id="password_confirmation"
+                          type={showPasswordConfirm ? 'text' : 'password'}
+                          autoComplete="new-password"
+                          aria-label="Konfirmasi password baru"
+                          value={passwordForm.password_confirmation}
+                          onChange={(e) => setPasswordForm({ ...passwordForm, password_confirmation: e.target.value })}
+                          placeholder="Ulangi password baru"
+                        />
+                        <button
+                          type="button"
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          onClick={() => setShowPasswordConfirm(!showPasswordConfirm)}
+                          aria-label={showPasswordConfirm ? 'Sembunyikan password' : 'Tampilkan password'}
+                        >
+                          {showPasswordConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                  <div className="text-sm text-muted-foreground">
                    <p>Info: Password harus minimal 8 karakter untuk keamanan akun Anda.</p>
                  </div>
