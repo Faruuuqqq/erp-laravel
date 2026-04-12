@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo } from 'react';
+import * as XLSX from 'xlsx';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { PageHeader, DataTableContainer, CurrencyCell, StatusBadge } from '@/components/ui/DataComponents';
 import { StatCard } from '@/components/ui/StatCard';
@@ -11,6 +12,7 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLaporanHarian } from '@/hooks/api/useInfo';
 import { useLazyPdfExport } from '@/hooks/useLazyPdfExport';
+import { useToast } from '@/hooks/use-toast';
 import { LaporanHarianPrint } from '@/components/print/LaporanHarianPrint';
 import { formatCurrency } from '@/lib/utils';
 import type { Transaction } from '@/types';
@@ -47,6 +49,7 @@ const LaporanHarian = () => {
   const { user } = useAuth();
   const { printDocument } = usePrint();
   const { exportToPdf } = useLazyPdfExport();
+  const { toast } = useToast();
 
   const { data, isLoading } = useLaporanHarian(selectedDate);
   const report = data?.data as DailyReport | undefined;
@@ -198,6 +201,64 @@ const LaporanHarian = () => {
     }
   }, [selectedDate, summary, displayTx, displayExp, exportToPdf]);
 
+  const handleExportXLSX = useCallback(() => {
+    try {
+      const wb = XLSX.utils.book_new();
+
+      // Sheet 1: Summary (Ringkasan)
+      const summaryData = [
+        { Metrik: 'Total Penjualan Tunai', Nilai: summary.penjualanTunai },
+        { Metrik: 'Total Penjualan Kredit', Nilai: summary.penjualanKredit },
+        { Metrik: 'Total Penjualan', Nilai: summary.totalPenjualan },
+        { Metrik: 'Total Pembelian', Nilai: summary.totalPembelian },
+        { Metrik: 'Biaya Operasional', Nilai: summary.totalBiaya },
+        { Metrik: 'Kas Bersih', Nilai: summary.kasBersih },
+      ];
+      const ws1 = XLSX.utils.json_to_sheet(summaryData);
+      XLSX.utils.book_append_sheet(wb, ws1, 'Ringkasan');
+
+      // Sheet 2: Transactions
+      const txData = displayTx.map(tx => {
+        const txStatus = tx.remaining === 0 ? 'Lunas' : (tx.paid ?? 0) > 0 ? 'Sebagian' : 'Kredit';
+        return {
+          'No. Faktur': tx.invoiceNumber,
+          'Tipe Transaksi': TIPE_LABELS[tx.type] ?? tx.type,
+          'Customer / Supplier': tx.customer || tx.supplier || '-',
+          'Total': tx.total,
+          'Bayar': tx.paid || 0,
+          'Sisa': tx.total - (tx.paid ?? 0),
+          'Status': txStatus,
+        };
+      });
+      const ws2 = XLSX.utils.json_to_sheet(txData);
+      XLSX.utils.book_append_sheet(wb, ws2, 'Transaksi');
+
+      // Sheet 3: Expenses (if exist)
+      if (displayExp.length > 0) {
+        const expData = displayExp.map(e => ({
+          'Kategori': e.category,
+          'Deskripsi': e.description,
+          'Jumlah': e.amount,
+        }));
+        const ws3 = XLSX.utils.json_to_sheet(expData);
+        XLSX.utils.book_append_sheet(wb, ws3, 'Biaya');
+      }
+
+      XLSX.writeFile(wb, `laporan-harian-${selectedDate}.xlsx`);
+
+      toast({
+        title: 'Sukses',
+        description: 'Data berhasil diekspor ke Excel'
+      });
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: 'Gagal mengekspor data',
+        variant: 'destructive'
+      });
+    }
+  }, [selectedDate, summary, displayTx, displayExp, toast]);
+
   return (
     <MainLayout title="Laporan Harian" subtitle="Ringkasan transaksi harian">
       <PageHeader
@@ -218,6 +279,7 @@ const LaporanHarian = () => {
             {canPrint('__owner_only__') && (
               <Button variant="outline" size="sm" onClick={handlePrint}><Printer className="h-4 w-4 mr-1.5" />Cetak</Button>
             )}
+            <Button variant="outline" size="sm" onClick={handleExportXLSX}><Download className="h-4 w-4 mr-1.5" />Export XLSX</Button>
             <Button variant="outline" size="sm" onClick={handleExportPDF} disabled={isExporting}><Download className="h-4 w-4 mr-1.5" />{isExporting ? 'Generating...' : 'Export PDF'}</Button>
           </>
         }

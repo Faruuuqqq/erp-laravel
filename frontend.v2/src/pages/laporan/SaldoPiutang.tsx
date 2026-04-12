@@ -20,7 +20,9 @@ import {
 import { useSaldoPiutang } from '@/hooks/api/useInfo';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
+import { exportToExcel } from '@/lib/export';
 
 interface PiutangCustomer {
   id: string;
@@ -36,6 +38,7 @@ const SaldoPiutang = () => {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const { canPrint } = usePermissions();
+  const { toast } = useToast();
 
   const debouncedSearch = useDebouncedValue(search, 400);
   const { data, isLoading } = useSaldoPiutang({
@@ -56,14 +59,44 @@ const SaldoPiutang = () => {
     return true;
   });
 
-  const handleExportPDF = useCallback(() => {
-    const content = `SALDO PIUTANG - TOKOSYNC ERP\nDicetak: ${new Date().toLocaleDateString('id-ID')}\n${'='.repeat(60)}\nTotal Piutang: ${formatCurrency(total)}\nCustomer: ${withDebt.length}\n${'='.repeat(60)}\n${filtered.filter(c => c.balance > 0).map(c => `${c.code}\t${c.name}\t${formatCurrency(c.balance)}\t${c.creditLimit > 0 && c.balance > c.creditLimit ? 'OVER LIMIT' : 'Normal'}`).join('\n')}\n${'='.repeat(60)}\nGRAND TOTAL: ${formatCurrency(total)}`;
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `saldo-piutang-${new Date().toISOString().slice(0, 10)}.txt`; a.click();
-    URL.revokeObjectURL(url);
-  }, [filtered, total, withDebt.length]);
+  const handleExportXLSX = useCallback(() => {
+    try {
+      const data = filtered.map(item => {
+        const sisaLimit = item.creditLimit - item.balance;
+        let status = 'Lunas';
+        if (item.balance > 0) {
+          status = item.creditLimit > 0 && item.balance > item.creditLimit ? 'Melebihi Limit' : 'Piutang';
+        }
+        return {
+          'Kode': item.code,
+          'Nama Customer': item.name,
+          'Telepon': item.phone,
+          'Email': item.email || '-',
+          'Total Piutang': item.balance,
+          'Limit Kredit': item.creditLimit,
+          'Sisa Limit': sisaLimit,
+          'Status': status,
+        };
+      });
+
+      exportToExcel(
+        data,
+        `saldo-piutang-${new Date().toISOString().slice(0, 10)}`,
+        { sheetName: 'Saldo Piutang' }
+      );
+
+      toast({
+        title: 'Sukses',
+        description: 'Data berhasil diekspor ke Excel'
+      });
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: 'Gagal mengekspor data',
+        variant: 'destructive'
+      });
+    }
+  }, [filtered, toast]);
 
   return (
     <MainLayout title="Saldo Piutang" subtitle="Daftar piutang dari customer">
@@ -75,7 +108,7 @@ const SaldoPiutang = () => {
             {canPrint('__owner_only__') && (
               <Button variant="outline" size="sm" onClick={() => window.print()}><Printer className="h-4 w-4 mr-1.5" />Cetak</Button>
             )}
-            <Button variant="outline" size="sm" onClick={handleExportPDF}><Download className="h-4 w-4 mr-1.5" />Export</Button>
+            <Button variant="outline" size="sm" onClick={handleExportXLSX}><Download className="h-4 w-4 mr-1.5" />Export XLSX</Button>
           </>
         }
       />

@@ -20,7 +20,9 @@ import {
 import { useSaldoUtang } from '@/hooks/api/useInfo';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
+import { exportToExcel } from '@/lib/export';
 
 interface UtangSupplier {
   id: string;
@@ -37,6 +39,7 @@ const SaldoUtang = () => {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
   const { canPrint } = usePermissions();
+  const { toast } = useToast();
 
   const debouncedSearch = useDebouncedValue(search, 400);
   const { data, isLoading } = useSaldoUtang({
@@ -55,14 +58,37 @@ const SaldoUtang = () => {
     return true;
   });
 
-  const handleExportPDF = useCallback(() => {
-    const content = `SALDO UTANG - TOKOSYNC ERP\nDicetak: ${new Date().toLocaleDateString('id-ID')}\n${'='.repeat(60)}\nTotal Utang: ${formatCurrency(total)}\nSupplier: ${withDebt.length}\n${'='.repeat(60)}\n${filtered.filter(s => s.balance > 0).map(s => `${s.code}\t${s.name}\t${formatCurrency(s.balance)}`).join('\n')}\n${'='.repeat(60)}\nGRAND TOTAL: ${formatCurrency(total)}`;
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `saldo-utang-${new Date().toISOString().slice(0, 10)}.txt`; a.click();
-    URL.revokeObjectURL(url);
-  }, [filtered, total, withDebt.length]);
+  const handleExportXLSX = useCallback(() => {
+    try {
+      const data = filtered.map(item => ({
+        'Kode': item.code,
+        'Nama Supplier': item.name,
+        'Telepon': item.phone,
+        'Email': item.email || '-',
+        'Alamat': item.address || '-',
+        'Total Transaksi': item.totalTransactions,
+        'Saldo Utang': item.balance,
+        'Status': item.balance > 0 ? 'Ada Utang' : 'Lunas',
+      }));
+
+      exportToExcel(
+        data,
+        `saldo-utang-${new Date().toISOString().slice(0, 10)}`,
+        { sheetName: 'Saldo Utang' }
+      );
+
+      toast({
+        title: 'Sukses',
+        description: 'Data berhasil diekspor ke Excel'
+      });
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: 'Gagal mengekspor data',
+        variant: 'destructive'
+      });
+    }
+  }, [filtered, toast]);
 
   return (
     <MainLayout title="Saldo Utang" subtitle="Daftar utang toko ke supplier">
@@ -74,7 +100,7 @@ const SaldoUtang = () => {
             {canPrint('__owner_only__') && (
               <Button variant="outline" size="sm" onClick={() => window.print()}><Printer className="h-4 w-4 mr-1.5" />Cetak</Button>
             )}
-            <Button variant="outline" size="sm" onClick={handleExportPDF}><Download className="h-4 w-4 mr-1.5" />Export</Button>
+            <Button variant="outline" size="sm" onClick={handleExportXLSX}><Download className="h-4 w-4 mr-1.5" />Export XLSX</Button>
           </>
         }
       />
