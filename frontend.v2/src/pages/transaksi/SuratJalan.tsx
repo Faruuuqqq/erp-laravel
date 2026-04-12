@@ -7,17 +7,16 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Plus, Trash2, FileText, Printer, Truck, FileDown, Eye } from 'lucide-react';
+import { Plus, Trash2, FileText, Truck, Eye } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useProducts } from '@/hooks/api/useProducts';
 import { useCustomers } from '@/hooks/api/useCustomers';
 import { useSalesReps } from '@/hooks/api/useSalesReps';
 import { useWarehouses } from '@/hooks/api/useWarehouses';
-import { usePrint } from '@/contexts/PrintContext';
+import { useCreateTransaction } from '@/hooks/api/useTransactions';
+import { PrintPreviewDialog } from '@/components/dialogs/PrintPreviewDialog';
 import { SuratJalanPrint } from '@/components/print/SuratJalanPrint';
-import apiClient from '@/lib/api-client';
 import type { Transaction } from '@/types';
 
 interface SJItem {
@@ -28,9 +27,16 @@ interface SJItem {
   keterangan: string;
 }
 
+// Helper function to generate unique noSJ
+const generateNoSJ = () => {
+  const now = new Date();
+  return `SJ-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(Math.floor(Math.random() * 900) + 100)}`;
+};
+
 const SuratJalan = () => {
   const { toast } = useToast();
   const { canCreate, canPrint } = usePermissions();
+  const createTx = useCreateTransaction();
 
   const [items, setItems] = useState<SJItem[]>([]);
   const [selectedProduct, setSelectedProduct] = useState('');
@@ -43,11 +49,10 @@ const SuratJalan = () => {
   const [pengirim, setPengirim] = useState('');
   const [catatan, setCatatan] = useState('');
   const [tanggal, setTanggal] = useState(new Date().toISOString().split('T')[0]);
-  const [previewOpen, setPreviewOpen] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [savedTransaction, setSavedTransaction] = useState<Transaction | null>(null);
-
-  const { printDocument } = usePrint();
+  const [noSJ, setNoSJ] = useState(() => generateNoSJ());
 
   // Real API data
   const { data: productsData } = useProducts({ perPage: 500 });
@@ -55,22 +60,17 @@ const SuratJalan = () => {
   const { data: salesData } = useSalesReps({ perPage: 100 });
   const { data: warehousesData } = useWarehouses({ perPage: 100 });
 
-  const products = productsData?.data ?? [];
-  const customers = customersData?.data ?? [];
-  const salesReps = salesData?.data ?? [];
-  const warehouses = warehousesData?.data ?? [];
-
-  const noSJ = useMemo(() => {
-    const now = new Date();
-    return `SJ-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(Math.floor(Math.random() * 900) + 100)}`;
-  }, []);
+  const products = useMemo(() => productsData?.data ?? [], [productsData?.data]);
+  const customers = useMemo(() => customersData?.data ?? [], [customersData?.data]);
+  const salesReps = useMemo(() => salesData?.data ?? [], [salesData?.data]);
+  const warehouses = useMemo(() => warehousesData?.data ?? [], [warehousesData?.data]);
 
   const today = new Date().toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' });
   const customer = customers.find(c => c.id === selectedCustomer);
   const gudang = warehouses.find(g => g.id === selectedGudang);
   const sales = salesReps.find(s => s.id === selectedSales);
 
-  const addItem = () => {
+  const addItem = useCallback(() => {
     const product = products.find(p => p.id === selectedProduct);
     if (!product) return toast({ title: 'Pilih produk terlebih dahulu', variant: 'destructive' });
     const qtyNum = parseInt(qty) || 1;
@@ -82,53 +82,52 @@ const SuratJalan = () => {
       satuan: product.unit ?? 'pcs',
       keterangan,
     }]);
-    setSelectedProduct(''); setQty('1'); setKeterangan('');
+    setSelectedProduct(''); 
+    setQty('1'); 
+    setKeterangan('');
     toast({ title: `${product.name} ditambahkan` });
-  };
+  }, [products, selectedProduct, qty, keterangan, toast]);
 
-  const removeItem = (idx: number) => setItems(prev => prev.filter((_, i) => i !== idx));
+  const removeItem = useCallback((idx: number) => {
+    setItems(prev => prev.filter((_, i) => i !== idx));
+  }, []);
+
   const totalQty = items.reduce((s, i) => s + i.qty, 0);
 
-  const handleSimpan = async () => {
+  const handleSimpan = useCallback(async () => {
     if (items.length === 0) return toast({ title: 'Belum ada barang', variant: 'destructive' });
     if (!selectedCustomer) return toast({ title: 'Pilih customer', variant: 'destructive' });
-    setIsSaving(true);
+    
     try {
-      await apiClient.post('/delivery-notes', {
+      setIsSaving(true);
+      const result = await createTx.mutateAsync({
+        type: 'surat_jalan',
         date: tanggal,
-        customer_id: selectedCustomer,
-        warehouse_id: selectedGudang || null,
-        sales_rep_id: selectedSales || null,
-        delivery_address: alamatKirim,
-        driver: pengirim,
+        customerId: selectedCustomer,
+        warehouseId: selectedGudang || null,
+        salesRepId: selectedSales || null,
         notes: catatan,
-        items: items.map(i => ({ product_id: i.productId, quantity: i.qty, notes: i.keterangan })),
+        items: items.map(i => ({ productId: i.productId, quantity: i.qty, price: 0, discount: 0 })),
       });
-      const response = await apiClient.post('/transactions', payload);
-      const savedTrx = response.data?.data as Transaction;
-      setSavedTransaction(savedTrx ?? null);
-      toast({ title: 'Surat Jalan disimpan', description: noSJ });
-      setItems([]); setSelectedCustomer(''); setSelectedGudang('');
-      setAlamatKirim(''); setPengirim(''); setCatatan('');
+      
+      setSavedTransaction(result as Transaction);
+      toast({ title: 'Surat Jalan disimpan', description: (result as Transaction).invoiceNumber });
+      
+      // Generate new noSJ for next entry
+      setNoSJ(generateNoSJ());
+      setItems([]);
+      setSelectedCustomer('');
+      setSelectedGudang('');
+      setAlamatKirim('');
+      setPengirim('');
+      setCatatan('');
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Gagal menyimpan surat jalan';
       toast({ title: 'Error', description: msg, variant: 'destructive' });
     } finally {
       setIsSaving(false);
     }
-  };
-
-  const handlePrint = useCallback(() => {
-    setPreviewOpen(false);
-    const trx = savedTransaction ?? {
-      id: noSJ, invoiceNumber: noSJ, date: tanggal,
-      customer: customer?.name ?? '', notes: alamatKirim,
-      salesId: sales?.name ?? gudang?.name ?? '',
-      type: 'surat_jalan', total: 0, paid: 0, status: 'completed',
-      items: items.map((i, idx) => ({ id: String(idx), productId: i.productId, productName: i.nama, quantity: i.qty, price: 0, subtotal: 0, unit: i.satuan })),
-    } as Transaction;
-    printDocument(<SuratJalanPrint transaction={trx} />);
-  }, [savedTransaction, printDocument, noSJ, tanggal, customer, alamatKirim, sales, gudang, items]);
+  }, [items, selectedCustomer, selectedGudang, selectedSales, tanggal, catatan, createTx, toast]);
 
   return (
     <MainLayout title="Surat Jalan" subtitle="Buat surat jalan untuk pengiriman barang">
@@ -290,94 +289,42 @@ const SuratJalan = () => {
                 <Input value={catatan} onChange={e => setCatatan(e.target.value)} placeholder="Catatan pengiriman..." className="text-xs h-8" />
               </div>
 
-              {canCreate('transactions.delivery_note') && (
-                <div className="flex gap-2 pt-2">
-                  <Button variant="outline" className="flex-1 h-9 text-sm"
-                    onClick={() => { setItems([]); setSelectedCustomer(''); setSelectedGudang(''); setAlamatKirim(''); setPengirim(''); }}>
-                    Reset
-                  </Button>
-                  <Button className="flex-1 h-9 text-sm" onClick={handleSimpan} disabled={isSaving}>
-                    {isSaving ? 'Menyimpan...' : 'Simpan'}
-                  </Button>
-                </div>
-              )}
+               {canCreate('transactions.delivery_note') && (
+                 <div className="flex gap-2 pt-2">
+                   <Button variant="outline" className="flex-1 h-9 text-sm"
+                     onClick={() => { setItems([]); setSelectedCustomer(''); setSelectedGudang(''); setAlamatKirim(''); setPengirim(''); setNoSJ(generateNoSJ()); }}>
+                     Reset
+                   </Button>
+                   <Button className="flex-1 h-9 text-sm" onClick={handleSimpan} disabled={isSaving}>
+                     {isSaving ? 'Menyimpan...' : 'Simpan'}
+                   </Button>
+                 </div>
+               )}
 
-              <div className="grid grid-cols-1 gap-2">
-                {canPrint('transactions.delivery_note') && (
-                  <Button variant="outline" className="h-9 text-sm" onClick={() => setPreviewOpen(true)}>
-                    <Eye className="mr-1.5 h-3.5 w-3.5" />Preview & Cetak
-                  </Button>
-                )}
-              </div>
+               {canPrint('transactions.delivery_note') && savedTransaction && (
+                 <Button variant="outline" className="w-full h-9 text-sm" onClick={() => setIsPreviewOpen(true)}>
+                   <Eye className="mr-1.5 h-3.5 w-3.5" />Preview & Cetak
+                 </Button>
+               )}
             </CardContent>
           </Card>
         </div>
       </div>
 
-      {/* Print Preview */}
-      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Preview Surat Jalan</DialogTitle></DialogHeader>
-          <div className="border rounded-lg p-6 bg-white text-black" id="surat-jalan-print">
-            <div className="text-center border-b-2 border-black pb-4 mb-4">
-              <h1 className="text-2xl font-bold">SURAT JALAN</h1>
-              <p className="text-sm">TokoSync ERP - Sistem Manajemen Toko</p>
-            </div>
-            <div className="grid grid-cols-2 gap-4 mb-4 text-sm">
-              <div>
-                <p><strong>No. Surat Jalan:</strong> {noSJ}</p>
-                <p><strong>Tanggal:</strong> {today}</p>
-                <p><strong>Sales:</strong> {sales?.name || '-'}</p>
-              </div>
-              <div>
-                <p><strong>Kepada:</strong> {customer?.name || '-'}</p>
-                <p><strong>Alamat:</strong> {alamatKirim || customer?.address || '-'}</p>
-                <p><strong>Gudang:</strong> {gudang?.name || '-'}</p>
-              </div>
-            </div>
-            {pengirim && <p className="text-sm mb-4"><strong>Pengirim/Driver:</strong> {pengirim}</p>}
-            <table className="w-full border-collapse border border-black text-sm mb-4">
-              <thead>
-                <tr className="bg-gray-100">
-                  <th className="border border-black px-2 py-1 text-left">No</th>
-                  <th className="border border-black px-2 py-1 text-left">Nama Barang</th>
-                  <th className="border border-black px-2 py-1 text-right">Qty</th>
-                  <th className="border border-black px-2 py-1 text-left">Satuan</th>
-                  <th className="border border-black px-2 py-1 text-left">Keterangan</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((item, idx) => (
-                  <tr key={idx}>
-                    <td className="border border-black px-2 py-1">{idx + 1}</td>
-                    <td className="border border-black px-2 py-1">{item.nama}</td>
-                    <td className="border border-black px-2 py-1 text-right">{item.qty}</td>
-                    <td className="border border-black px-2 py-1">{item.satuan}</td>
-                    <td className="border border-black px-2 py-1">{item.keterangan || '-'}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr>
-                  <td colSpan={2} className="border border-black px-2 py-1 font-bold text-right">Total</td>
-                  <td className="border border-black px-2 py-1 text-right font-bold">{totalQty}</td>
-                  <td colSpan={2} className="border border-black px-2 py-1" />
-                </tr>
-              </tfoot>
-            </table>
-            {catatan && <p className="text-sm mb-4 italic">Catatan: {catatan}</p>}
-            <div className="grid grid-cols-3 gap-4 mt-8 text-sm text-center">
-              <div><p className="mb-16">Pengirim</p><p>(_____________)</p><p>{pengirim || '...'}</p></div>
-              <div><p className="mb-16">Penerima</p><p>(_____________)</p><p>{customer?.name || '...'}</p></div>
-              <div><p className="mb-16">Diketahui Oleh</p><p>(_____________)</p><p>Admin / Owner</p></div>
-            </div>
+      {/* Print Preview - Only show after saved */}
+      {savedTransaction && (
+        <PrintPreviewDialog
+          isOpen={isPreviewOpen}
+          onClose={() => setIsPreviewOpen(false)}
+          title="Surat Jalan"
+          documentId="surat-jalan-print"
+          filename={`surat-jalan-${savedTransaction.invoiceNumber}`}
+        >
+          <div id="surat-jalan-print">
+            <SuratJalanPrint transaction={savedTransaction} />
           </div>
-          <div className="flex justify-end gap-2 mt-2">
-            <Button variant="outline" onClick={() => setPreviewOpen(false)}>Tutup</Button>
-            <Button onClick={handlePrint}><Printer className="mr-1.5 h-4 w-4" />Cetak</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+        </PrintPreviewDialog>
+      )}
     </MainLayout>
   );
 };

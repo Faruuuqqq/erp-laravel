@@ -7,12 +7,14 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Search, Receipt, Check, FileDown } from 'lucide-react';
+import { Search, Receipt, Check, Eye } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useSuppliers } from '@/hooks/api/useSuppliers';
 import { useTransactions, useCreateTransaction } from '@/hooks/api/useTransactions';
+import { PrintPreviewDialog } from '@/components/dialogs/PrintPreviewDialog';
+import { PembayaranUtangPrint } from '@/components/print/PembayaranUtangPrint';
 import { formatCurrency } from '@/lib/utils';
 import type { Transaction } from '@/types';
 
@@ -28,6 +30,8 @@ const PembayaranUtang = () => {
   const [catatan, setCatatan] = useState('');
   const [tanggal] = useState(new Date().toISOString().split('T')[0]);
   const [saved, setSaved] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [savedTransaction, setSavedTransaction] = useState<Transaction | null>(null);
 
   const createTx = useCreateTransaction();
   const { data: suppliersData } = useSuppliers({ perPage: 200 });
@@ -36,7 +40,7 @@ const PembayaranUtang = () => {
     type: 'pembelian',
     status: 'completed',
     perPage: 200,
-    ...(filterSupplier !== 'all' ? { search: filterSupplier } : {}),
+    ...(filterSupplier !== 'all' ? { supplier_id: filterSupplier } : {}),
   });
 
   const suppliers = suppliersData?.data ?? [];
@@ -67,7 +71,7 @@ const PembayaranUtang = () => {
     if (!firstTx?.supplierId) return;
 
     try {
-      await createTx.mutateAsync({
+      const result = await createTx.mutateAsync({
         type: 'pembayaran_utang',
         date: tanggal,
         supplierId: firstTx.supplierId,
@@ -75,6 +79,8 @@ const PembayaranUtang = () => {
         notes: catatan || `Bayar utang: ${selectedItems.join(', ')}`,
         items: [], // payment transaction — no items
       });
+      setSavedTransaction(result as Transaction);
+      setSelectedItems([]); // Clear selected items after successful save
       setSaved(true);
       toast({ title: 'Pembayaran utang berhasil dicatat', description: `${selectedItems.length} faktur dibayar` });
     } catch (err: unknown) {
@@ -84,7 +90,7 @@ const PembayaranUtang = () => {
   }, [selectedItems, metodePembayaran, jumlahBayarNum, utangList, tanggal, catatan, createTx, toast]);
 
   const reset = useCallback(() => {
-    setSelectedItems([]); setSaved(false); setJumlahBayar(''); setMetodePembayaran(''); setCatatan('');
+    setSelectedItems([]); setSaved(false); setJumlahBayar(''); setMetodePembayaran(''); setCatatan(''); setSavedTransaction(null);
   }, []);
 
   if (saved) {
@@ -99,10 +105,14 @@ const PembayaranUtang = () => {
             <p className="text-3xl font-bold text-primary mt-3">{formatCurrency(jumlahBayarNum)}</p>
             <p className="text-sm text-muted-foreground mt-1">{selectedItems.length} faktur utang diselesaikan</p>
           </div>
-          <div className="flex gap-3">
-            <Button variant="outline" onClick={() => toast({ title: 'Mengekspor PDF...' })}><FileDown className="mr-2 h-4 w-4" />Export PDF</Button>
-            <Button onClick={reset}>Input Baru</Button>
-          </div>
+           <div className="flex gap-3">
+             {savedTransaction && (
+               <Button variant="outline" onClick={() => setIsPreviewOpen(true)}>
+                 <Eye className="mr-2 h-4 w-4" />Preview & Cetak
+               </Button>
+             )}
+             <Button onClick={reset}>Input Baru</Button>
+           </div>
         </div>
       </MainLayout>
     );
@@ -207,22 +217,38 @@ const PembayaranUtang = () => {
                 <Input value={catatan} onChange={e => setCatatan(e.target.value)} placeholder="Catatan pembayaran..." className="text-xs h-8" />
               </div>
 
-              {canCreate('transactions.payable') && (
-                <div className="flex gap-2 pt-1">
-                  <Button variant="outline" className="flex-1 h-9 text-sm" onClick={() => setSelectedItems([])}>Batal</Button>
-                  <Button className="flex-1 h-9 text-sm" onClick={handleSave} disabled={selectedItems.length === 0 || createTx.isPending}>
-                    <Check className="mr-1.5 h-4 w-4" />{createTx.isPending ? 'Menyimpan...' : 'Bayar'}
-                  </Button>
-                </div>
-              )}
+               {canCreate('transactions.payable') && (
+                 <div className="flex gap-2 pt-1">
+                   <Button variant="outline" className="flex-1 h-9 text-sm" onClick={() => setSelectedItems([])}>Batal</Button>
+                   <Button className="flex-1 h-9 text-sm" onClick={handleSave} disabled={selectedItems.length === 0 || createTx.isPending}>
+                     <Check className="mr-1.5 h-4 w-4" />{createTx.isPending ? 'Menyimpan...' : 'Bayar'}
+                   </Button>
+                 </div>
+               )}
 
-              <Button variant="outline" className="w-full h-8 text-xs" onClick={() => toast({ title: 'Mengekspor PDF...' })}>
-                <FileDown className="mr-1.5 h-3.5 w-3.5" />Export PDF
-              </Button>
+               {savedTransaction && (
+                 <Button variant="outline" className="w-full h-8 text-xs" onClick={() => setIsPreviewOpen(true)}>
+                   <Eye className="mr-1.5 h-3.5 w-3.5" />Preview & Cetak
+                 </Button>
+               )}
             </CardContent>
           </Card>
         </div>
       </div>
+
+      {savedTransaction && (
+        <PrintPreviewDialog
+          isOpen={isPreviewOpen}
+          onClose={() => setIsPreviewOpen(false)}
+          title="Bukti Pembayaran Utang"
+          documentId="pembayaran-utang-print"
+          filename={`pembayaran-utang-${new Date().toISOString().slice(0, 10)}`}
+        >
+          <div id="pembayaran-utang-print">
+            <PembayaranUtangPrint transaction={savedTransaction} />
+          </div>
+        </PrintPreviewDialog>
+      )}
     </MainLayout>
   );
 };
