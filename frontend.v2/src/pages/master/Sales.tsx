@@ -9,10 +9,6 @@ import { Label } from '@/components/ui/label';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
 import { Plus, Search, Pencil, Trash2, TrendingUp } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { StatCard } from '@/components/ui/StatCard';
@@ -22,6 +18,7 @@ import {
 } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
+import { DeleteConfirmDialog } from '@/components/dialogs/DeleteConfirmDialog';
 import { formatCurrency } from '@/lib/utils';
 import { useSalesReps, useCreateSalesRep, useUpdateSalesRep, useDeleteSalesRep } from '@/hooks/api/useSalesReps';
 import type { SalesRep } from '@/types';
@@ -34,10 +31,11 @@ const Sales = () => {
    const { execute: executeRetryable } = useRetryableAction({ maxRetries: 3, delayMs: 1000 });
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [statusFilter, setStatusFilter] = useState<'aktif' | 'nonaktif' | 'semua'>('semua');
-  const [isAddOpen, setIsAddOpen] = useState(false);
-  const [editItem, setEditItem] = useState<SalesRep | null>(null);
-  const [form, setForm] = useState(BLANK_FORM);
+   const [statusFilter, setStatusFilter] = useState<'aktif' | 'nonaktif' | 'semua'>('semua');
+   const [isAddOpen, setIsAddOpen] = useState(false);
+   const [editItem, setEditItem] = useState<SalesRep | null>(null);
+   const [form, setForm] = useState(BLANK_FORM);
+   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
 
   const debouncedSearch = useDebouncedValue(searchTerm, 300);
   const { data: salesData, isLoading } = useSalesReps({ page: currentPage, search: debouncedSearch || undefined, per_page: 20, status: statusFilter === 'semua' ? undefined : statusFilter });
@@ -166,25 +164,16 @@ const Sales = () => {
                                  <Pencil className="h-3.5 w-3.5" />
                                </Button>
                              )}
-                             {canDelete('sales_reps') && (
-                               <AlertDialog>
-                                 <AlertDialogTrigger asChild>
-                                   <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive">
-                                     <Trash2 className="h-3.5 w-3.5" />
-                                   </Button>
-                                 </AlertDialogTrigger>
-                                 <AlertDialogContent>
-                                   <AlertDialogHeader>
-                                     <AlertDialogTitle>Hapus Sales</AlertDialogTitle>
-                                     <AlertDialogDescription>Hapus <strong>{s.name}</strong>? Tindakan ini tidak dapat dibatalkan.</AlertDialogDescription>
-                                   </AlertDialogHeader>
-                                   <AlertDialogFooter>
-                                     <AlertDialogCancel>Batal</AlertDialogCancel>
-                                     <AlertDialogAction className="bg-destructive hover:bg-destructive/90" onClick={() => handleDelete(s.id, s.name)}>Hapus</AlertDialogAction>
-                                   </AlertDialogFooter>
-                                 </AlertDialogContent>
-                               </AlertDialog>
-                             )}
+                              {canDelete('sales_reps') && (
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-8 w-8 text-destructive hover:text-destructive" 
+                                  onClick={() => setDeleteConfirm({ id: s.id, name: s.name })}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              )}
                            </div>
                          </TableCell>
                        )}
@@ -276,10 +265,24 @@ const Sales = () => {
                </Button>
              </div>
            </div>
-         </DialogContent>
-       </Dialog>
-     </MainLayout>
-   );
- };
+          </DialogContent>
+        </Dialog>
 
- export default Sales;
+        {deleteConfirm && (
+          <DeleteConfirmDialog
+            open={!!deleteConfirm}
+            onOpenChange={(open) => !open && setDeleteConfirm(null)}
+            itemName={deleteConfirm.name}
+            itemType="Sales"
+            onConfirm={() => {
+              handleDelete(deleteConfirm.id, deleteConfirm.name);
+              setDeleteConfirm(null);
+            }}
+            isDeleting={deleteMutation.isPending}
+          />
+        )}
+      </MainLayout>
+    );
+  };
+
+  export default Sales;

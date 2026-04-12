@@ -10,10 +10,6 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
-import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import {
@@ -25,6 +21,7 @@ import { StatCard } from '@/components/ui/StatCard';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
+import { DeleteConfirmDialog } from '@/components/dialogs/DeleteConfirmDialog';
 import { formatCurrency } from '@/lib/utils';
 import { useProducts, useCreateProduct, useUpdateProduct, useDeleteProduct } from '@/hooks/api/useProducts';
 import { useCategories } from '@/hooks/api/useCategories';
@@ -34,16 +31,17 @@ import type { Product } from '@/types';
 const BLANK_FORM = { name: '', categoryId: '', buyPrice: '', sellPrice: '', stock: '', minimumStock: '', unit: '', warehouseId: '' };
 
 const Produk = () => {
-   const { canCreate, canEdit, canDelete } = usePermissions();
-   const { toast } = useToast();
-   const { execute: executeRetryable } = useRetryableAction({ maxRetries: 3, delayMs: 1000 });
-  const [searchTerm, setSearchTerm] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [categoryFilter, setCategoryFilter] = useState<number | undefined>();
-  const [warehouseFilter, setWarehouseFilter] = useState<number | undefined>();
-  const [isAddOpen, setIsAddOpen] = useState(false);
-  const [editItem, setEditItem] = useState<Product | null>(null);
-  const [form, setForm] = useState(BLANK_FORM);
+    const { canCreate, canEdit, canDelete } = usePermissions();
+    const { toast } = useToast();
+    const { execute: executeRetryable } = useRetryableAction({ maxRetries: 3, delayMs: 1000 });
+   const [searchTerm, setSearchTerm] = useState('');
+   const [currentPage, setCurrentPage] = useState(1);
+   const [categoryFilter, setCategoryFilter] = useState<number | undefined>();
+   const [warehouseFilter, setWarehouseFilter] = useState<number | undefined>();
+   const [isAddOpen, setIsAddOpen] = useState(false);
+   const [editItem, setEditItem] = useState<Product | null>(null);
+   const [form, setForm] = useState(BLANK_FORM);
+   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
 
   const debouncedSearch = useDebouncedValue(searchTerm, 300);
   const { data: productsData, isLoading } = useProducts({ 
@@ -255,23 +253,16 @@ const Produk = () => {
                              {canEdit('products') && (
                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(p)}><Pencil className="h-3.5 w-3.5" /></Button>
                              )}
-                             {canDelete('products') && (
-                               <AlertDialog>
-                                 <AlertDialogTrigger asChild>
-                                   <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></Button>
-                                 </AlertDialogTrigger>
-                                 <AlertDialogContent>
-                                   <AlertDialogHeader>
-                                     <AlertDialogTitle>Hapus Produk</AlertDialogTitle>
-                                     <AlertDialogDescription>Hapus <strong>{p.name}</strong>? Tindakan ini tidak dapat dibatalkan.</AlertDialogDescription>
-                                   </AlertDialogHeader>
-                                   <AlertDialogFooter>
-                                     <AlertDialogCancel>Batal</AlertDialogCancel>
-                                     <AlertDialogAction className="bg-destructive hover:bg-destructive/90" onClick={() => handleDelete(p.id, p.name)}>Hapus</AlertDialogAction>
-                                   </AlertDialogFooter>
-                                 </AlertDialogContent>
-                               </AlertDialog>
-                             )}
+                              {canDelete('products') && (
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-8 w-8 text-destructive hover:text-destructive" 
+                                  onClick={() => setDeleteConfirm({ id: p.id, name: p.name })}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              )}
                            </div>
                          </TableCell>
                        )}
@@ -386,10 +377,24 @@ const Produk = () => {
                </Button>
              </div>
            </div>
-         </DialogContent>
-       </Dialog>
-     </MainLayout>
-   );
- };
+          </DialogContent>
+        </Dialog>
 
- export default Produk;
+        {deleteConfirm && (
+          <DeleteConfirmDialog
+            open={!!deleteConfirm}
+            onOpenChange={(open) => !open && setDeleteConfirm(null)}
+            itemName={deleteConfirm.name}
+            itemType="Produk"
+            onConfirm={() => {
+              handleDelete(deleteConfirm.id, deleteConfirm.name);
+              setDeleteConfirm(null);
+            }}
+            isDeleting={deleteMutation.isPending}
+          />
+        )}
+      </MainLayout>
+    );
+  };
+
+  export default Produk;

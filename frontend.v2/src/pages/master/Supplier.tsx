@@ -10,10 +10,6 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
-import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { Plus, Search, Pencil, Trash2, Building2, Download } from 'lucide-react';
@@ -21,6 +17,7 @@ import { Badge } from '@/components/ui/badge';
 import { StatCard } from '@/components/ui/StatCard';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
+import { DeleteConfirmDialog } from '@/components/dialogs/DeleteConfirmDialog';
 import { formatCurrency } from '@/lib/utils';
 import { useSuppliers, useCreateSupplier, useUpdateSupplier, useDeleteSupplier } from '@/hooks/api/useSuppliers';
 import type { Supplier as SupplierType } from '@/types';
@@ -32,10 +29,11 @@ const Supplier = () => {
    const { toast } = useToast();
    const { execute: executeRetryable } = useRetryableAction({ maxRetries: 3, delayMs: 1000 });
   const [searchTerm, setSearchTerm] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [isAddOpen, setIsAddOpen] = useState(false);
-  const [editItem, setEditItem] = useState<SupplierType | null>(null);
-  const [form, setForm] = useState(BLANK_FORM);
+   const [currentPage, setCurrentPage] = useState(1);
+   const [isAddOpen, setIsAddOpen] = useState(false);
+   const [editItem, setEditItem] = useState<SupplierType | null>(null);
+   const [form, setForm] = useState(BLANK_FORM);
+   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
 
   const debouncedSearch = useDebouncedValue(searchTerm, 300);
   const { data: suppliersData, isLoading } = useSuppliers({ page: currentPage, search: debouncedSearch || undefined, per_page: 20 });
@@ -164,25 +162,16 @@ const Supplier = () => {
                             <Pencil className="h-3.5 w-3.5" />
                           </Button>
                         )}
-                        {canDelete('suppliers') && (
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive">
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Hapus Supplier</AlertDialogTitle>
-                                <AlertDialogDescription>Apakah Anda yakin ingin menghapus <strong>{s.name}</strong>? Tindakan ini tidak dapat dibatalkan.</AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Batal</AlertDialogCancel>
-                                <AlertDialogAction className="bg-destructive hover:bg-destructive/90" onClick={() => handleDelete(s.id, s.name)}>Hapus</AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        )}
+                         {canDelete('suppliers') && (
+                           <Button 
+                             variant="ghost" 
+                             size="icon" 
+                             className="h-8 w-8 text-destructive hover:text-destructive" 
+                             onClick={() => setDeleteConfirm({ id: s.id, name: s.name })}
+                           >
+                             <Trash2 className="h-3.5 w-3.5" />
+                           </Button>
+                         )}
                       </div>
                     </TableCell>
                   )}
@@ -264,6 +253,20 @@ const Supplier = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      {deleteConfirm && (
+        <DeleteConfirmDialog
+          open={!!deleteConfirm}
+          onOpenChange={(open) => !open && setDeleteConfirm(null)}
+          itemName={deleteConfirm.name}
+          itemType="Supplier"
+          onConfirm={() => {
+            handleDelete(deleteConfirm.id, deleteConfirm.name);
+            setDeleteConfirm(null);
+          }}
+          isDeleting={deleteMutation.isPending}
+        />
+      )}
     </MainLayout>
   );
 };

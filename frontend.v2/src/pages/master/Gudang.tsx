@@ -8,10 +8,6 @@ import { Label } from '@/components/ui/label';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
 import { Plus, Search, Pencil, Trash2, Warehouse } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { StatCard } from '@/components/ui/StatCard';
@@ -21,6 +17,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { usePermissions } from '@/hooks/usePermissions';
+import { DeleteConfirmDialog } from '@/components/dialogs/DeleteConfirmDialog';
 import { useWarehouses, useCreateWarehouse, useUpdateWarehouse, useDeleteWarehouse } from '@/hooks/api/useWarehouses';
 
 interface WarehouseForm {
@@ -38,10 +35,11 @@ const Gudang = () => {
    const { execute: executeRetryable } = useRetryableAction({ maxRetries: 3, delayMs: 1000 });
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [statusFilter, setStatusFilter] = useState<'aktif' | 'nonaktif' | 'semua'>('semua');
-  const [isAddOpen, setIsAddOpen] = useState(false);
-  const [editId, setEditId] = useState<string | null>(null);
-  const [form, setForm] = useState<WarehouseForm>(BLANK_FORM());
+   const [statusFilter, setStatusFilter] = useState<'aktif' | 'nonaktif' | 'semua'>('semua');
+   const [isAddOpen, setIsAddOpen] = useState(false);
+   const [editId, setEditId] = useState<string | null>(null);
+   const [form, setForm] = useState<WarehouseForm>(BLANK_FORM());
+   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
 
   const { data, isLoading } = useWarehouses({ page: currentPage, per_page: 20, status: statusFilter === 'semua' ? undefined : statusFilter });
   const createWh = useCreateWarehouse();
