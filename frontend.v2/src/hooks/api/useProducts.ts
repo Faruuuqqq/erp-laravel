@@ -43,11 +43,21 @@ export const useProduct = (id: string) => {
   });
 };
 
+interface CreateProductRequest {
+  name: string;
+  code?: string;
+  category?: string;
+  categoryId?: string;
+  buyPrice?: number;
+  sellPrice?: number;
+  unit?: string;
+}
+
 export const useCreateProduct = () => {
-  const queryClient = useQueryClient();
-  
-  return useMutation({
-    mutationFn: (data: any) => api.post('/products', data),
+   const queryClient = useQueryClient();
+   
+   return useMutation({
+     mutationFn: (data: CreateProductRequest) => api.post('/products', data),
     onMutate: async (newProduct) => {
       // Cancel outgoing refetches
       await queryClient.cancelQueries({ queryKey: productKeys.lists() });
@@ -58,30 +68,30 @@ export const useCreateProduct = () => {
       // Generate temp ID for optimistic update - fixed timestamp issue
       const tempId = `temp_${Date.now()}`;
       
-      // Optimistically update cache
-      if (previousProducts) {
-        queryClient.setQueryData(productKeys.lists(), (old: any) => ({
-          ...old,
-          data: [...(old?.data || []), { ...newProduct, id: tempId }],
-          meta: { ...old?.meta, total: (old?.meta?.total ?? 0) + 1 },
-        }));
-      }
+       // Optimistically update cache
+       if (previousProducts) {
+         queryClient.setQueryData(productKeys.lists(), (old: PaginatedResponse<Product> | undefined) => ({
+           ...old,
+           data: [...(old?.data || []), { ...newProduct, id: tempId }],
+           meta: { ...old?.meta, total: (old?.meta?.total ?? 0) + 1 },
+         }));
+       }
       
       return { previousProducts, tempId };
     },
     onSuccess: (result, newProduct, context) => {
-      // Replace optimistic data with real data from server
-      if (context?.previousProducts) {
-        queryClient.setQueryData(productKeys.lists(), (old: any) => ({
-          ...old,
-          data: (old?.data || []).map((p: any) => 
-            p.id === context?.tempId ? result.data : p
-          ),
-        }));
-      }
-      // Add to detail cache
-      queryClient.setQueryData(productKeys.detail(result.data.id), result.data);
-    },
+       // Replace optimistic data with real data from server
+       if (context?.previousProducts) {
+         queryClient.setQueryData(productKeys.lists(), (old: PaginatedResponse<Product> | undefined) => ({
+           ...old,
+           data: (old?.data || []).map((p: Product) => 
+             p.id === context?.tempId ? result.data : p
+           ),
+         }));
+       }
+       // Add to detail cache
+       queryClient.setQueryData(productKeys.detail(result.data.id), result.data);
+     },
     onError: (err, newProduct, context) => {
       // Rollback to previous data if failed
       if (context?.previousProducts) {
@@ -92,36 +102,46 @@ export const useCreateProduct = () => {
   });
 };
 
+interface UpdateProductRequest {
+  name?: string;
+  code?: string;
+  category?: string;
+  categoryId?: string;
+  buyPrice?: number;
+  sellPrice?: number;
+  unit?: string;
+}
+
 export const useUpdateProduct = () => {
-  const queryClient = useQueryClient();
-  
-  return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) =>
-      api.put(`/products/${id}`, data),
-    onMutate: async ({ id, data }) => {
-      await queryClient.cancelQueries({ queryKey: productKeys.detail(id) });
-      const previousProduct = queryClient.getQueryData(productKeys.detail(id));
-      queryClient.setQueryData(productKeys.detail(id), { ...previousProduct, ...data });
-      
-      // Also update in list view
-      queryClient.setQueryData(productKeys.lists(), (old: any) => ({
-        ...old,
-        data: (old?.data || []).map((p: any) =>
-          p.id === id ? { ...p, ...data } : p
-        ),
-      }));
-      
-      return { previousProduct };
-    },
-    onSuccess: (result, { id }, context) => {
-      queryClient.setQueryData(productKeys.detail(id), result.data);
-      queryClient.setQueryData(productKeys.lists(), (old: any) => ({
-        ...old,
-        data: (old?.data || []).map((p: any) =>
-          p.id === id ? result.data : p
-        ),
-      }));
-    },
+   const queryClient = useQueryClient();
+   
+   return useMutation({
+     mutationFn: ({ id, data }: { id: string; data: UpdateProductRequest }) =>
+       api.put(`/products/${id}`, data),
+     onMutate: async ({ id, data }) => {
+       await queryClient.cancelQueries({ queryKey: productKeys.detail(id) });
+       const previousProduct = queryClient.getQueryData(productKeys.detail(id));
+       queryClient.setQueryData(productKeys.detail(id), { ...previousProduct, ...data });
+       
+       // Also update in list view
+       queryClient.setQueryData(productKeys.lists(), (old: PaginatedResponse<Product> | undefined) => ({
+         ...old,
+         data: (old?.data || []).map((p: Product) =>
+           p.id === id ? { ...p, ...data } : p
+         ),
+       }));
+       
+       return { previousProduct };
+     },
+     onSuccess: (result, { id }, context) => {
+       queryClient.setQueryData(productKeys.detail(id), result.data);
+       queryClient.setQueryData(productKeys.lists(), (old: PaginatedResponse<Product> | undefined) => ({
+         ...old,
+         data: (old?.data || []).map((p: Product) =>
+           p.id === id ? result.data : p
+         ),
+       }));
+     },
     onError: (err, { id }, context) => {
       if (context?.previousProduct) {
         queryClient.setQueryData(productKeys.detail(id), context.previousProduct);
@@ -134,16 +154,16 @@ export const useDeleteProduct = () => {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: (id: string) => api.delete(`/products/${id}`),
-    onMutate: async (id) => {
-      await queryClient.cancelQueries({ queryKey: productKeys.lists() });
-      const previousProducts = queryClient.getQueryData(productKeys.lists());
-      queryClient.setQueryData(productKeys.lists(), (old: any) => ({
-        ...old,
-        data: old?.data?.filter((p: any) => p.id !== id) || [],
-      }));
-      return { previousProducts };
-    },
+     mutationFn: (id: string) => api.delete(`/products/${id}`),
+     onMutate: async (id) => {
+       await queryClient.cancelQueries({ queryKey: productKeys.lists() });
+       const previousProducts = queryClient.getQueryData(productKeys.lists());
+       queryClient.setQueryData(productKeys.lists(), (old: PaginatedResponse<Product> | undefined) => ({
+         ...old,
+         data: old?.data?.filter((p: Product) => p.id !== id) || [],
+       }));
+       return { previousProducts };
+     },
     onError: (err, id, context) => {
       if (context?.previousProducts) {
         queryClient.setQueryData(productKeys.lists(), context.previousProducts);
@@ -153,26 +173,26 @@ export const useDeleteProduct = () => {
 };
 
 export const useUpdateStock = () => {
-  const queryClient = useQueryClient();
-  
-  return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) =>
-      api.patch(`/products/${id}/stock`, data),
-    onMutate: async ({ id, data }) => {
-      await queryClient.cancelQueries({ queryKey: productKeys.detail(id) });
-      const previousProduct = queryClient.getQueryData(productKeys.detail(id));
-      queryClient.setQueryData(productKeys.detail(id), { ...previousProduct, stock: data.stock });
-      
-      // Also update in list view
-      queryClient.setQueryData(productKeys.lists(), (old: any) => ({
-        ...old,
-        data: (old?.data || []).map((p: any) =>
-          p.id === id ? { ...p, stock: data.stock } : p
-        ),
-      }));
-      
-      return { previousProduct };
-    },
+   const queryClient = useQueryClient();
+   
+   return useMutation({
+     mutationFn: ({ id, data }: { id: string; data: { stock: number } }) =>
+       api.patch(`/products/${id}/stock`, data),
+     onMutate: async ({ id, data }) => {
+       await queryClient.cancelQueries({ queryKey: productKeys.detail(id) });
+       const previousProduct = queryClient.getQueryData(productKeys.detail(id));
+       queryClient.setQueryData(productKeys.detail(id), { ...previousProduct, stock: data.stock });
+       
+       // Also update in list view
+       queryClient.setQueryData(productKeys.lists(), (old: PaginatedResponse<Product> | undefined) => ({
+         ...old,
+         data: (old?.data || []).map((p: Product) =>
+           p.id === id ? { ...p, stock: data.stock } : p
+         ),
+       }));
+       
+       return { previousProduct };
+     },
     onError: (err, { id }, context) => {
       if (context?.previousProduct) {
         queryClient.setQueryData(productKeys.detail(id), context.previousProduct);

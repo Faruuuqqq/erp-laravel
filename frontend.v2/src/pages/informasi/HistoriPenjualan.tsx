@@ -55,7 +55,7 @@ const HistoriPenjualan = () => {
     perPage: 15,
   });
 
-  const { data: customersData } = useCustomers({ perPage: 200 });
+  const { data: customersData } = useCustomers({ per_page: 200 });
   const customers = customersData?.data ?? [];
 
   const tunai = filterType !== 'kredit' ? (tunaiData?.data ?? []) : [];
@@ -198,7 +198,7 @@ const HistoriPenjualan = () => {
             <Switch id="show-lunas" checked={showLunasOnly} onCheckedChange={setShowLunasOnly} />
             <Label htmlFor="show-lunas" className="text-xs text-muted-foreground cursor-pointer">Lunas saja</Label>
           </div>
-           <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={handleExport} disabled={isExporting}><FileDown className="h-3.5 w-3.5" />{isExporting ? 'Generating...' : 'Export PDF'}</Button>
+          <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={handleExport} disabled={isExporting}><FileDown className="h-3.5 w-3.5" />{isExporting ? 'Generating...' : 'Export PDF'}</Button>
         </div>
       </div>
 
@@ -260,10 +260,10 @@ const HistoriPenjualan = () => {
                       <TableCell>
                         <div className="flex gap-0.5">
                           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setSelectedTrx(t)}><Eye className="h-3.5 w-3.5" /></Button>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-7 w-7 text-muted-foreground hover:text-foreground" 
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-muted-foreground hover:text-foreground"
                             title={t.isHidden ? 'Tampilkan' : 'Sembunyikan'}
                             onClick={() => handleToggleHide(t.id)}
                             disabled={togglingId === t.id}

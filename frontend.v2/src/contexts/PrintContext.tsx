@@ -1,12 +1,7 @@
-import React, { createContext, useContext, useState, ReactNode, useRef } from 'react';
+import React, { useState, ReactNode, useRef } from 'react';
+import { PrintContext } from './PrintContextDef';
 
-interface PrintContextType {
-  printDocument: (content: ReactNode) => void;
-}
-
-const PrintContext = createContext<PrintContextType | undefined>(undefined);
-
-export const PrintProvider = ({ children }: { children: ReactNode }) => {
+const PrintProvider = ({ children }: { children: ReactNode }) => {
   const [printContent, setPrintContent] = useState<ReactNode | null>(null);
   const printFrameRef = useRef<HTMLIFrameElement>(null);
 
@@ -99,10 +94,4 @@ export const PrintProvider = ({ children }: { children: ReactNode }) => {
   );
 };
 
-export const usePrint = () => {
-  const context = useContext(PrintContext);
-  if (context === undefined) {
-    throw new Error('usePrint must be used within a PrintProvider');
-  }
-  return context;
-};
+export { PrintProvider };

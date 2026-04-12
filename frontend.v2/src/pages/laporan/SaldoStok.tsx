@@ -11,7 +11,7 @@ import { Package, AlertTriangle, Search, Download, Printer, TrendingUp } from 'l
 import { useStockReport, printStockReport } from '@/hooks/api/useReports';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useAuth } from '@/contexts/AuthContext';
-import { usePrint } from '@/contexts/PrintContext';
+import { usePrint } from '@/contexts/usePrint';
 import { SaldoStokPrint } from '@/components/print/SaldoStokPrint';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';

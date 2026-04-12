@@ -62,7 +62,7 @@ export const useCreateCustomer = () => {
       const previousCustomers = queryClient.getQueryData(customerKeys.lists());
       const tempId = 'temp-' + Date.now();
       
-      queryClient.setQueryData(customerKeys.lists(), (old: any) => ({
+      queryClient.setQueryData(customerKeys.lists(), (old: PaginatedResponse<Customer> | undefined) => ({
         ...old,
         data: [...(old?.data || []), { ...newCustomer, id: tempId }],
       }));
@@ -70,9 +70,9 @@ export const useCreateCustomer = () => {
       return { previousCustomers, tempId };
     },
     onSuccess: (result, newCustomer, context) => {
-      queryClient.setQueryData(customerKeys.lists(), (old: any) => ({
+      queryClient.setQueryData(customerKeys.lists(), (old: PaginatedResponse<Customer> | undefined) => ({
         ...old,
-        data: (old?.data || []).map((c: any) =>
+        data: (old?.data || []).map((c: Customer) =>
           c.id === context?.tempId ? result.data : c
         ),
       }));
@@ -95,9 +95,9 @@ export const useUpdateCustomer = () => {
       const previousCustomer = queryClient.getQueryData(customerKeys.detail(id));
       
       queryClient.setQueryData(customerKeys.detail(id), { ...previousCustomer, ...data });
-      queryClient.setQueryData(customerKeys.lists(), (old: any) => ({
+      queryClient.setQueryData(customerKeys.lists(), (old: PaginatedResponse<Customer> | undefined) => ({
         ...old,
-        data: (old?.data || []).map((c: any) =>
+        data: (old?.data || []).map((c: Customer) =>
           c.id === id ? { ...c, ...data } : c
         ),
       }));
@@ -106,9 +106,9 @@ export const useUpdateCustomer = () => {
     },
     onSuccess: (result, { id }, context) => {
       queryClient.setQueryData(customerKeys.detail(id), result.data);
-      queryClient.setQueryData(customerKeys.lists(), (old: any) => ({
+      queryClient.setQueryData(customerKeys.lists(), (old: PaginatedResponse<Customer> | undefined) => ({
         ...old,
-        data: (old?.data || []).map((c: any) =>
+        data: (old?.data || []).map((c: Customer) =>
           c.id === id ? result.data : c
         ),
       }));
@@ -129,9 +129,9 @@ export const useDeleteCustomer = () => {
       await queryClient.cancelQueries({ queryKey: customerKeys.lists() });
       const previousCustomers = queryClient.getQueryData(customerKeys.lists());
       
-      queryClient.setQueryData(customerKeys.lists(), (old: any) => ({
+      queryClient.setQueryData(customerKeys.lists(), (old: PaginatedResponse<Customer> | undefined) => ({
         ...old,
-        data: (old?.data || []).filter((c: any) => c.id !== id),
+        data: (old?.data || []).filter((c: Customer) => c.id !== id),
       }));
       
       return { previousCustomers };

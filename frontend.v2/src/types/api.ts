@@ -195,6 +195,31 @@ export interface StockMovement {
   reference: string;
 }
 
+export interface StockMutation {
+  id: string;
+  productId: string;
+  type: string;
+  quantity: number;
+  stockAfter: number;
+  reference: string;
+  notes: string;
+  createdAt: string;
+}
+
+export interface StockMutationResponse {
+  data: {
+    product: { openingStock?: number };
+    mutations: StockMutation[];
+  };
+}
+
+export interface QueryParams {
+  product_id?: string;
+  from?: string;
+  to?: string;
+  [key: string]: string | number | boolean | undefined;
+}
+
 export interface StoreSettings {
   name: string;
   phone: string;

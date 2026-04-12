@@ -60,6 +60,10 @@ const HistoriPembayaranPiutang = () => {
     }
   }, [toggleHideMutation, toast]);
 
+  const handleExport = useCallback(() => {
+    toast({ title: 'Fitur', description: 'Export PDF akan segera tersedia', variant: 'default' });
+  }, [toast]);
+
   return (
     <MainLayout title="Histori Pembayaran Piutang" subtitle="Riwayat penerimaan pembayaran piutang customer">
       <div className="mb-4 grid gap-3 md:grid-cols-2">

@@ -204,9 +204,10 @@ const Pengaturan = () => {
       if (updateUser && user) {
         updateUser({ ...user, name: profileForm.name, email: profileForm.email });
       }
-    } catch (error: any) {
-      const message = error.response?.data?.errors?.email?.[0] 
-        || error.response?.data?.message 
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { errors?: { email?: string[] }; message?: string } } };
+      const message = err.response?.data?.errors?.email?.[0] 
+        || err.response?.data?.message 
         || 'Gagal memperbarui profil';
       
       toast({ 
@@ -231,8 +232,9 @@ const Pengaturan = () => {
         description: `Nama: ${storeForm.store_name}`,
         variant: 'default',
       });
-    } catch (error: any) {
-      const message = error.response?.data?.message || 'Gagal memperbarui informasi toko';
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } } };
+      const message = err.response?.data?.message || 'Gagal memperbarui informasi toko';
       
       toast({ 
         title: 'Gagal memperbarui toko',
@@ -266,10 +268,11 @@ const Pengaturan = () => {
         password: '',
         password_confirmation: '',
       });
-    } catch (error: any) {
-      const message = error.response?.data?.errors?.current_password?.[0]
-        || error.response?.data?.errors?.password?.[0]
-        || error.response?.data?.message
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { errors?: { current_password?: string[]; password?: string[] }; message?: string } } };
+      const message = err.response?.data?.errors?.current_password?.[0]
+        || err.response?.data?.errors?.password?.[0]
+        || err.response?.data?.message
         || 'Gagal mengubah password';
       
       toast({ 
@@ -292,8 +295,9 @@ const Pengaturan = () => {
         description: 'Preferensi notifikasi Anda telah disimpan',
         variant: 'default',
       });
-    } catch (error: any) {
-      const message = error.response?.data?.message || 'Gagal memperbarui notifikasi';
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } } };
+      const message = err.response?.data?.message || 'Gagal memperbarui notifikasi';
       
       toast({ 
         title: 'Gagal memperbarui notifikasi',

@@ -1,15 +1,14 @@
 import React from 'react';
-import { format } from 'date-fns';
-import { id as localeId } from 'date-fns/locale';
+import { PrintLayout } from './PrintLayout';
 import { formatCurrency } from '@/lib/utils';
 
-interface KartuStokEntry {
+interface PrintEntry {
   tanggal: string;
   keterangan: string;
+  referensi: string;
   masuk: number;
   keluar: number;
   saldo: number;
-  referensi?: string;
 }
 
 interface KartuStokPrintProps {
@@ -18,97 +17,117 @@ interface KartuStokPrintProps {
   satuan?: string;
   periodFrom?: string;
   periodTo?: string;
-  entries: KartuStokEntry[];
+  entries: PrintEntry[];
   hargaBeli?: number;
-  printedBy?: string;
 }
 
+/**
+ * Print template for Kartu Stok (Stock Card)
+ * Displays product info, period filters, and detailed stock mutations with running balance
+ */
 export const KartuStokPrint = ({
-  productName, productCode, satuan, periodFrom, periodTo,
-  entries, hargaBeli, printedBy
+  productName,
+  productCode,
+  satuan,
+  periodFrom,
+  periodTo,
+  entries,
+  hargaBeli,
 }: KartuStokPrintProps) => {
-  const now = format(new Date(), 'dd MMMM yyyy HH:mm', { locale: localeId });
-  const formatPeriod = (d?: string) => d ? format(new Date(d), 'dd/MM/yyyy', { locale: localeId }) : '-';
+  // Format date for display
+  const formatDate = (dateStr?: string): string => {
+    if (!dateStr) return '-';
+    try {
+      return new Date(dateStr).toLocaleDateString('id-ID');
+    } catch {
+      return dateStr;
+    }
+  };
 
-  const lastEntry = entries[entries.length - 1];
-  const saldoAkhir = lastEntry?.saldo ?? 0;
+  // Calculate totals from entries
+  const totalMasuk = entries.reduce((sum, e) => sum + e.masuk, 0);
+  const totalKeluar = entries.reduce((sum, e) => sum + e.keluar, 0);
+  const finalBalance = entries.length > 0 ? entries[entries.length - 1].saldo : 0;
 
   return (
-    <div className="print-document p-8">
-      {/* Header */}
-      <div className="flex justify-between items-start mb-6">
-        <div>
-          <h1 className="text-xl font-bold">KARTU STOK</h1>
-          <p className="text-sm text-gray-500">Dicetak: {now}</p>
-          {printedBy && <p className="text-sm text-gray-500">Oleh: {printedBy}</p>}
-        </div>
-        <div className="text-right">
-          <p className="text-sm">Periode: {formatPeriod(periodFrom)} s/d {formatPeriod(periodTo)}</p>
+    <PrintLayout title="Kartu Stok" date={new Date().toISOString()}>
+      {/* Product Header */}
+      <div className="mb-6 pb-4 border-b">
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <p className="text-xs text-gray-600">Nama Produk</p>
+            <p className="text-lg font-bold">{productName}</p>
+            <p className="text-sm text-gray-600 mt-1">Kode: {productCode}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs text-gray-600">Satuan</p>
+            <p className="text-lg font-bold">{satuan || '-'}</p>
+            {hargaBeli !== undefined && (
+              <p className="text-sm text-gray-600 mt-1">Harga Beli: {formatCurrency(hargaBeli)}</p>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Product Info */}
-      <div className="mb-4 p-3 border rounded grid grid-cols-2 gap-2 text-sm">
-        <div><span className="text-gray-500">Kode Produk</span><p className="font-bold font-mono">{productCode}</p></div>
-        <div><span className="text-gray-500">Nama Produk</span><p className="font-bold">{productName}</p></div>
-        <div><span className="text-gray-500">Satuan</span><p>{satuan ?? '-'}</p></div>
-        {hargaBeli !== undefined && (
-          <div><span className="text-gray-500">Harga Beli</span><p className="font-semibold">{formatCurrency(hargaBeli)}</p></div>
-        )}
-      </div>
+      {/* Period Info */}
+      {(periodFrom || periodTo) && (
+        <div className="mb-4 text-xs text-gray-600">
+          <p>
+            Periode: {formatDate(periodFrom)} s/d {formatDate(periodTo)}
+          </p>
+        </div>
+      )}
 
-      {/* Stock Movement Table */}
-      <table>
+      {/* Stock Mutations Table */}
+      <table className="print-table">
         <thead>
           <tr>
-            <th className="text-center w-24">Tanggal</th>
+            <th className="w-12 text-center">No</th>
+            <th className="w-20">Tanggal</th>
             <th>Keterangan</th>
-            <th>Referensi</th>
-            <th className="text-center w-20">Masuk</th>
-            <th className="text-center w-20">Keluar</th>
-            <th className="text-center w-24 font-bold">Saldo</th>
+            <th className="w-20 text-center">No. Referensi</th>
+            <th className="w-16 text-right">Masuk</th>
+            <th className="w-16 text-right">Keluar</th>
+            <th className="w-16 text-right">Saldo</th>
           </tr>
         </thead>
         <tbody>
-          {entries.length === 0 ? (
-            <tr><td colSpan={6} className="text-center py-4 text-gray-500">Tidak ada mutasi stok dalam periode ini</td></tr>
-          ) : entries.map((entry, idx) => (
-            <tr key={idx}>
-              <td className="text-center text-sm">
-                {entry.tanggal ? format(new Date(entry.tanggal), 'dd/MM/yy') : '-'}
-              </td>
+          {entries.map((entry, idx) => (
+            <tr key={`${entry.tanggal}-${idx}`} className={idx === 0 ? 'italic bg-gray-50' : ''}>
+              <td className="text-center text-xs">{idx === 0 ? '-' : idx}</td>
+              <td className="text-sm">{formatDate(entry.tanggal)}</td>
               <td className="text-sm">{entry.keterangan}</td>
-              <td className="font-mono text-xs text-gray-500">{entry.referensi ?? '-'}</td>
-              <td className="text-center text-green-700 font-semibold">
-                {entry.masuk > 0 ? entry.masuk.toLocaleString('id-ID') : '-'}
+              <td className="text-center text-xs font-mono">{entry.referensi || '-'}</td>
+              <td className="text-right text-sm">
+                {entry.masuk > 0 ? entry.masuk : '-'}
               </td>
-              <td className="text-center text-red-600 font-semibold">
-                {entry.keluar > 0 ? entry.keluar.toLocaleString('id-ID') : '-'}
+              <td className="text-right text-sm">
+                {entry.keluar > 0 ? entry.keluar : '-'}
               </td>
-              <td className="text-center font-bold text-blue-700">
-                {entry.saldo.toLocaleString('id-ID')}
-              </td>
+              <td className="text-right font-semibold text-sm tabular-nums">{entry.saldo}</td>
             </tr>
           ))}
         </tbody>
         <tfoot>
-          <tr>
-            <td colSpan={5} className="text-right font-bold py-2">SALDO AKHIR</td>
-            <td className="text-center font-bold text-lg text-blue-700">{saldoAkhir.toLocaleString('id-ID')}</td>
+          <tr className="bg-gray-50 font-bold border-t-2">
+            <td colSpan={4} className="text-right text-sm py-2">
+              TOTAL PERIODE
+            </td>
+            <td className="text-right text-sm py-2">+{totalMasuk}</td>
+            <td className="text-right text-sm py-2">-{totalKeluar}</td>
+            <td className="text-right text-sm py-2 tabular-nums">{finalBalance}</td>
           </tr>
-          {hargaBeli !== undefined && (
-            <tr>
-              <td colSpan={5} className="text-right font-bold py-1">NILAI PERSEDIAAN</td>
-              <td className="text-center font-bold">{formatCurrency(saldoAkhir * hargaBeli)}</td>
-            </tr>
-          )}
         </tfoot>
       </table>
 
-      <div className="mt-6 text-xs text-gray-500 text-center">
-        --- Kartu stok dicetak otomatis oleh sistem ERP. Perubahan stok hanya valid jika ada dokumen pendukung. ---
+      {/* Notes */}
+      <div className="mt-6 text-xs text-gray-600">
+        <p>
+          <span className="font-bold">Keterangan:</span> Saldo Awal menunjukkan stok pada awal periode. Setiap baris menampilkan
+          pergerakan stok dengan saldo running balance untuk referensi audit.
+        </p>
       </div>
-    </div>
+    </PrintLayout>
   );
 };
 

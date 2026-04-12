@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import type { Product } from '@/types';
 
 export const useValidateQty = () => {
   const { toast } = useToast();
@@ -12,7 +13,7 @@ export const useValidateQty = () => {
     });
   };
 
-  const validateAddToCart = (qty: string, diskon: string, product: any) => {
+  const validateAddToCart = (qty: string, diskon: string, product: Product) => {
     // Validate quantity
     const qtyNum = parseInt(qty);
     if (isNaN(qtyNum) || qtyNum <= 0) {
@@ -46,7 +47,7 @@ export const useValidateQty = () => {
     return { isValid: true };
   };
 
-  const validateCartNotEmpty = (cart: any[]) => {
+  const validateCartNotEmpty = (cart: unknown[]) => {
     if (cart.length === 0) {
       return { isValid: false, error: 'Keranjang belanja masih kosong' };
     }

@@ -9,6 +9,14 @@ interface WarehouseParams {
   status?: 'aktif' | 'nonaktif';
 }
 
+interface CreateUpdateWarehouseRequest {
+  code: string;
+  name: string;
+  address: string;
+  manager: string;
+  status: 'aktif' | 'nonaktif';
+}
+
 // Transform status values: Frontend ('aktif'/'nonaktif') ↔ Backend ('active'/'inactive')
 const toBackendStatus = (status?: string): string | undefined => {
   if (!status) return undefined;
@@ -20,7 +28,7 @@ const toFrontendStatus = (status?: string): 'aktif' | 'nonaktif' | undefined => 
   return status === 'active' ? 'aktif' : status === 'inactive' ? 'nonaktif' : undefined;
 };
 
-const transformToBackend = (data: any) => ({
+const transformToBackend = (data: CreateUpdateWarehouseRequest) => ({
   ...data,
   status: toBackendStatus(data.status),
 });
@@ -72,29 +80,29 @@ export const useWarehouse = (id: string) => {
 };
 
 export const useCreateWarehouse = () => {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (data: Record<string, unknown>) => api.post('/warehouses', transformToBackend(data)),
-    onMutate: async (newWarehouse) => {
-      await queryClient.cancelQueries({ queryKey: warehouseKeys.lists() });
-      const previousWarehouses = queryClient.getQueryData(warehouseKeys.lists());
-      const tempId = 'temp-' + Date.now();
-      
-      queryClient.setQueryData(warehouseKeys.lists(), (old: any) => ({
-        ...old,
-        data: [...(old?.data || []), { ...newWarehouse, id: tempId }],
-      }));
-      
-      return { previousWarehouses, tempId };
-    },
-    onSuccess: (result, newWarehouse, context) => {
-      queryClient.setQueryData(warehouseKeys.lists(), (old: any) => ({
-        ...old,
-        data: (old?.data || []).map((w: any) =>
-          w.id === context?.tempId ? result.data : w
-        ),
-      }));
-    },
+   const queryClient = useQueryClient();
+   return useMutation({
+     mutationFn: (data: CreateUpdateWarehouseRequest) => api.post('/warehouses', transformToBackend(data)),
+     onMutate: async (newWarehouse) => {
+       await queryClient.cancelQueries({ queryKey: warehouseKeys.lists() });
+       const previousWarehouses = queryClient.getQueryData(warehouseKeys.lists());
+       const tempId = 'temp-' + Date.now();
+       
+       queryClient.setQueryData(warehouseKeys.lists(), (old: PaginatedResponse<Warehouse> | undefined) => ({
+         ...old,
+         data: [...(old?.data || []), { ...newWarehouse, id: tempId }],
+       }));
+       
+       return { previousWarehouses, tempId };
+     },
+     onSuccess: (result, newWarehouse, context) => {
+       queryClient.setQueryData(warehouseKeys.lists(), (old: PaginatedResponse<Warehouse> | undefined) => ({
+         ...old,
+         data: (old?.data || []).map((w: Warehouse) =>
+           w.id === context?.tempId ? result.data : w
+         ),
+       }));
+     },
     onError: (err, newWarehouse, context) => {
       if (context?.previousWarehouses) {
         queryClient.setQueryData(warehouseKeys.lists(), context.previousWarehouses);
@@ -104,34 +112,34 @@ export const useCreateWarehouse = () => {
 };
 
 export const useUpdateWarehouse = () => {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Record<string, unknown> }) =>
-      api.put(`/warehouses/${id}`, transformToBackend(data)),
-    onMutate: async ({ id, data }) => {
-      await queryClient.cancelQueries({ queryKey: warehouseKeys.detail(id) });
-      const previousWarehouse = queryClient.getQueryData(warehouseKeys.detail(id));
-      
-      queryClient.setQueryData(warehouseKeys.detail(id), { ...previousWarehouse, ...data });
-      queryClient.setQueryData(warehouseKeys.lists(), (old: any) => ({
-        ...old,
-        data: (old?.data || []).map((w: any) =>
-          w.id === id ? { ...w, ...data } : w
-        ),
-      }));
-      
-      return { previousWarehouse };
-    },
-    onSuccess: (result, { id }, context) => {
-      const transformedResult = transformToFrontend(result.data);
-      queryClient.setQueryData(warehouseKeys.detail(id), transformedResult);
-      queryClient.setQueryData(warehouseKeys.lists(), (old: any) => ({
-        ...old,
-        data: (old?.data || []).map((w: any) =>
-          w.id === id ? transformedResult : w
-        ),
-      }));
-    },
+   const queryClient = useQueryClient();
+   return useMutation({
+     mutationFn: ({ id, data }: { id: string; data: CreateUpdateWarehouseRequest }) =>
+       api.put(`/warehouses/${id}`, transformToBackend(data)),
+     onMutate: async ({ id, data }) => {
+       await queryClient.cancelQueries({ queryKey: warehouseKeys.detail(id) });
+       const previousWarehouse = queryClient.getQueryData(warehouseKeys.detail(id));
+       
+       queryClient.setQueryData(warehouseKeys.detail(id), { ...previousWarehouse, ...data });
+       queryClient.setQueryData(warehouseKeys.lists(), (old: PaginatedResponse<Warehouse> | undefined) => ({
+         ...old,
+         data: (old?.data || []).map((w: Warehouse) =>
+           w.id === id ? { ...w, ...data } : w
+         ),
+       }));
+       
+       return { previousWarehouse };
+     },
+     onSuccess: (result, { id }, context) => {
+       const transformedResult = transformToFrontend(result.data);
+       queryClient.setQueryData(warehouseKeys.detail(id), transformedResult);
+       queryClient.setQueryData(warehouseKeys.lists(), (old: PaginatedResponse<Warehouse> | undefined) => ({
+         ...old,
+         data: (old?.data || []).map((w: Warehouse) =>
+           w.id === id ? transformedResult : w
+         ),
+       }));
+     },
     onError: (err, { id }, context) => {
       if (context?.previousWarehouse) {
         queryClient.setQueryData(warehouseKeys.detail(id), context.previousWarehouse);
@@ -144,17 +152,17 @@ export const useDeleteWarehouse = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.delete(`/warehouses/${id}`),
-    onMutate: async (id) => {
-      await queryClient.cancelQueries({ queryKey: warehouseKeys.lists() });
-      const previousWarehouses = queryClient.getQueryData(warehouseKeys.lists());
-      
-      queryClient.setQueryData(warehouseKeys.lists(), (old: any) => ({
-        ...old,
-        data: (old?.data || []).filter((w: any) => w.id !== id),
-      }));
-      
-      return { previousWarehouses };
-    },
+     onMutate: async (id) => {
+       await queryClient.cancelQueries({ queryKey: warehouseKeys.lists() });
+       const previousWarehouses = queryClient.getQueryData(warehouseKeys.lists());
+       
+       queryClient.setQueryData(warehouseKeys.lists(), (old: PaginatedResponse<Warehouse> | undefined) => ({
+         ...old,
+         data: (old?.data || []).filter((w: Warehouse) => w.id !== id),
+       }));
+       
+       return { previousWarehouses };
+     },
     onError: (err, id, context) => {
       if (context?.previousWarehouses) {
         queryClient.setQueryData(warehouseKeys.lists(), context.previousWarehouses);

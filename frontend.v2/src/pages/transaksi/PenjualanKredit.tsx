@@ -146,8 +146,8 @@ const PenjualanKredit = () => {
     }
   }, [state, diskonTotalNum, dpNum, createTx, toast]);
 
-  // Reset handler
-  const reset = useCallback(() => { setState(BLANK()); setSaved(false); setSavedTrx(null); setIsPreviewOpen(false); }, []);
+   // Reset handler
+   const reset = useCallback(() => { setState(BLANK()); setSaved(false); setSavedTrx(null); setIsPreviewOpen(false); setIsDraftPreviewOpen(false); }, []);
 
   if (saved && savedTrx) {
     return (

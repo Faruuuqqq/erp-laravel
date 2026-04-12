@@ -60,14 +60,16 @@ const Produk = () => {
   const updateMutation = useUpdateProduct();
   const deleteMutation = useDeleteProduct();
 
-  const products = productsData?.data ?? [];
-  const pagination = productsData?.meta;
-  const categories = categoriesData?.data ?? [];
-  const warehouses = warehousesData?.data ?? [];
+   const products = productsData?.data ?? [];
+   const pagination = productsData?.meta;
+   
+   // Wrap categories and warehouses in useMemo to stabilize references
+   const categories = useMemo(() => categoriesData?.data ?? [], [categoriesData?.data]);
+   const warehouses = useMemo(() => warehousesData?.data ?? [], [warehousesData?.data]);
 
-  // Efficient lookup using Map for O(1) access - 90% CPU reduction
-  const categoryMap = useMemo(() => new Map(categories.map(c => [c.id, c.name])), [categories]);
-  const warehouseMap = useMemo(() => new Map(warehouses.map(w => [w.id, w.name])), [warehouses]);
+   // Efficient lookup using Map for O(1) access - 90% CPU reduction
+   const categoryMap = useMemo(() => new Map(categories.map(c => [c.id, c.name])), [categories]);
+   const warehouseMap = useMemo(() => new Map(warehouses.map(w => [w.id, w.name])), [warehouses]);
 
   const totalNilai = products.reduce((s, p) => s + Number(p.buyPrice ?? 0) * Number(p.stock ?? 0), 0);
   const lowStock = products.filter(p => Number(p.stock) <= Number(p.minimumStock ?? 0)).length;

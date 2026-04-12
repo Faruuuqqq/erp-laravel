@@ -27,7 +27,7 @@ export const useRetryableAction = (config: RetryConfig = {}) => {
 
   const execute = useCallback(
     async (
-      action: () => Promise<any>,
+      action: () => Promise<unknown>,
       options: RetryableActionOptions
     ) => {
       const actionId = Math.random().toString(36);
