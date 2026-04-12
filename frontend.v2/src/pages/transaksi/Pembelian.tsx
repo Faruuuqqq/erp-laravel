@@ -16,6 +16,7 @@ import { useProducts } from '@/hooks/api/useProducts';
 import { useSuppliers } from '@/hooks/api/useSuppliers';
 import { useWarehouses } from '@/hooks/api/useWarehouses';
 import { useCreateTransaction } from '@/hooks/api/useTransactions';
+import { DraftPreviewDialog } from '@/components/dialogs/DraftPreviewDialog';
 import { PrintPreviewDialog } from '@/components/dialogs/PrintPreviewDialog';
 import { FakturPembelian } from '@/components/print/FakturPembelian';
 import { formatCurrency } from '@/lib/utils';
@@ -447,13 +448,8 @@ const Pembelian = () => {
        )}
 
        {/* Draft Preview Dialog */}
-       <PrintPreviewDialog
-         isOpen={isDraftPreviewOpen}
-         onClose={() => setIsDraftPreviewOpen(false)}
-         title="Preview Pembelian (Draft)"
-         documentId="faktur-pembelian-draft-print"
-         filename="Pembelian-Draft"
-         printContent={
+       {(() => {
+         const draftPreviewContent = (
            <div className="w-full text-sm space-y-4 p-4">
              <div className="border-b pb-4">
                <p className="font-semibold text-lg">Pembelian (Draft)</p>
@@ -512,67 +508,16 @@ const Pembelian = () => {
                </div>
              </div>
            </div>
-         }
-       >
-         <div className="w-full text-sm space-y-4 p-4">
-           <div className="border-b pb-4">
-             <p className="font-semibold text-lg">Pembelian (Draft)</p>
-             <p className="text-xs text-muted-foreground">Belum disimpan</p>
-           </div>
-           <div className="space-y-1 text-xs">
-             <div className="flex justify-between">
-               <span>Tanggal:</span>
-               <span className="font-semibold">{state.tanggal}</span>
-             </div>
-             <div className="flex justify-between">
-               <span>Supplier:</span>
-               <span className="font-semibold">{supplier?.name || '-'}</span>
-             </div>
-             {state.catatan && (
-               <div className="flex justify-between">
-                 <span>Catatan:</span>
-                 <span className="font-semibold">{state.catatan}</span>
-               </div>
-             )}
-           </div>
-           <table className="w-full text-xs">
-             <thead className="border-b bg-muted/50">
-               <tr>
-                 <th className="text-left py-2">Produk</th>
-                 <th className="text-right py-2">Qty</th>
-                 <th className="text-right py-2">Harga</th>
-                 <th className="text-right py-2">Subtotal</th>
-               </tr>
-             </thead>
-             <tbody>
-               {state.cart.map(item => (
-                 <tr key={item.productId} className="border-b">
-                   <td className="py-2">{item.nama}</td>
-                   <td className="text-right">{item.qty}</td>
-                   <td className="text-right">{formatCurrency(item.harga)}</td>
-                   <td className="text-right font-semibold">{formatCurrency(item.subtotal)}</td>
-                 </tr>
-               ))}
-             </tbody>
-           </table>
-           <div className="space-y-1 text-xs border-t pt-4">
-             <div className="flex justify-between">
-               <span>Subtotal:</span>
-               <span>{formatCurrency(subtotal)}</span>
-             </div>
-             {parseFloat(state.diskon) > 0 && (
-               <div className="flex justify-between text-warning">
-                 <span>Diskon:</span>
-                 <span>-{formatCurrency(parseFloat(state.diskon) || 0)}</span>
-               </div>
-             )}
-             <div className="flex justify-between font-semibold text-base border-t pt-2">
-               <span>Total:</span>
-               <span>{formatCurrency(grandTotal)}</span>
-             </div>
-            </div>
-          </div>
-        </PrintPreviewDialog>
+         );
+         return (
+           <DraftPreviewDialog
+             isOpen={isDraftPreviewOpen}
+             onClose={() => setIsDraftPreviewOpen(false)}
+             content={draftPreviewContent}
+             title="Preview Pembelian"
+           />
+         );
+       })()}
 
 
       {/* Price Conflict Dialog */}

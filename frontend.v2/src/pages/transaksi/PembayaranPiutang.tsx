@@ -13,6 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useCustomers } from '@/hooks/api/useCustomers';
 import { useTransactions, useCreateTransaction } from '@/hooks/api/useTransactions';
+import { DraftPreviewDialog } from '@/components/dialogs/DraftPreviewDialog';
 import { PrintPreviewDialog } from '@/components/dialogs/PrintPreviewDialog';
 import { PembayaranPiutangPrint } from '@/components/print/PembayaranPiutangPrint';
 import { formatCurrency } from '@/lib/utils';
@@ -262,13 +263,8 @@ const PembayaranPiutang = () => {
        )}
 
        {/* Draft Preview Dialog */}
-       <PrintPreviewDialog
-         isOpen={isDraftPreviewOpen}
-         onClose={() => setIsDraftPreviewOpen(false)}
-         title="Preview Pembayaran Piutang (Draft)"
-         documentId="pembayaran-piutang-draft-print"
-         filename="Pembayaran-Piutang-Draft"
-         printContent={
+       {(() => {
+         const draftPreviewContent = (
            <div className="w-full text-sm space-y-4 p-4">
              <div className="border-b pb-4">
                <p className="font-semibold text-lg">Pembayaran Piutang (Draft)</p>
@@ -328,68 +324,16 @@ const PembayaranPiutang = () => {
                )}
              </div>
            </div>
-         }
-       >
-         <div className="w-full text-sm space-y-4 p-4">
-           <div className="border-b pb-4">
-             <p className="font-semibold text-lg">Pembayaran Piutang (Draft)</p>
-             <p className="text-xs text-muted-foreground">Belum disimpan</p>
-           </div>
-           <div className="space-y-1 text-xs">
-             <div className="flex justify-between">
-               <span>Tanggal Terima:</span>
-               <span className="font-semibold">{tanggal}</span>
-             </div>
-             <div className="flex justify-between">
-               <span>Metode Pembayaran:</span>
-               <span className="font-semibold">{metodePembayaran || '-'}</span>
-             </div>
-             {catatan && (
-               <div className="flex justify-between">
-                 <span>Catatan:</span>
-                 <span className="font-semibold">{catatan}</span>
-               </div>
-             )}
-           </div>
-           <div className="border-t pt-4">
-             <p className="text-xs font-semibold text-muted-foreground mb-2">Daftar Faktur Piutang</p>
-             <table className="w-full text-xs">
-               <thead className="border-b bg-muted/50">
-                 <tr>
-                   <th className="text-left py-2">No. Faktur</th>
-                   <th className="text-left py-2">Customer</th>
-                   <th className="text-right py-2">Sisa Piutang</th>
-                 </tr>
-               </thead>
-               <tbody>
-                 {piutangList.filter(p => selectedItems.includes(p.id)).map(item => (
-                   <tr key={item.id} className="border-b">
-                     <td className="py-2 font-mono font-semibold">{item.invoiceNumber}</td>
-                     <td className="py-2">{item.customer || '-'}</td>
-                     <td className="text-right py-2">{formatCurrency(item.remaining ?? 0)}</td>
-                   </tr>
-                 ))}
-               </tbody>
-             </table>
-           </div>
-           <div className="space-y-1 text-xs border-t pt-4">
-             <div className="flex justify-between">
-               <span>Total Piutang:</span>
-               <span className="font-semibold">{formatCurrency(totalSelected)}</span>
-             </div>
-             <div className="flex justify-between font-semibold text-base border-t pt-2">
-               <span>Jumlah Diterima:</span>
-               <span className="text-success">{formatCurrency(jumlahDiterimaNum)}</span>
-             </div>
-             {sisa !== 0 && (
-               <div className={`flex justify-between ${sisa <= 0 ? 'text-success' : 'text-warning'}`}>
-                 <span>{sisa <= 0 ? 'Lebih Bayar' : 'Sisa Piutang'}:</span>
-                 <span className="font-semibold">{formatCurrency(Math.abs(sisa))}</span>
-               </div>
-             )}
-           </div>
-         </div>
-       </PrintPreviewDialog>
+         );
+         return (
+           <DraftPreviewDialog
+             isOpen={isDraftPreviewOpen}
+             onClose={() => setIsDraftPreviewOpen(false)}
+             content={draftPreviewContent}
+             title="Preview Pembayaran Piutang"
+           />
+         );
+       })()}
      </MainLayout>
    );
  };

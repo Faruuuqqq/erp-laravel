@@ -15,6 +15,7 @@ import { useCustomers } from '@/hooks/api/useCustomers';
 import { useSalesReps } from '@/hooks/api/useSalesReps';
 import { useWarehouses } from '@/hooks/api/useWarehouses';
 import { useCreateTransaction } from '@/hooks/api/useTransactions';
+import { DraftPreviewDialog } from '@/components/dialogs/DraftPreviewDialog';
 import { PrintPreviewDialog } from '@/components/dialogs/PrintPreviewDialog';
 import { SuratJalanPrint } from '@/components/print/SuratJalanPrint';
 import type { Transaction } from '@/types';
@@ -126,11 +127,92 @@ const SuratJalan = () => {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Gagal menyimpan surat jalan';
       toast({ title: 'Error', description: msg, variant: 'destructive' });
     } finally {
-      setIsSaving(false);
-    }
-  }, [items, selectedCustomer, selectedGudang, selectedSales, tanggal, catatan, createTx, toast]);
+       setIsSaving(false);
+     }
+   }, [items, selectedCustomer, selectedGudang, selectedSales, tanggal, catatan, createTx, toast]);
 
-  return (
+   // Memoized draft preview content
+   const draftPreviewContent = useMemo(() => (
+     <div className="w-full text-sm space-y-4 p-4">
+       <div className="border-b pb-4">
+         <p className="font-semibold text-lg">Surat Jalan (Draft)</p>
+         <p className="text-xs text-muted-foreground">Belum disimpan</p>
+       </div>
+       <div className="space-y-1 text-xs">
+         <div className="flex justify-between">
+           <span>No. Surat Jalan:</span>
+           <span className="font-semibold font-mono">{noSJ}</span>
+         </div>
+         <div className="flex justify-between">
+           <span>Tanggal:</span>
+           <span className="font-semibold">{tanggal}</span>
+         </div>
+         <div className="flex justify-between">
+           <span>Customer / Penerima:</span>
+           <span className="font-semibold">{customer?.name || '-'}</span>
+         </div>
+         <div className="flex justify-between">
+           <span>Alamat Pengiriman:</span>
+           <span className="font-semibold">{alamatKirim || '-'}</span>
+         </div>
+         <div className="flex justify-between">
+           <span>Gudang Pengirim:</span>
+           <span className="font-semibold">{gudang?.name || '-'}</span>
+         </div>
+         <div className="flex justify-between">
+           <span>Pengirim / Driver:</span>
+           <span className="font-semibold">{pengirim || '-'}</span>
+         </div>
+         <div className="flex justify-between">
+           <span>Sales:</span>
+           <span className="font-semibold">{sales?.name || '-'}</span>
+         </div>
+         {catatan && (
+           <div className="flex justify-between">
+             <span>Catatan:</span>
+             <span className="font-semibold">{catatan}</span>
+           </div>
+         )}
+       </div>
+       <div className="border-t pt-4">
+         <p className="text-xs font-semibold text-muted-foreground mb-2">Daftar Barang</p>
+         <table className="w-full text-xs">
+           <thead className="border-b bg-muted/50">
+             <tr>
+               <th className="text-left py-2">No</th>
+               <th className="text-left py-2">Nama Barang</th>
+               <th className="text-right py-2">Qty</th>
+               <th className="text-left py-2">Satuan</th>
+               <th className="text-left py-2">Keterangan</th>
+             </tr>
+           </thead>
+           <tbody>
+             {items.map((item, idx) => (
+               <tr key={idx} className="border-b">
+                 <td className="py-2">{idx + 1}</td>
+                 <td className="py-2">{item.nama}</td>
+                 <td className="text-right">{item.qty}</td>
+                 <td className="py-2">{item.satuan}</td>
+                 <td className="py-2">{item.keterangan || '-'}</td>
+               </tr>
+             ))}
+           </tbody>
+         </table>
+       </div>
+       <div className="space-y-1 text-xs border-t pt-4">
+         <div className="flex justify-between">
+           <span>Total Item:</span>
+           <span className="font-semibold">{items.length} item</span>
+         </div>
+         <div className="flex justify-between font-semibold text-base">
+           <span>Total Qty:</span>
+           <span>{totalQty} pcs</span>
+         </div>
+       </div>
+     </div>
+   ), [noSJ, tanggal, customer?.name, alamatKirim, gudang?.name, pengirim, sales?.name, catatan, items, totalQty]);
+
+   return (
     <MainLayout title="Surat Jalan" subtitle="Buat surat jalan untuk pengiriman barang">
       <Alert className="mb-4 border-primary/30 bg-primary/5">
         <FileText className="h-4 w-4 text-primary" />
@@ -333,171 +415,13 @@ const SuratJalan = () => {
          </PrintPreviewDialog>
        )}
 
-       {/* Draft Preview Dialog */}
-       <PrintPreviewDialog
-         isOpen={isDraftPreviewOpen}
-         onClose={() => setIsDraftPreviewOpen(false)}
-         title="Preview Surat Jalan (Draft)"
-         documentId="surat-jalan-draft-print"
-         filename="Surat-Jalan-Draft"
-         printContent={
-           <div className="w-full text-sm space-y-4 p-4">
-             <div className="border-b pb-4">
-               <p className="font-semibold text-lg">Surat Jalan (Draft)</p>
-               <p className="text-xs text-muted-foreground">Belum disimpan</p>
-             </div>
-             <div className="space-y-1 text-xs">
-               <div className="flex justify-between">
-                 <span>No. Surat Jalan:</span>
-                 <span className="font-semibold font-mono">{noSJ}</span>
-               </div>
-               <div className="flex justify-between">
-                 <span>Tanggal:</span>
-                 <span className="font-semibold">{tanggal}</span>
-               </div>
-               <div className="flex justify-between">
-                 <span>Customer / Penerima:</span>
-                 <span className="font-semibold">{customer?.name || '-'}</span>
-               </div>
-               <div className="flex justify-between">
-                 <span>Alamat Pengiriman:</span>
-                 <span className="font-semibold">{alamatKirim || '-'}</span>
-               </div>
-               <div className="flex justify-between">
-                 <span>Gudang Pengirim:</span>
-                 <span className="font-semibold">{gudang?.name || '-'}</span>
-               </div>
-               <div className="flex justify-between">
-                 <span>Pengirim / Driver:</span>
-                 <span className="font-semibold">{pengirim || '-'}</span>
-               </div>
-               <div className="flex justify-between">
-                 <span>Sales:</span>
-                 <span className="font-semibold">{sales?.name || '-'}</span>
-               </div>
-               {catatan && (
-                 <div className="flex justify-between">
-                   <span>Catatan:</span>
-                   <span className="font-semibold">{catatan}</span>
-                 </div>
-               )}
-             </div>
-             <div className="border-t pt-4">
-               <p className="text-xs font-semibold text-muted-foreground mb-2">Daftar Barang</p>
-               <table className="w-full text-xs">
-                 <thead className="border-b bg-muted/50">
-                   <tr>
-                     <th className="text-left py-2">No</th>
-                     <th className="text-left py-2">Nama Barang</th>
-                     <th className="text-right py-2">Qty</th>
-                     <th className="text-left py-2">Satuan</th>
-                     <th className="text-left py-2">Keterangan</th>
-                   </tr>
-                 </thead>
-                 <tbody>
-                   {items.map((item, idx) => (
-                     <tr key={idx} className="border-b">
-                       <td className="py-2">{idx + 1}</td>
-                       <td className="py-2">{item.nama}</td>
-                       <td className="text-right">{item.qty}</td>
-                       <td className="py-2">{item.satuan}</td>
-                       <td className="py-2">{item.keterangan || '-'}</td>
-                     </tr>
-                   ))}
-                 </tbody>
-               </table>
-             </div>
-             <div className="space-y-1 text-xs border-t pt-4">
-               <div className="flex justify-between">
-                 <span>Total Item:</span>
-                 <span className="font-semibold">{items.length} item</span>
-               </div>
-               <div className="flex justify-between font-semibold text-base">
-                 <span>Total Qty:</span>
-                 <span>{totalQty} pcs</span>
-               </div>
-             </div>
-           </div>
-         }
-       >
-         <div className="w-full text-sm space-y-4 p-4">
-           <div className="border-b pb-4">
-             <p className="font-semibold text-lg">Surat Jalan (Draft)</p>
-             <p className="text-xs text-muted-foreground">Belum disimpan</p>
-           </div>
-           <div className="space-y-1 text-xs">
-             <div className="flex justify-between">
-               <span>No. Surat Jalan:</span>
-               <span className="font-semibold font-mono">{noSJ}</span>
-             </div>
-             <div className="flex justify-between">
-               <span>Tanggal:</span>
-               <span className="font-semibold">{tanggal}</span>
-             </div>
-             <div className="flex justify-between">
-               <span>Customer / Penerima:</span>
-               <span className="font-semibold">{customer?.name || '-'}</span>
-             </div>
-             <div className="flex justify-between">
-               <span>Alamat Pengiriman:</span>
-               <span className="font-semibold">{alamatKirim || '-'}</span>
-             </div>
-             <div className="flex justify-between">
-               <span>Gudang Pengirim:</span>
-               <span className="font-semibold">{gudang?.name || '-'}</span>
-             </div>
-             <div className="flex justify-between">
-               <span>Pengirim / Driver:</span>
-               <span className="font-semibold">{pengirim || '-'}</span>
-             </div>
-             <div className="flex justify-between">
-               <span>Sales:</span>
-               <span className="font-semibold">{sales?.name || '-'}</span>
-             </div>
-             {catatan && (
-               <div className="flex justify-between">
-                 <span>Catatan:</span>
-                 <span className="font-semibold">{catatan}</span>
-               </div>
-             )}
-           </div>
-           <div className="border-t pt-4">
-             <p className="text-xs font-semibold text-muted-foreground mb-2">Daftar Barang</p>
-             <table className="w-full text-xs">
-               <thead className="border-b bg-muted/50">
-                 <tr>
-                   <th className="text-left py-2">No</th>
-                   <th className="text-left py-2">Nama Barang</th>
-                   <th className="text-right py-2">Qty</th>
-                   <th className="text-left py-2">Satuan</th>
-                   <th className="text-left py-2">Keterangan</th>
-                 </tr>
-               </thead>
-               <tbody>
-                 {items.map((item, idx) => (
-                   <tr key={idx} className="border-b">
-                     <td className="py-2">{idx + 1}</td>
-                     <td className="py-2">{item.nama}</td>
-                     <td className="text-right">{item.qty}</td>
-                     <td className="py-2">{item.satuan}</td>
-                     <td className="py-2">{item.keterangan || '-'}</td>
-                   </tr>
-                 ))}
-               </tbody>
-             </table>
-           </div>
-           <div className="space-y-1 text-xs border-t pt-4">
-             <div className="flex justify-between">
-               <span>Total Item:</span>
-               <span className="font-semibold">{items.length} item</span>
-             </div>
-             <div className="flex justify-between font-semibold text-base">
-               <span>Total Qty:</span>
-               <span>{totalQty} pcs</span>
-             </div>
-           </div>
-         </div>
-       </PrintPreviewDialog>
+        {/* Draft Preview Dialog */}
+        <DraftPreviewDialog
+          isOpen={isDraftPreviewOpen}
+          onClose={() => setIsDraftPreviewOpen(false)}
+          content={draftPreviewContent}
+          title="Surat Jalan"
+        />
      </MainLayout>
    );
  };

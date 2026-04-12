@@ -18,6 +18,7 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { useProducts } from '@/hooks/api/useProducts';
 import { useSuppliers } from '@/hooks/api/useSuppliers';
 import { useTransactions, useCreateTransaction } from '@/hooks/api/useTransactions';
+import { DraftPreviewDialog } from '@/components/dialogs/DraftPreviewDialog';
 import { PrintPreviewDialog } from '@/components/dialogs/PrintPreviewDialog';
 import { ReturPembelianPrint } from '@/components/print/ReturPembelianPrint';
 import { formatCurrency } from '@/lib/utils';
@@ -331,13 +332,8 @@ const ReturPembelian = () => {
        )}
 
        {/* Draft Preview Dialog */}
-       <PrintPreviewDialog
-         isOpen={isDraftPreviewOpen}
-         onClose={() => setIsDraftPreviewOpen(false)}
-         title="Preview Retur Pembelian (Draft)"
-         documentId="retur-pembelian-draft-print"
-         filename="Retur-Pembelian-Draft"
-         printContent={
+       {(() => {
+         const draftPreviewContent = (
            <div className="w-full text-sm space-y-4 p-4">
              <div className="border-b pb-4">
                <p className="font-semibold text-lg">Retur Pembelian (Draft)</p>
@@ -403,74 +399,16 @@ const ReturPembelian = () => {
                </div>
              </div>
            </div>
-         }
-       >
-         <div className="w-full text-sm space-y-4 p-4">
-           <div className="border-b pb-4">
-             <p className="font-semibold text-lg">Retur Pembelian (Draft)</p>
-             <p className="text-xs text-muted-foreground">Belum disimpan</p>
-           </div>
-           <div className="space-y-1 text-xs">
-             <div className="flex justify-between">
-               <span>Tanggal Retur:</span>
-               <span className="font-semibold">{tanggal}</span>
-             </div>
-             <div className="flex justify-between">
-               <span>Supplier:</span>
-               <span className="font-semibold">{suppliers.find(s => s.id === selectedSupplier)?.name || '-'}</span>
-             </div>
-             <div className="flex justify-between">
-               <span>Alasan Retur:</span>
-               <span className="font-semibold">{ALASAN_OPTIONS.find(a => a.value === alasan)?.label || '-'}</span>
-             </div>
-             {catatan && (
-               <div className="flex justify-between">
-                 <span>Catatan:</span>
-                 <span className="font-semibold">{catatan}</span>
-               </div>
-             )}
-           </div>
-           <div className="border-t pt-4">
-             <p className="text-xs font-semibold text-muted-foreground mb-2">Daftar Barang Retur</p>
-             <table className="w-full text-xs">
-               <thead className="border-b bg-muted/50">
-                 <tr>
-                   <th className="text-left py-2">No</th>
-                   <th className="text-left py-2">Produk</th>
-                   <th className="text-right py-2">Qty</th>
-                   <th className="text-right py-2">Harga</th>
-                   <th className="text-right py-2">Subtotal</th>
-                 </tr>
-               </thead>
-               <tbody>
-                 {items.map((item, idx) => (
-                   <tr key={idx} className="border-b">
-                     <td className="py-2">{idx + 1}</td>
-                     <td className="py-2">{item.nama}</td>
-                     <td className="text-right">{item.qty}</td>
-                     <td className="text-right">{formatCurrency(item.harga)}</td>
-                     <td className="text-right font-semibold">{formatCurrency(item.subtotal)}</td>
-                   </tr>
-                 ))}
-               </tbody>
-             </table>
-           </div>
-           <div className="space-y-1 text-xs border-t pt-4">
-             <div className="flex justify-between">
-               <span>Total Item:</span>
-               <span className="font-semibold">{items.length} produk</span>
-             </div>
-             <div className="flex justify-between">
-               <span>Total Qty:</span>
-               <span className="font-semibold">{items.reduce((s, i) => s + i.qty, 0)} pcs</span>
-             </div>
-             <div className="flex justify-between font-semibold text-base border-t pt-2">
-               <span>Total Nilai Retur:</span>
-               <span className="text-destructive">{formatCurrency(totalNilai)}</span>
-             </div>
-           </div>
-         </div>
-       </PrintPreviewDialog>
+         );
+         return (
+           <DraftPreviewDialog
+             isOpen={isDraftPreviewOpen}
+             onClose={() => setIsDraftPreviewOpen(false)}
+             content={draftPreviewContent}
+             title="Preview Retur Pembelian"
+           />
+         );
+       })()}
      </MainLayout>
    );
  };

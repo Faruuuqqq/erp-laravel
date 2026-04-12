@@ -17,6 +17,7 @@ import { useCustomers } from '@/hooks/api/useCustomers';
 import { useSalesReps } from '@/hooks/api/useSalesReps';
 import { useWarehouses } from '@/hooks/api/useWarehouses';
 import { useCreateTransaction } from '@/hooks/api/useTransactions';
+import { DraftPreviewDialog } from '@/components/dialogs/DraftPreviewDialog';
 import { PrintPreviewDialog } from '@/components/dialogs/PrintPreviewDialog';
 import { FakturPenjualan } from '@/components/print/FakturPenjualan';
 import { formatCurrency } from '@/lib/utils';
@@ -147,9 +148,83 @@ const PenjualanKredit = () => {
   }, [state, diskonTotalNum, dpNum, createTx, toast]);
 
    // Reset handler
-   const reset = useCallback(() => { setState(BLANK()); setSaved(false); setSavedTrx(null); setIsPreviewOpen(false); setIsDraftPreviewOpen(false); }, []);
+    const reset = useCallback(() => { setState(BLANK()); setSaved(false); setSavedTrx(null); setIsPreviewOpen(false); setIsDraftPreviewOpen(false); }, []);
 
-  if (saved && savedTrx) {
+    // Memoized draft preview content
+    const draftPreviewContent = useMemo(() => (
+      <div className="w-full text-sm space-y-4 p-4">
+        <div className="border-b pb-4">
+          <p className="font-semibold text-lg">Penjualan Kredit (Draft)</p>
+          <p className="text-xs text-muted-foreground">Belum disimpan</p>
+        </div>
+        <div className="space-y-1 text-xs">
+          <div className="flex justify-between">
+            <span>Tanggal:</span>
+            <span className="font-semibold">{state.tanggal}</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Customer:</span>
+            <span className="font-semibold">{customer?.name || '-'}</span>
+          </div>
+          {state.catatan && (
+            <div className="flex justify-between">
+              <span>Catatan:</span>
+              <span className="font-semibold">{state.catatan}</span>
+            </div>
+          )}
+        </div>
+        <table className="w-full text-xs">
+          <thead className="border-b bg-muted/50">
+            <tr>
+              <th className="text-left py-2">Produk</th>
+              <th className="text-right py-2">Qty</th>
+              <th className="text-right py-2">Harga</th>
+              <th className="text-right py-2">Diskon</th>
+              <th className="text-right py-2">Subtotal</th>
+            </tr>
+          </thead>
+          <tbody>
+            {state.cart.map(item => (
+              <tr key={item.productId} className="border-b">
+                <td className="py-2">{item.nama}</td>
+                <td className="text-right">{item.qty}</td>
+                <td className="text-right">{formatCurrency(item.harga)}</td>
+                <td className="text-right">{item.diskon}%</td>
+                <td className="text-right font-semibold">{formatCurrency(item.subtotal)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div className="space-y-1 text-xs border-t pt-4">
+          <div className="flex justify-between">
+            <span>Subtotal:</span>
+            <span>{formatCurrency(subtotal)}</span>
+          </div>
+          {diskonTotalNum > 0 && (
+            <div className="flex justify-between text-warning">
+              <span>Diskon:</span>
+              <span>-{formatCurrency(diskonTotalNum)}</span>
+            </div>
+          )}
+          <div className="flex justify-between font-semibold text-base border-t pt-2">
+            <span>Total:</span>
+            <span>{formatCurrency(grandTotal)}</span>
+          </div>
+          {dpNum > 0 && (
+            <div className="flex justify-between text-success">
+              <span>DP:</span>
+              <span>{formatCurrency(dpNum)}</span>
+            </div>
+          )}
+          <div className={`flex justify-between font-semibold ${isOverLimit ? 'text-destructive' : 'text-warning'}`}>
+            <span>Sisa Piutang:</span>
+            <span>{formatCurrency(sisaPiutang)}</span>
+          </div>
+        </div>
+      </div>
+    ), [state.tanggal, customer?.name, state.catatan, state.cart, subtotal, diskonTotalNum, grandTotal, dpNum, sisaPiutang, isOverLimit]);
+
+   if (saved && savedTrx) {
     return (
       <MainLayout title="Penjualan Kredit" subtitle="Transaksi berhasil disimpan">
         <div className="flex flex-col items-center justify-center py-16 gap-6">
@@ -380,156 +455,12 @@ const PenjualanKredit = () => {
        )}
 
        {/* Draft Preview Dialog */}
-       <PrintPreviewDialog
+       <DraftPreviewDialog
          isOpen={isDraftPreviewOpen}
          onClose={() => setIsDraftPreviewOpen(false)}
-         title="Preview Penjualan Kredit (Draft)"
-         documentId="faktur-penjualan-kredit-draft-print"
-         filename="Penjualan-Kredit-Draft"
-         printContent={
-           <div className="w-full text-sm space-y-4 p-4">
-             <div className="border-b pb-4">
-               <p className="font-semibold text-lg">Penjualan Kredit (Draft)</p>
-               <p className="text-xs text-muted-foreground">Belum disimpan</p>
-             </div>
-             <div className="space-y-1 text-xs">
-               <div className="flex justify-between">
-                 <span>Tanggal:</span>
-                 <span className="font-semibold">{state.tanggal}</span>
-               </div>
-               <div className="flex justify-between">
-                 <span>Customer:</span>
-                 <span className="font-semibold">{customer?.name || '-'}</span>
-               </div>
-               {state.catatan && (
-                 <div className="flex justify-between">
-                   <span>Catatan:</span>
-                   <span className="font-semibold">{state.catatan}</span>
-                 </div>
-               )}
-             </div>
-             <table className="w-full text-xs">
-               <thead className="border-b bg-muted/50">
-                 <tr>
-                   <th className="text-left py-2">Produk</th>
-                   <th className="text-right py-2">Qty</th>
-                   <th className="text-right py-2">Harga</th>
-                   <th className="text-right py-2">Diskon</th>
-                   <th className="text-right py-2">Subtotal</th>
-                 </tr>
-               </thead>
-               <tbody>
-                 {state.cart.map(item => (
-                   <tr key={item.productId} className="border-b">
-                     <td className="py-2">{item.nama}</td>
-                     <td className="text-right">{item.qty}</td>
-                     <td className="text-right">{formatCurrency(item.harga)}</td>
-                     <td className="text-right">{item.diskon}%</td>
-                     <td className="text-right font-semibold">{formatCurrency(item.subtotal)}</td>
-                   </tr>
-                 ))}
-               </tbody>
-             </table>
-             <div className="space-y-1 text-xs border-t pt-4">
-               <div className="flex justify-between">
-                 <span>Subtotal:</span>
-                 <span>{formatCurrency(subtotal)}</span>
-               </div>
-               {diskonTotalNum > 0 && (
-                 <div className="flex justify-between text-warning">
-                   <span>Diskon:</span>
-                   <span>-{formatCurrency(diskonTotalNum)}</span>
-                 </div>
-               )}
-               <div className="flex justify-between font-semibold text-base border-t pt-2">
-                 <span>Total:</span>
-                 <span>{formatCurrency(grandTotal)}</span>
-               </div>
-               {dpNum > 0 && (
-                 <div className="flex justify-between text-success">
-                   <span>DP:</span>
-                   <span>{formatCurrency(dpNum)}</span>
-                 </div>
-               )}
-               <div className={`flex justify-between font-semibold ${isOverLimit ? 'text-destructive' : 'text-warning'}`}>
-                 <span>Sisa Piutang:</span>
-                 <span>{formatCurrency(sisaPiutang)}</span>
-               </div>
-             </div>
-           </div>
-         }
-       >
-         <div className="w-full text-sm space-y-4 p-4">
-           <div className="border-b pb-4">
-             <p className="font-semibold text-lg">Penjualan Kredit (Draft)</p>
-             <p className="text-xs text-muted-foreground">Belum disimpan</p>
-           </div>
-           <div className="space-y-1 text-xs">
-             <div className="flex justify-between">
-               <span>Tanggal:</span>
-               <span className="font-semibold">{state.tanggal}</span>
-             </div>
-             <div className="flex justify-between">
-               <span>Customer:</span>
-               <span className="font-semibold">{customer?.name || '-'}</span>
-             </div>
-             {state.catatan && (
-               <div className="flex justify-between">
-                 <span>Catatan:</span>
-                 <span className="font-semibold">{state.catatan}</span>
-               </div>
-             )}
-           </div>
-           <table className="w-full text-xs">
-             <thead className="border-b bg-muted/50">
-               <tr>
-                 <th className="text-left py-2">Produk</th>
-                 <th className="text-right py-2">Qty</th>
-                 <th className="text-right py-2">Harga</th>
-                 <th className="text-right py-2">Diskon</th>
-                 <th className="text-right py-2">Subtotal</th>
-               </tr>
-             </thead>
-             <tbody>
-               {state.cart.map(item => (
-                 <tr key={item.productId} className="border-b">
-                   <td className="py-2">{item.nama}</td>
-                   <td className="text-right">{item.qty}</td>
-                   <td className="text-right">{formatCurrency(item.harga)}</td>
-                   <td className="text-right">{item.diskon}%</td>
-                   <td className="text-right font-semibold">{formatCurrency(item.subtotal)}</td>
-                 </tr>
-               ))}
-             </tbody>
-           </table>
-           <div className="space-y-1 text-xs border-t pt-4">
-             <div className="flex justify-between">
-               <span>Subtotal:</span>
-               <span>{formatCurrency(subtotal)}</span>
-             </div>
-             {diskonTotalNum > 0 && (
-               <div className="flex justify-between text-warning">
-                 <span>Diskon:</span>
-                 <span>-{formatCurrency(diskonTotalNum)}</span>
-               </div>
-             )}
-             <div className="flex justify-between font-semibold text-base border-t pt-2">
-               <span>Total:</span>
-               <span>{formatCurrency(grandTotal)}</span>
-             </div>
-             {dpNum > 0 && (
-               <div className="flex justify-between text-success">
-                 <span>DP:</span>
-                 <span>{formatCurrency(dpNum)}</span>
-               </div>
-             )}
-             <div className={`flex justify-between font-semibold ${isOverLimit ? 'text-destructive' : 'text-warning'}`}>
-               <span>Sisa Piutang:</span>
-               <span>{formatCurrency(sisaPiutang)}</span>
-             </div>
-           </div>
-         </div>
-       </PrintPreviewDialog>
+         content={draftPreviewContent}
+         title="Penjualan Kredit"
+       />
     </MainLayout>
   );
 };
