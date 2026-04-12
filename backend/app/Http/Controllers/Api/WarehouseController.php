@@ -28,6 +28,7 @@ class WarehouseController extends Controller
         $data = $request->validate([
             'name'    => ['required', 'string', 'max:100'],
             'address' => ['nullable', 'string'],
+            'manager' => ['nullable', 'string', 'max:100'],
             'status'  => ['nullable', 'in:active,inactive'],
         ]);
         $warehouse = Warehouse::create($data);
@@ -44,6 +45,7 @@ class WarehouseController extends Controller
         $data = $request->validate([
             'name'    => ['sometimes', 'required', 'string', 'max:100'],
             'address' => ['nullable', 'string'],
+            'manager' => ['nullable', 'string', 'max:100'],
             'status'  => ['nullable', 'in:active,inactive'],
         ]);
         $warehouse->update($data);

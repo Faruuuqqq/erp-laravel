@@ -12,6 +12,7 @@ class WarehouseResource extends JsonResource
             'id'            => (string) $this->id,
             'name'          => $this->name,
             'address'       => $this->address ?? '',
+            'manager'       => $this->manager ?? '',
             'status'        => $this->status,
             'totalProducts' => $this->products()->count(),
             'createdAt'     => $this->created_at?->toISOString(),
