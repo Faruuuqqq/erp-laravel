@@ -164,25 +164,11 @@ const Gudang = () => {
                                  <Pencil className="h-3.5 w-3.5" />
                                </Button>
                              )}
-                             {canDelete('master.warehouses') && (
-                               <AlertDialog>
-                                 <AlertDialogTrigger asChild>
-                                   <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive">
-                                     <Trash2 className="h-3.5 w-3.5" />
-                                   </Button>
-                                 </AlertDialogTrigger>
-                                 <AlertDialogContent>
-                                   <AlertDialogHeader>
-                                     <AlertDialogTitle>Hapus Gudang</AlertDialogTitle>
-                                     <AlertDialogDescription>Hapus <strong>{g.name}</strong>? Tindakan ini tidak dapat dibatalkan.</AlertDialogDescription>
-                                   </AlertDialogHeader>
-                                   <AlertDialogFooter>
-                                     <AlertDialogCancel>Batal</AlertDialogCancel>
-                                     <AlertDialogAction className="bg-destructive hover:bg-destructive/90" onClick={() => handleDelete(g.id, g.name)}>Hapus</AlertDialogAction>
-                                   </AlertDialogFooter>
-                                 </AlertDialogContent>
-                               </AlertDialog>
-                             )}
+                              {canDelete('master.warehouses') && (
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setDeleteConfirm({ id: g.id, name: g.name })}>
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              )}
                            </div>
                          </TableCell>
                        )}
@@ -269,9 +255,25 @@ const Gudang = () => {
              </div>
            </div>
          </DialogContent>
-       </Dialog>
-     </MainLayout>
-   );
- };
+        </Dialog>
 
- export default Gudang;
+        {deleteConfirm && (
+          <DeleteConfirmDialog
+            itemName={deleteConfirm.name}
+            itemType="gudang"
+            itemId={deleteConfirm.id}
+            isDeleting={deleteWh.isPending}
+            onConfirm={async () => {
+              await handleDelete(deleteConfirm.id, deleteConfirm.name);
+              setDeleteConfirm(null);
+            }}
+            onOpenChange={(open) => {
+              if (!open) setDeleteConfirm(null);
+            }}
+          />
+        )}
+      </MainLayout>
+    );
+  };
+
+  export default Gudang;

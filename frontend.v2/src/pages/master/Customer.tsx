@@ -9,10 +9,7 @@ import { Label } from '@/components/ui/label';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
+import { DeleteConfirmDialog } from '@/components/dialogs/DeleteConfirmDialog';
 
 import { Plus, Search, Pencil, Trash2, Phone, MapPin, AlertCircle, Download, Users } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -31,6 +28,7 @@ const CustomerPage = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editItem, setEditItem] = useState<Customer | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
   const [form, setForm] = useState({ name: '', phone: '', email: '', address: '', credit_limit: '10000000' });
    const { toast } = useToast();
    const { execute: executeRetryable } = useRetryableAction({ maxRetries: 3, delayMs: 1000 });
@@ -176,23 +174,9 @@ const CustomerPage = () => {
                               {canEdit('customers') && (
                                 <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(c)}><Pencil className="h-3.5 w-3.5" /></Button>
                               )}
-                              {canDelete('customers') && (
-                                <AlertDialog>
-                                  <AlertDialogTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></Button>
-                                  </AlertDialogTrigger>
-                                  <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                      <AlertDialogTitle>Hapus Customer</AlertDialogTitle>
-                                      <AlertDialogDescription>Apakah Anda yakin ingin menghapus <strong>{c.name}</strong>?</AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                      <AlertDialogCancel>Batal</AlertDialogCancel>
-                                      <AlertDialogAction className="bg-destructive hover:bg-destructive/90" onClick={() => handleDelete(c.id, c.name)}>Hapus</AlertDialogAction>
-                                    </AlertDialogFooter>
-                                  </AlertDialogContent>
-                                </AlertDialog>
-                              )}
+                               {canDelete('customers') && (
+                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setDeleteConfirm({ id: c.id, name: c.name })}><Trash2 className="h-3.5 w-3.5" /></Button>
+                               )}
                             </div>
                           </td>
                         </tr>
@@ -315,9 +299,25 @@ const CustomerPage = () => {
             </div>
           </div>
         </DialogContent>
-      </Dialog>
-    </MainLayout>
-  );
-};
+       </Dialog>
 
-export default CustomerPage;
+       {deleteConfirm && (
+         <DeleteConfirmDialog
+           itemName={deleteConfirm.name}
+           itemType="customer"
+           itemId={deleteConfirm.id}
+           isDeleting={deleteMutation.isPending}
+           onConfirm={async () => {
+             await handleDelete(deleteConfirm.id, deleteConfirm.name);
+             setDeleteConfirm(null);
+           }}
+           onOpenChange={(open) => {
+             if (!open) setDeleteConfirm(null);
+           }}
+         />
+       )}
+     </MainLayout>
+   );
+ };
+
+ export default CustomerPage;
