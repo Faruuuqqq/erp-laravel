@@ -284,15 +284,16 @@ const ReturPenjualan = () => {
           </AlertDialogHeader>
            <AlertDialogFooter>
              <AlertDialogCancel>Batal</AlertDialogCancel>
-             <AlertDialogAction onClick={async () => {
-               try {
-                 setIsSaving(true);
-                 const result = await createTx.mutateAsync({
-                   type: 'retur_penjualan',
-                   customerId: selectedCustomer,
-                   notes: `${alasan} — ${catatan}`,
-                   items: items.map(i => ({ productId: i.productId, quantity: i.qty, price: i.harga, discount: 0 })),
-                 });
+              <AlertDialogAction onClick={async () => {
+                try {
+                  setIsSaving(true);
+                  const result = await createTx.mutateAsync({
+                    type: 'retur_penjualan',
+                    date: tanggal,
+                    customerId: selectedCustomer,
+                    notes: `${alasan} — ${catatan}`,
+                    items: items.map(i => ({ productId: i.productId, quantity: i.qty, price: i.harga, discount: 0 })),
+                  });
                  setSavedTrx(result as Transaction);
                  setConfirmOpen(false);
                  setSaved(true);
