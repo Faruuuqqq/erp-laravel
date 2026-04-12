@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
-import { Plus, Trash2, CreditCard, Calculator, Printer, FileDown, CheckCircle2, AlertCircle, Search } from 'lucide-react';
+import { Plus, Trash2, CreditCard, Calculator, Eye, CheckCircle2, AlertCircle, Search } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useProducts } from '@/hooks/api/useProducts';
@@ -17,7 +17,7 @@ import { useCustomers } from '@/hooks/api/useCustomers';
 import { useSalesReps } from '@/hooks/api/useSalesReps';
 import { useWarehouses } from '@/hooks/api/useWarehouses';
 import { useCreateTransaction } from '@/hooks/api/useTransactions';
-import { usePrint } from '@/contexts/PrintContext';
+import { PrintPreviewDialog } from '@/components/dialogs/PrintPreviewDialog';
 import { FakturPenjualan } from '@/components/print/FakturPenjualan';
 import { formatCurrency } from '@/lib/utils';
 import type { Transaction } from '@/types';
@@ -56,92 +56,34 @@ const PenjualanKredit = () => {
   const [state, setState] = useState(BLANK());
   const [saved, setSaved] = useState(false);
   const [savedTrx, setSavedTrx] = useState<Transaction | null>(null);
-  const { printDocument } = usePrint();
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
-  const handlePrint = useCallback(() => {
-    if (savedTrx) printDocument(<FakturPenjualan transaction={savedTrx} />);
-  }, [savedTrx, printDocument]);
+   const handleSave = useCallback(async () => {
+     if (state.cart.length === 0) return toast({ title: 'Keranjang masih kosong', variant: 'destructive' });
+     if (!state.selectedCustomer) return toast({ title: 'Pilih customer terlebih dahulu', variant: 'destructive' });
+     try {
+       const result = await createTx.mutateAsync({
+         type: 'penjualan_kredit',
+         date: state.tanggal,
+         customerId: state.selectedCustomer,
+         salesId: state.selectedSales || null,
+         warehouseId: state.selectedGudang || null,
+         discount: diskonTotalNum,
+         paid: dpNum,
+         dueDate: state.jatuhTempo || undefined,
+         notes: state.catatan,
+         items: state.cart.map(i => ({ productId: i.productId, quantity: i.qty, price: i.harga, discount: i.diskon })),
+       });
+       setSavedTrx(result as Transaction);
+       setSaved(true);
+       toast({ title: 'Penjualan kredit berhasil disimpan', description: (result as Transaction).invoiceNumber });
+     } catch (err: unknown) {
+       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Gagal menyimpan';
+       toast({ title: 'Error', description: msg, variant: 'destructive' });
+     }
+   }, [state, createTx, toast]);
 
-  const { data: productsData } = useProducts({ perPage: 500 });
-  const { data: customersData } = useCustomers({ perPage: 500 });
-  const { data: salesData } = useSalesReps({ perPage: 100 });
-  const { data: warehousesData } = useWarehouses({ perPage: 100 });
-
-  const products = productsData?.data ?? [];
-  const customers = customersData?.data ?? [];
-  const salesReps = salesData?.data ?? [];
-  const warehouses = warehousesData?.data ?? [];
-
-  const set = useCallback(<K extends keyof ReturnType<typeof BLANK>>(key: K, val: ReturnType<typeof BLANK>[K]) =>
-    setState(p => ({ ...p, [key]: val })), []);
-
-  const filteredProducts = useMemo(() =>
-    products.filter(p =>
-      p.name.toLowerCase().includes(state.searchProduct.toLowerCase()) ||
-      (p.code ?? '').toLowerCase().includes(state.searchProduct.toLowerCase())
-    ), [products, state.searchProduct]);
-
-  const customer = customers.find(c => c.id === state.selectedCustomer);
-
-  const addToCart = useCallback(() => {
-    const product = products.find(p => p.id === state.selectedProduct);
-    if (!product) return toast({ title: 'Pilih produk terlebih dahulu', variant: 'destructive' });
-    const qtyNum = parseInt(state.qty) || 1;
-    if (qtyNum > (product.stock ?? 0)) return toast({ title: `Stok tidak cukup. Tersedia: ${product.stock ?? 0}`, variant: 'destructive' });
-    const diskonNum = parseFloat(state.diskonItem) || 0;
-    const subtotal = product.sellPrice * qtyNum * (1 - diskonNum / 100);
-    setState(prev => {
-      const existing = prev.cart.findIndex(c => c.productId === state.selectedProduct);
-      const newCart = [...prev.cart];
-      if (existing >= 0) {
-        const it = newCart[existing];
-        newCart[existing] = { ...it, qty: it.qty + qtyNum, subtotal: it.harga * (it.qty + qtyNum) * (1 - it.diskon / 100) };
-      } else {
-        newCart.push({ productId: product.id, nama: product.name, satuan: product.unit ?? 'pcs', qty: qtyNum, harga: product.sellPrice, diskon: diskonNum, subtotal });
-      }
-      return { ...prev, cart: newCart, selectedProduct: '', qty: '1', diskonItem: '0', searchProduct: '' };
-    });
-    toast({ title: `${product.name} ditambahkan` });
-  }, [products, state.selectedProduct, state.qty, state.diskonItem, toast]);
-
-  const removeItem = useCallback((idx: number) =>
-    setState(p => ({ ...p, cart: p.cart.filter((_, i) => i !== idx) })), []);
-
-  const subtotal = state.cart.reduce((s, i) => s + i.subtotal, 0);
-  const diskonTotalNum = parseFloat(state.diskonTotal) || 0;
-  const grandTotal = subtotal - diskonTotalNum;
-  const dpNum = parseFloat(state.dp) || 0;
-  const sisaPiutang = grandTotal - dpNum;
-  const existingPiutang = Number(customer?.balance ?? 0);
-  const newPiutang = existingPiutang + sisaPiutang;
-  const limitKredit = Number(customer?.creditLimit ?? 0);
-  const isOverLimit = customer && limitKredit > 0 && newPiutang > limitKredit;
-
-  const handleSave = useCallback(async () => {
-    if (state.cart.length === 0) return toast({ title: 'Keranjang masih kosong', variant: 'destructive' });
-    if (!state.selectedCustomer) return toast({ title: 'Pilih customer terlebih dahulu', variant: 'destructive' });
-    try {
-      const result = await createTx.mutateAsync({
-        type: 'penjualan_kredit',
-        date: state.tanggal,
-        customerId: state.selectedCustomer,
-        salesId: state.selectedSales || null,
-        warehouseId: state.selectedGudang || null,
-        discount: diskonTotalNum,
-        paid: dpNum,
-        notes: state.catatan,
-        items: state.cart.map(i => ({ productId: i.productId, quantity: i.qty, price: i.harga, discount: i.diskon })),
-      });
-      setSavedTrx(result as Transaction);
-      setSaved(true);
-      toast({ title: 'Penjualan kredit berhasil disimpan', description: (result as Transaction).invoiceNumber });
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Gagal menyimpan';
-      toast({ title: 'Error', description: msg, variant: 'destructive' });
-    }
-  }, [state, createTx, diskonTotalNum, dpNum, toast]);
-
-  const reset = useCallback(() => { setState(BLANK()); setSaved(false); setSavedTrx(null); }, []);
+   const reset = useCallback(() => { setState(BLANK()); setSaved(false); setSavedTrx(null); setIsPreviewOpen(false); }, []);
 
   if (saved && savedTrx) {
     return (
@@ -156,15 +98,14 @@ const PenjualanKredit = () => {
             <p className="text-3xl font-bold text-warning mt-3">{formatCurrency(savedTrx.remaining ?? 0)}</p>
             <p className="text-sm text-muted-foreground">Total Piutang Ditambahkan</p>
           </div>
-          <div className="flex gap-3">
-            {canPrint('transactions.credit_sale') && (
-              <>
-                <Button variant="outline" onClick={handlePrint}><Printer className="mr-2 h-4 w-4" />Cetak Faktur</Button>
-                <Button variant="outline" onClick={handlePrint}><FileDown className="mr-2 h-4 w-4" />Export PDF</Button>
-              </>
-            )}
-            <Button onClick={reset}>Transaksi Baru</Button>
-          </div>
+           <div className="flex gap-3">
+             {canPrint('transactions.credit_sale') && (
+               <Button onClick={() => setIsPreviewOpen(true)}>
+                 <Eye className="mr-2 h-4 w-4" />Preview & Cetak
+               </Button>
+             )}
+             <Button onClick={reset}>Transaksi Baru</Button>
+           </div>
         </div>
       </MainLayout>
     );
@@ -338,24 +279,35 @@ const PenjualanKredit = () => {
                 <Input value={state.catatan} onChange={e => set('catatan', e.target.value)} placeholder="Catatan tambahan..." className="text-xs h-8" />
               </div>
 
-              {canCreate('transactions.credit_sale') && (
-                <div className="flex gap-2 pt-1">
-                  <Button variant="outline" className="flex-1 h-9 text-sm" onClick={reset}>Reset</Button>
-                  <Button className="flex-1 h-9 text-sm" onClick={handleSave} disabled={state.cart.length === 0 || createTx.isPending}>
-                    {createTx.isPending ? 'Menyimpan...' : 'Simpan'}
-                  </Button>
-                </div>
-              )}
-              {canPrint('transactions.credit_sale') && (
-                <div className="grid grid-cols-2 gap-2">
-                  <Button variant="outline" className="h-8 text-xs" onClick={handlePrint}><Printer className="mr-1.5 h-3.5 w-3.5" />Cetak</Button>
-                  <Button variant="outline" className="h-8 text-xs" onClick={handlePrint}><FileDown className="mr-1.5 h-3.5 w-3.5" />PDF</Button>
-                </div>
-              )}
+               {canCreate('transactions.credit_sale') && (
+                 <div className="flex gap-2 pt-1">
+                   <Button variant="outline" className="flex-1 h-9 text-sm" onClick={reset}>Reset</Button>
+                   <Button className="flex-1 h-9 text-sm" onClick={handleSave} disabled={state.cart.length === 0 || createTx.isPending}>
+                     {createTx.isPending ? 'Menyimpan...' : 'Simpan'}
+                   </Button>
+                 </div>
+               )}
+               {savedTrx && canPrint('transactions.credit_sale') && (
+                 <Button variant="outline" className="w-full h-8 text-xs" onClick={() => setIsPreviewOpen(true)}><Eye className="mr-1.5 h-3.5 w-3.5" />Preview & Cetak</Button>
+               )}
             </CardContent>
           </Card>
         </div>
       </div>
+
+      {savedTrx && (
+        <PrintPreviewDialog
+          isOpen={isPreviewOpen}
+          onClose={() => setIsPreviewOpen(false)}
+          title="Faktur Penjualan Kredit"
+          documentId="faktur-penjualan-kredit-print"
+          filename={`faktur-penjualan-kredit-${savedTrx.invoiceNumber}`}
+        >
+          <div id="faktur-penjualan-kredit-print">
+            <FakturPenjualan transaction={savedTrx} />
+          </div>
+        </PrintPreviewDialog>
+      )}
     </MainLayout>
   );
 };

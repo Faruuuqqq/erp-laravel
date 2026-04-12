@@ -7,20 +7,20 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Search, Wallet, Check, FileDown, Printer } from 'lucide-react';
+import { Search, Wallet, Check, Eye } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useCustomers } from '@/hooks/api/useCustomers';
 import { useTransactions, useCreateTransaction } from '@/hooks/api/useTransactions';
-import { usePrint } from '@/contexts/PrintContext';
+import { PrintPreviewDialog } from '@/components/dialogs/PrintPreviewDialog';
+import { PembayaranPiutangPrint } from '@/components/print/PembayaranPiutangPrint';
 import { formatCurrency } from '@/lib/utils';
 import type { Transaction } from '@/types';
 
 const PembayaranPiutang = () => {
   const { toast } = useToast();
   const { canCreate, canPrint } = usePermissions();
-  const { printDocument } = usePrint();
 
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -30,6 +30,8 @@ const PembayaranPiutang = () => {
   const [catatan, setCatatan] = useState('');
   const [tanggal] = useState(new Date().toISOString().split('T')[0]);
   const [saved, setSaved] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [savedTransaction, setSavedTransaction] = useState<Transaction | null>(null);
 
   const createTx = useCreateTransaction();
   const { data: customersData } = useCustomers({ perPage: 200 });
@@ -59,68 +61,37 @@ const PembayaranPiutang = () => {
     if (selectedItems.length === 0) return toast({ title: 'Pilih faktur terlebih dahulu', variant: 'destructive' });
     if (!metodePembayaran) return toast({ title: 'Pilih metode pembayaran', variant: 'destructive' });
     if (jumlahDiterimaNum <= 0) return toast({ title: 'Masukkan jumlah yang diterima', variant: 'destructive' });
+    // Validate overpayment (allow max 1% tolerance)
+    const tolerance = totalSelected * 0.01;
+    if (jumlahDiterimaNum > totalSelected + tolerance) return toast({ title: 'Jumlah diterima melebihi piutang (max 1% tolerance)', variant: 'destructive' });
 
     const firstTx = piutangList.find(p => selectedItems.includes(p.id));
     if (!firstTx?.customerId) return;
 
     try {
-      await createTx.mutateAsync({
+      const result = await createTx.mutateAsync({
         type: 'pembayaran_piutang',
         date: tanggal,
         customerId: firstTx.customerId,
         paid: jumlahDiterimaNum,
+        paymentMethod: metodePembayaran,
         notes: catatan || `Terima bayar piutang: ${selectedItems.join(', ')}`,
         items: [],
       });
+      setSavedTransaction(result as Transaction);
       setSaved(true);
       toast({ title: 'Pembayaran piutang berhasil dicatat', description: `${selectedItems.length} faktur dibayar` });
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Gagal menyimpan';
       toast({ title: 'Error', description: msg, variant: 'destructive' });
     }
-  }, [selectedItems, metodePembayaran, jumlahDiterimaNum, piutangList, tanggal, catatan, createTx, toast]);
+  }, [selectedItems, metodePembayaran, jumlahDiterimaNum, piutangList, totalSelected, tanggal, catatan, createTx, toast]);
 
   const reset = useCallback(() => {
-    setSelectedItems([]); setSaved(false); setJumlahDiterima(''); setMetodePembayaran(''); setCatatan('');
+    setSelectedItems([]); setSaved(false); setJumlahDiterima(''); setMetodePembayaran(''); setCatatan(''); setSavedTransaction(null);
   }, []);
 
-  const paidItems = piutangList.filter(p => selectedItems.includes(p.id));
 
-  const handlePrint = useCallback(() => {
-    const tanggalCetak = new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' });
-    const node = (
-      <div style={{ fontFamily: 'monospace', padding: 24, fontSize: 13 }}>
-        <h2 style={{ textAlign: 'center', marginBottom: 4 }}>BUKTI PEMBAYARAN PIUTANG</h2>
-        <p style={{ textAlign: 'center', color: '#555' }}>Tanggal: {tanggalCetak}</p>
-        <hr style={{ margin: '8px 0' }} />
-        <p>Metode Pembayaran : {metodePembayaran}</p>
-        <p>Jumlah Diterima  : <strong>{formatCurrency(jumlahDiterimaNum)}</strong></p>
-        <hr style={{ margin: '8px 0' }} />
-        <p style={{ fontWeight: 'bold', marginBottom: 4 }}>Faktur yang Dilunasi ({paidItems.length}):</p>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              <th style={{ textAlign: 'left', paddingBottom: 4 }}>No. Faktur</th>
-              <th style={{ textAlign: 'left' }}>Customer</th>
-              <th style={{ textAlign: 'right' }}>Sisa Piutang</th>
-            </tr>
-          </thead>
-          <tbody>
-            {paidItems.map((p, i) => (
-              <tr key={i}>
-                <td style={{ paddingTop: 2 }}>{p.invoiceNumber}</td>
-                <td>{p.customer ?? '-'}</td>
-                <td style={{ textAlign: 'right' }}>{formatCurrency(p.remaining ?? 0)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <hr style={{ margin: '8px 0' }} />
-        <p style={{ textAlign: 'right', fontWeight: 'bold' }}>TOTAL DILUNASI: {formatCurrency(jumlahDiterimaNum)}</p>
-      </div>
-    );
-    printDocument(node);
-  }, [paidItems, metodePembayaran, jumlahDiterimaNum, printDocument]);
 
   if (saved) {
     return (
@@ -134,15 +105,12 @@ const PembayaranPiutang = () => {
             <p className="text-3xl font-bold text-success mt-3">{formatCurrency(jumlahDiterimaNum)}</p>
             <p className="text-sm text-muted-foreground mt-1">{selectedItems.length} faktur diselesaikan</p>
           </div>
-          <div className="flex gap-3">
-            {canPrint('transactions.payment') && (
-              <>
-                <Button variant="outline" onClick={handlePrint}><Printer className="mr-2 h-4 w-4" />Cetak Bukti</Button>
-                <Button variant="outline" onClick={handlePrint}><FileDown className="mr-2 h-4 w-4" />Export PDF</Button>
-              </>
-            )}
-            <Button onClick={reset}>Input Baru</Button>
-          </div>
+           <div className="flex gap-3">
+             {canPrint('transactions.payment') && (
+               <Button variant="outline" onClick={() => setIsPreviewOpen(true)}><Eye className="mr-2 h-4 w-4" />Preview & Cetak</Button>
+             )}
+             <Button onClick={reset}>Input Baru</Button>
+           </div>
         </div>
       </MainLayout>
     );
@@ -262,13 +230,29 @@ const PembayaranPiutang = () => {
                   </Button>
                 </div>
               )}
-              <Button variant="outline" className="w-full h-8 text-xs" onClick={() => toast({ title: 'Mengekspor PDF...' })}>
-                <FileDown className="mr-1.5 h-3.5 w-3.5" />Export PDF
-              </Button>
+                {savedTransaction && (
+                  <Button variant="outline" className="w-full h-8 text-xs" onClick={() => setIsPreviewOpen(true)}>
+                    <Eye className="mr-1.5 h-3.5 w-3.5" />Preview & Cetak
+                  </Button>
+                )}
             </CardContent>
           </Card>
         </div>
       </div>
+
+      {savedTransaction && (
+        <PrintPreviewDialog
+          isOpen={isPreviewOpen}
+          onClose={() => setIsPreviewOpen(false)}
+          title="Bukti Pembayaran Piutang"
+          documentId="pembayaran-piutang-print"
+          filename={`pembayaran-piutang-${new Date().toISOString().slice(0, 10)}`}
+        >
+          <div id="pembayaran-piutang-print">
+            <PembayaranPiutangPrint transaction={savedTransaction} />
+          </div>
+        </PrintPreviewDialog>
+      )}
     </MainLayout>
   );
 };
