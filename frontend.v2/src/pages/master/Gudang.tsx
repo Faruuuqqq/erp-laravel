@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
-import { Plus, Search, Pencil, Trash2, Warehouse } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2, Warehouse, Download } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { StatCard } from '@/components/ui/StatCard';
 import {
@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { usePermissions } from '@/hooks/usePermissions';
 import { DeleteConfirmDialog } from '@/components/dialogs/DeleteConfirmDialog';
 import { useWarehouses, useCreateWarehouse, useUpdateWarehouse, useDeleteWarehouse } from '@/hooks/api/useWarehouses';
+import { exportToXlsx, type ColumnConfig } from '@/lib/xlsx-export';
 
 interface WarehouseForm {
   name: string;
@@ -77,19 +78,68 @@ const Gudang = () => {
      );
    }, [form, editId, createWh, updateWh, toast, executeRetryable]);
 
-   const handleDelete = useCallback(async (id: string, name: string) => {
-     await executeRetryable(
-       () => deleteWh.mutateAsync(id),
-       {
-         title: 'Gudang dihapus',
-         description: `${name} telah dihapus.`,
-         errorTitle: 'Gagal menghapus gudang',
-       }
-     );
-   }, [deleteWh, executeRetryable]);
+    const handleDelete = useCallback(async (id: string, name: string) => {
+      await executeRetryable(
+        () => deleteWh.mutateAsync(id),
+        {
+          title: 'Gudang dihapus',
+          description: `${name} telah dihapus.`,
+          errorTitle: 'Gagal menghapus gudang',
+        }
+      );
+    }, [deleteWh, executeRetryable]);
 
-   const setField = useCallback(<K extends keyof WarehouseForm>(key: K, val: WarehouseForm[K]) =>
-     setForm(p => ({ ...p, [key]: val })), []);
+    const handleExport = useCallback(() => {
+      try {
+        interface WarehouseData {
+          code?: string;
+          id: string;
+          name: string;
+          address?: string;
+          manager?: string;
+          status?: string;
+        }
+
+        const columns: ColumnConfig<WarehouseData>[] = [
+          { header: 'Kode', key: 'code', width: 12 },
+          { header: 'Nama Gudang', key: 'name', width: 30 },
+          { header: 'Alamat', key: 'address', width: 35 },
+          { header: 'Pengelola', key: 'manager', width: 20 },
+          { header: 'Status', key: 'status', width: 12 },
+        ];
+
+        const warehouses = list.map(w => ({
+          code: w.code ?? `W-${w.id.slice(0, 4)}`,
+          id: w.id,
+          name: w.name,
+          address: w.address ?? '',
+          manager: w.manager ?? '',
+          status: w.status === 'aktif' || w.status === 'active' ? 'Aktif' : 'Nonaktif',
+        }));
+
+        exportToXlsx(
+          warehouses,
+          'gudang.xlsx',
+          columns,
+          { sheetName: 'Gudang', autoWidth: true }
+        );
+
+        toast({
+          title: 'Berhasil',
+          description: `${warehouses.length} data gudang diunduh dalam format XLSX.`,
+        });
+      } catch (error) {
+        console.error('Export error:', error);
+        toast({
+          title: 'Gagal',
+          description: 'Gagal mengunduh data gudang.',
+          variant: 'destructive',
+        });
+      }
+    }, [list, toast]);
+
+    const setField = useCallback(<K extends keyof WarehouseForm>(key: K, val: WarehouseForm[K]) =>
+      setForm(p => ({ ...p, [key]: val })), []);
 
    return (
      <MainLayout title="Gudang" subtitle="Kelola daftar gudang penyimpanan">
@@ -115,12 +165,17 @@ const Gudang = () => {
                <SelectItem value="nonaktif">Nonaktif</SelectItem>
              </SelectContent>
            </Select>
+          </div>
+         <div className="flex gap-2">
+           <Button variant="outline" size="sm" onClick={handleExport} title="Download data gudang dalam format Excel">
+             <Download className="mr-1.5 h-4 w-4" />Export XLSX
+           </Button>
+           {canCreate('master.warehouses') && (
+             <Button size="sm" onClick={() => { setForm(BLANK_FORM()); setIsAddOpen(true); }}>
+               <Plus className="mr-1.5 h-4 w-4" />Tambah Gudang
+             </Button>
+           )}
          </div>
-        {canCreate('master.warehouses') && (
-          <Button size="sm" onClick={() => { setForm(BLANK_FORM()); setIsAddOpen(true); }}>
-            <Plus className="mr-1.5 h-4 w-4" />Tambah Gudang
-          </Button>
-        )}
       </div>
 
        {isLoading ? (

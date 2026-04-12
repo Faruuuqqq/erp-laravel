@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useRetryableAction } from '@/hooks/useRetryableAction';
@@ -20,6 +20,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { usePermissions } from '@/hooks/usePermissions';
 import { formatCurrency } from '@/lib/utils';
 import type { Customer } from '@/types';
+import { exportToXlsx, type ColumnConfig } from '@/lib/xlsx-export';
 
 const CustomerPage = () => {
   const { isOwner } = useAuth();
@@ -91,26 +92,59 @@ const CustomerPage = () => {
      );
    };
 
-    const handleDelete = async (id: string, name: string) => {
-      await executeRetryable(
-        () => deleteMutation.mutateAsync(id),
-        {
-          title: 'Customer dihapus',
-          description: `${name} telah dihapus.`,
-          errorTitle: 'Gagal menghapus customer',
-        }
-      );
-    };
+     const handleDelete = async (id: string, name: string) => {
+       await executeRetryable(
+         () => deleteMutation.mutateAsync(id),
+         {
+           title: 'Customer dihapus',
+           description: `${name} telah dihapus.`,
+           errorTitle: 'Gagal menghapus customer',
+         }
+       );
+     };
 
-   const handleExport = () => {
-      const rows = [['Kode', 'Nama', 'Telepon', 'Email', 'Alamat', 'Total Piutang', 'Limit Kredit'],
-      ...customers.map(c => [`CUS-${c.id}`, c.name, c.phone, c.email || '', c.address || '', formatCurrency(c.balance), formatCurrency(c.creditLimit || 0)])];
-      const csv = rows.map(r => r.join(',')).join('\n');
-      const blob = new Blob([csv], { type: 'text/csv' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = 'customer.csv'; a.click();
-      URL.revokeObjectURL(url);
-    };
+    const handleExport = useCallback(() => {
+      try {
+        const columns: ColumnConfig<Customer>[] = [
+          { header: 'Kode', key: 'id', format: (v) => `CUS-${v}`, width: 12 },
+          { header: 'Nama', key: 'name', width: 30 },
+          { header: 'Telepon', key: 'phone', width: 15 },
+          { header: 'Email', key: 'email', width: 25 },
+          { header: 'Alamat', key: 'address', width: 35 },
+          {
+            header: 'Total Piutang',
+            key: 'balance',
+            format: (value) => typeof value === 'number' ? value : Number(value) || 0,
+            width: 15,
+          },
+          {
+            header: 'Limit Kredit',
+            key: 'creditLimit',
+            format: (value) => typeof value === 'number' ? value : Number(value) || 0,
+            width: 15,
+          },
+        ];
+
+        exportToXlsx(
+          customers,
+          'customer.xlsx',
+          columns,
+          { sheetName: 'Customer', autoWidth: true }
+        );
+
+        toast({
+          title: 'Berhasil',
+          description: `${customers.length} data customer diunduh dalam format XLSX.`,
+        });
+      } catch (error) {
+        console.error('Export error:', error);
+        toast({
+          title: 'Gagal',
+          description: 'Gagal mengunduh data customer.',
+          variant: 'destructive',
+        });
+      }
+    }, [customers, toast]);
 
   return (
     <MainLayout title="Customer" subtitle="Kelola data customer toko Anda">
@@ -125,14 +159,14 @@ const CustomerPage = () => {
            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
            <Input placeholder="Cari customer..." className="pl-9 h-9" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }} />
          </div>
-         <div className="flex gap-2 shrink-0">
-           <Button variant="outline" size="sm" onClick={handleExport}><Download className="mr-1.5 h-4 w-4" />Export CSV</Button>
-           {canCreate('customers') && (
-             <Button size="sm" onClick={() => { setForm({ name: '', phone: '', email: '', address: '', credit_limit: '10000000' }); setIsAddOpen(true); }}>
-               <Plus className="mr-1.5 h-4 w-4" />Tambah Customer
-             </Button>
-           )}
-         </div>
+          <div className="flex gap-2 shrink-0">
+            <Button variant="outline" size="sm" onClick={handleExport} title="Download data customer dalam format Excel"><Download className="mr-1.5 h-4 w-4" />Export XLSX</Button>
+            {canCreate('customers') && (
+              <Button size="sm" onClick={() => { setForm({ name: '', phone: '', email: '', address: '', credit_limit: '10000000' }); setIsAddOpen(true); }}>
+                <Plus className="mr-1.5 h-4 w-4" />Tambah Customer
+              </Button>
+            )}
+          </div>
        </div>
 
       {isLoading ? (

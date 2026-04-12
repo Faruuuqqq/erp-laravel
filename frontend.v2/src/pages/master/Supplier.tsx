@@ -21,6 +21,7 @@ import { DeleteConfirmDialog } from '@/components/dialogs/DeleteConfirmDialog';
 import { formatCurrency } from '@/lib/utils';
 import { useSuppliers, useCreateSupplier, useUpdateSupplier, useDeleteSupplier } from '@/hooks/api/useSuppliers';
 import type { Supplier as SupplierType } from '@/types';
+import { exportToXlsx, type ColumnConfig } from '@/lib/xlsx-export';
 
 const BLANK_FORM = { name: '', phone: '', email: '', address: '', noRekening: '' };
 
@@ -91,26 +92,53 @@ const Supplier = () => {
      );
    };
 
-   const handleDelete = async (id: string, name: string) => {
-     await executeRetryable(
-       () => deleteMutation.mutateAsync(id),
-       {
-         title: 'Supplier dihapus',
-         description: `${name} telah dihapus.`,
-         errorTitle: 'Gagal menghapus supplier',
-       }
-     );
-   };
+    const handleDelete = async (id: string, name: string) => {
+      await executeRetryable(
+        () => deleteMutation.mutateAsync(id),
+        {
+          title: 'Supplier dihapus',
+          description: `${name} telah dihapus.`,
+          errorTitle: 'Gagal menghapus supplier',
+        }
+      );
+    };
 
-   const handleExport = () => {
-     const rows = [['Kode', 'Nama', 'Telepon', 'Email', 'Alamat', 'Total Utang'],
-       ...suppliers.map(s => [s.code ?? '', s.name, s.phone ?? '', s.email ?? '', s.address ?? '', formatCurrency(Number(s.balance ?? 0))])];
-     const csv = rows.map(r => r.join(',')).join('\n');
-     const blob = new Blob([csv], { type: 'text/csv' });
-     const url = URL.createObjectURL(blob);
-     const a = document.createElement('a'); a.href = url; a.download = 'supplier.csv'; a.click();
-     URL.revokeObjectURL(url);
-   };
+    const handleExport = useCallback(() => {
+      try {
+        const columns: ColumnConfig<SupplierType>[] = [
+          { header: 'Kode', key: 'code', width: 12 },
+          { header: 'Nama', key: 'name', width: 30 },
+          { header: 'Telepon', key: 'phone', width: 15 },
+          { header: 'Email', key: 'email', width: 25 },
+          { header: 'Alamat', key: 'address', width: 35 },
+          {
+            header: 'Total Utang',
+            key: 'balance',
+            format: (value) => typeof value === 'number' ? value : Number(value) || 0,
+            width: 15,
+          },
+        ];
+
+        exportToXlsx(
+          suppliers,
+          'supplier.xlsx',
+          columns,
+          { sheetName: 'Supplier', autoWidth: true }
+        );
+
+        toast({
+          title: 'Berhasil',
+          description: `${suppliers.length} data supplier diunduh dalam format XLSX.`,
+        });
+      } catch (error) {
+        console.error('Export error:', error);
+        toast({
+          title: 'Gagal',
+          description: 'Gagal mengunduh data supplier.',
+          variant: 'destructive',
+        });
+      }
+    }, [suppliers, toast]);
 
   return (
     <MainLayout title="Supplier" subtitle="Kelola data supplier toko Anda">
@@ -125,16 +153,16 @@ const Supplier = () => {
            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
            <Input placeholder="Cari supplier..." className="pl-9 h-9" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }} />
          </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={handleExport}>
-            <Download className="mr-1.5 h-4 w-4" />Export CSV
-          </Button>
-          {canCreate('suppliers') && (
-            <Button size="sm" onClick={() => { setForm(BLANK_FORM); setIsAddOpen(true); }}>
-              <Plus className="mr-1.5 h-4 w-4" />Tambah Supplier
-            </Button>
-          )}
-        </div>
+         <div className="flex gap-2">
+           <Button variant="outline" size="sm" onClick={handleExport} title="Download data supplier dalam format Excel">
+             <Download className="mr-1.5 h-4 w-4" />Export XLSX
+           </Button>
+           {canCreate('suppliers') && (
+             <Button size="sm" onClick={() => { setForm(BLANK_FORM); setIsAddOpen(true); }}>
+               <Plus className="mr-1.5 h-4 w-4" />Tambah Supplier
+             </Button>
+           )}
+         </div>
       </div>
 
       <Card>

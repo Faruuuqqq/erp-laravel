@@ -27,6 +27,7 @@ import { useProducts, useCreateProduct, useUpdateProduct, useDeleteProduct } fro
 import { useCategories } from '@/hooks/api/useCategories';
 import { useWarehouses } from '@/hooks/api/useWarehouses';
 import type { Product } from '@/types';
+import { exportToXlsx, type ColumnConfig } from '@/lib/xlsx-export';
 
 const BLANK_FORM = { name: '', categoryId: '', buyPrice: '', sellPrice: '', stock: '', minimumStock: '', unit: '', warehouseId: '' };
 
@@ -143,15 +144,54 @@ const Produk = () => {
      );
    };
 
-   const handleExport = () => {
-     const rows = [['Kode', 'Nama', 'Kategori', 'Harga Beli', 'Harga Jual', 'Stok', 'Satuan', 'Min Stok'],
-       ...products.map(p => [p.code ?? '', p.name, categoryMap.get(p.categoryId ?? '') ?? p.categoryName ?? '', formatCurrency(Number(p.buyPrice)), formatCurrency(Number(p.sellPrice)), p.stock, p.unit, p.minimumStock])];
-     const csv = rows.map(r => r.join(',')).join('\n');
-     const blob = new Blob([csv], { type: 'text/csv' });
-     const url = URL.createObjectURL(blob);
-     const a = document.createElement('a'); a.href = url; a.download = 'produk.csv'; a.click();
-     URL.revokeObjectURL(url);
-   };
+    const handleExport = useCallback(() => {
+      try {
+        const columns: ColumnConfig<Product>[] = [
+          { header: 'Kode', key: 'code', width: 12 },
+          { header: 'Nama', key: 'name', width: 30 },
+          {
+            header: 'Kategori',
+            key: 'categoryId',
+            format: (v) => categoryMap.get(v as string) ?? 'Uncategorized',
+            width: 15,
+          },
+          {
+            header: 'Harga Beli',
+            key: 'buyPrice',
+            format: (value) => typeof value === 'number' ? value : Number(value) || 0,
+            width: 12,
+          },
+          {
+            header: 'Harga Jual',
+            key: 'sellPrice',
+            format: (value) => typeof value === 'number' ? value : Number(value) || 0,
+            width: 12,
+          },
+          { header: 'Stok', key: 'stock', width: 10 },
+          { header: 'Satuan', key: 'unit', width: 10 },
+          { header: 'Min Stok', key: 'minimumStock', width: 10 },
+        ];
+
+        exportToXlsx(
+          products,
+          'produk.xlsx',
+          columns,
+          { sheetName: 'Produk', autoWidth: true }
+        );
+
+        toast({
+          title: 'Berhasil',
+          description: `${products.length} data produk diunduh dalam format XLSX.`,
+        });
+      } catch (error) {
+        console.error('Export error:', error);
+        toast({
+          title: 'Gagal',
+          description: 'Gagal mengunduh data produk.',
+          variant: 'destructive',
+        });
+      }
+    }, [products, categoryMap, toast]);
 
    return (
     <MainLayout title="Produk" subtitle="Kelola daftar produk dan kategori">
@@ -203,13 +243,13 @@ const Produk = () => {
              </SelectContent>
            </Select>
          </div>
-         <div className="flex gap-2 shrink-0">
-           <Button variant="outline" size="sm" onClick={handleExport}><Download className="mr-1.5 h-4 w-4" />Export CSV</Button>
-           {canCreate('products') && (
-             <Button size="sm" onClick={() => { setForm(BLANK_FORM); setIsAddOpen(true); }}>
-               <Plus className="mr-1.5 h-4 w-4" />Tambah Produk
-             </Button>
-           )}
+          <div className="flex gap-2 shrink-0">
+            <Button variant="outline" size="sm" onClick={handleExport} title="Download data produk dalam format Excel"><Download className="mr-1.5 h-4 w-4" />Export XLSX</Button>
+            {canCreate('products') && (
+              <Button size="sm" onClick={() => { setForm(BLANK_FORM); setIsAddOpen(true); }}>
+                <Plus className="mr-1.5 h-4 w-4" />Tambah Produk
+              </Button>
+            )}
          </div>
        </div>
 

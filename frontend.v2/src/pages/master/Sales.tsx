@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
-import { Plus, Search, Pencil, Trash2, TrendingUp } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2, TrendingUp, Download } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { StatCard } from '@/components/ui/StatCard';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -22,6 +22,7 @@ import { DeleteConfirmDialog } from '@/components/dialogs/DeleteConfirmDialog';
 import { formatCurrency } from '@/lib/utils';
 import { useSalesReps, useCreateSalesRep, useUpdateSalesRep, useDeleteSalesRep } from '@/hooks/api/useSalesReps';
 import type { SalesRep } from '@/types';
+import { exportToXlsx, type ColumnConfig } from '@/lib/xlsx-export';
 
 const BLANK_FORM = { name: '', phone: '', email: '', area: '', status: 'aktif' as 'aktif' | 'nonaktif' };
 
@@ -76,16 +77,76 @@ const Sales = () => {
      );
    };
 
-    const handleDelete = async (id: string, name: string) => {
-      await executeRetryable(
-        () => deleteMutation.mutateAsync(id),
-        {
-          title: 'Sales dihapus',
-          description: `${name} telah dihapus.`,
-          errorTitle: 'Gagal menghapus sales',
+     const handleDelete = async (id: string, name: string) => {
+       await executeRetryable(
+         () => deleteMutation.mutateAsync(id),
+         {
+           title: 'Sales dihapus',
+           description: `${name} telah dihapus.`,
+           errorTitle: 'Gagal menghapus sales',
+         }
+       );
+     };
+
+    const handleExport = useCallback(() => {
+      try {
+        interface SalesExportData {
+          code?: string;
+          id: string;
+          name: string;
+          phone?: string;
+          email?: string;
+          area?: string;
+          status?: string;
+          totalSales?: number;
         }
-      );
-    };
+
+        const columns: ColumnConfig<SalesExportData>[] = [
+          { header: 'Kode', key: 'code', width: 12 },
+          { header: 'Nama Sales', key: 'name', width: 30 },
+          { header: 'Telepon', key: 'phone', width: 15 },
+          { header: 'Email', key: 'email', width: 25 },
+          { header: 'Area Kerja', key: 'area', width: 20 },
+          { header: 'Status', key: 'status', width: 12 },
+          {
+            header: 'Total Penjualan',
+            key: 'totalSales',
+            format: (value) => typeof value === 'number' ? value : Number(value) || 0,
+            width: 15,
+          },
+        ];
+
+        const salesData = list.map(s => ({
+          code: s.code ?? `S-${s.id.slice(0, 4)}`,
+          id: s.id,
+          name: s.name,
+          phone: s.phone ?? '',
+          email: s.email ?? '',
+          area: s.area ?? '',
+          status: s.status === 'aktif' || s.status === 'active' ? 'Aktif' : 'Nonaktif',
+          totalSales: Number(s.totalSales ?? 0),
+        }));
+
+        exportToXlsx(
+          salesData,
+          'sales.xlsx',
+          columns,
+          { sheetName: 'Sales', autoWidth: true }
+        );
+
+        toast({
+          title: 'Berhasil',
+          description: `${salesData.length} data sales diunduh dalam format XLSX.`,
+        });
+      } catch (error) {
+        console.error('Export error:', error);
+        toast({
+          title: 'Gagal',
+          description: 'Gagal mengunduh data sales.',
+          variant: 'destructive',
+        });
+      }
+    }, [list, toast]);
 
    return (
      <MainLayout title="Sales" subtitle="Kelola daftar sales / marketing">
@@ -111,12 +172,17 @@ const Sales = () => {
                <SelectItem value="nonaktif">Nonaktif</SelectItem>
              </SelectContent>
            </Select>
+          </div>
+         <div className="flex gap-2">
+           <Button variant="outline" size="sm" onClick={handleExport} title="Download data sales dalam format Excel">
+             <Download className="mr-1.5 h-4 w-4" />Export XLSX
+           </Button>
+           {canCreate('sales_reps') && (
+             <Button size="sm" onClick={() => { setForm(BLANK_FORM); setIsAddOpen(true); }}>
+               <Plus className="mr-1.5 h-4 w-4" />Tambah Sales
+             </Button>
+           )}
          </div>
-        {canCreate('sales_reps') && (
-          <Button size="sm" onClick={() => { setForm(BLANK_FORM); setIsAddOpen(true); }}>
-            <Plus className="mr-1.5 h-4 w-4" />Tambah Sales
-          </Button>
-        )}
       </div>
 
        {isLoading ? (
