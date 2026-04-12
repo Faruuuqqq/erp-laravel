@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,14 +12,15 @@ import {
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Plus, Trash2, RotateCcw, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Plus, Trash2, RotateCcw, CheckCircle2, AlertTriangle, Eye } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useCustomers } from '@/hooks/api/useCustomers';
 import { useTransactions } from '@/hooks/api/useTransactions';
 import { useProducts } from '@/hooks/api/useProducts';
-import PrintLayout from '@/components/print/PrintLayout';
+import { useCreateTransaction } from '@/hooks/api/useTransactions';
+import { PrintPreviewDialog } from '@/components/dialogs/PrintPreviewDialog';
 import { ReturPenjualanPrint } from '@/components/print/ReturPenjualanPrint';
 import type { Transaction } from '@/types';
 
@@ -28,6 +29,7 @@ interface ReturItem { productId: string; nama: string; qty: number; harga: numbe
 const ReturPenjualan = () => {
   const { toast } = useToast();
   const { canCreate } = usePermissions();
+  const createTx = useCreateTransaction();
   const [items, setItems] = useState<ReturItem[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState('');
   const [selectedFaktur, setSelectedFaktur] = useState('');
@@ -39,42 +41,63 @@ const ReturPenjualan = () => {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [saved, setSaved] = useState(false);
   const [savedTrx, setSavedTrx] = useState<Transaction | null>(null);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const { data: customersData } = useCustomers({ perPage: 200 });
-  const { data: transactionsData } = useTransactions({ type: selectedCustomer ? `penjualan_tunai,penjualan_kredit` : undefined });
+  // Query both penjualan_tunai and penjualan_kredit separately or use types array
+  const { data: transactionsDataTunai } = useTransactions({ type: 'penjualan_tunai' });
+  const { data: transactionsDataKredit } = useTransactions({ type: 'penjualan_kredit' });
   const { data: productsData } = useProducts({ perPage: 999 });
 
   const customers = customersData?.data ?? [];
-  const penjualanFakturs = (transactionsData?.data ?? []).filter(t =>
-    (t.type === 'penjualan_tunai' || t.type === 'penjualan_kredit') &&
-    (!selectedCustomer || t.customerId === selectedCustomer)
+  const allTransactions = useMemo(() => [
+    ...(transactionsDataTunai?.data ?? []),
+    ...(transactionsDataKredit?.data ?? [])
+  ], [transactionsDataTunai?.data, transactionsDataKredit?.data]);
+  
+  const penjualanFakturs = useMemo(() => 
+    allTransactions.filter(t =>
+      !selectedCustomer || t.customerId === selectedCustomer
+    ),
+    [allTransactions, selectedCustomer]
   );
-  const products = productsData?.data ?? [];
-  const selectedTrx = penjualanFakturs.find(t => t.invoiceNumber === selectedFaktur);
+  
+  const products = useMemo(() => productsData?.data ?? [], [productsData?.data]);
+  
+  // Fixed: Use t.id instead of t.invoiceNumber
+  const selectedTrx = penjualanFakturs.find(t => t.id === selectedFaktur);
 
-  const noRetur = `RTJ-${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}-${String(Math.floor(Math.random()*900)+100)}`;
+  // Fixed: Generate noRetur only once with useMemo
+  const noRetur = useMemo(() => 
+    `RTJ-${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}-${String(Math.floor(Math.random()*900)+100)}`,
+    []
+  );
 
-
-  const addItem = () => {
+  const addItem = useCallback(() => {
     const product = products.find(p => p.id === selectedProduct);
     if (!product) return toast({ title: 'Pilih produk', variant: 'destructive' });
     const qtyNum = parseInt(qty) || 1;
     const trxItem = selectedTrx?.items?.find(i => i.productId === selectedProduct);
     const harga = trxItem ? Number(trxItem.price) : Number(product.sellPrice ?? product.buyPrice ?? 0);
-    setItems([...items, { productId: product.id, nama: product.name, qty: qtyNum, harga, satuan: product.unit ?? 'pcs', subtotal: harga * qtyNum }]);
-    setSelectedProduct(''); setQty('1');
+    setItems(prev => [...prev, { productId: product.id, nama: product.name, qty: qtyNum, harga, satuan: product.unit ?? 'pcs', subtotal: harga * qtyNum }]);
+    setSelectedProduct(''); 
+    setQty('1');
     toast({ title: `${product.name} ditambahkan` });
-  };
+  }, [products, selectedProduct, qty, selectedTrx, toast]);
 
-  const removeItem = (idx: number) => setItems(items.filter((_, i) => i !== idx));
+  const removeItem = useCallback((idx: number) => {
+    setItems(prev => prev.filter((_, i) => i !== idx));
+  }, []);
+
   const totalNilai = items.reduce((s, i) => s + i.subtotal, 0);
 
-  const handleSave = () => {
+  const handleSave = useCallback(() => {
     if (items.length === 0) return toast({ title: 'Belum ada barang retur', variant: 'destructive' });
     if (!alasan) return toast({ title: 'Pilih alasan retur', variant: 'destructive' });
     if (!metodeKembalian) return toast({ title: 'Pilih metode pengembalian', variant: 'destructive' });
     setConfirmOpen(true);
-  };
+  }, [items.length, alasan, metodeKembalian, toast]);
 
   if (saved) {
     return (
@@ -89,14 +112,14 @@ const ReturPenjualan = () => {
             <p className="text-3xl font-bold text-warning mt-3">{formatCurrency(totalNilai)}</p>
             <p className="text-sm text-muted-foreground">Nilai retur - metode: {metodeKembalian}</p>
           </div>
-          <div className="flex gap-3">
-            {savedTrx && (
-              <PrintLayout buttonLabel="Cetak Retur" buttonSize="sm" buttonVariant="outline">
-                <ReturPenjualanPrint transaction={savedTrx} />
-              </PrintLayout>
-            )}
-            <Button onClick={() => { setItems([]); setSaved(false); setSavedTrx(null); setSelectedFaktur(''); setSelectedCustomer(''); setAlasan(''); setMetodeKembalian(''); setCatatan(''); }}>Retur Baru</Button>
-          </div>
+           <div className="flex gap-3">
+             {savedTrx && (
+               <Button variant="outline" onClick={() => setIsPreviewOpen(true)}>
+                 <Eye className="mr-2 h-4 w-4" />Preview & Cetak
+               </Button>
+             )}
+             <Button onClick={() => { setItems([]); setSaved(false); setSavedTrx(null); setSelectedFaktur(''); setSelectedCustomer(''); setAlasan(''); setMetodeKembalian(''); setCatatan(''); }}>Retur Baru</Button>
+           </div>
         </div>
       </MainLayout>
     );
@@ -139,13 +162,13 @@ const ReturPenjualan = () => {
               <div className="grid gap-3 md:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label className="text-xs">No. Faktur Penjualan</Label>
-                  <Select value={selectedFaktur} onValueChange={setSelectedFaktur}>
-                    <SelectTrigger className="text-xs"><SelectValue placeholder="Pilih faktur" /></SelectTrigger>
-                    <SelectContent>
-                      {penjualanFakturs.map(t => <SelectItem key={t.id} value={t.invoiceNumber}>{t.invoiceNumber} - {t.customer}</SelectItem>)}
-                      <SelectItem value="manual">Input Manual</SelectItem>
-                    </SelectContent>
-                  </Select>
+                   <Select value={selectedFaktur} onValueChange={setSelectedFaktur}>
+                     <SelectTrigger className="text-xs"><SelectValue placeholder="Pilih faktur" /></SelectTrigger>
+                     <SelectContent>
+                       {penjualanFakturs.map(t => <SelectItem key={t.id} value={t.id}>{t.invoiceNumber} - {t.customer}</SelectItem>)}
+                       <SelectItem value="manual">Input Manual</SelectItem>
+                     </SelectContent>
+                   </Select>
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">Alasan Retur</Label>
@@ -245,7 +268,7 @@ const ReturPenjualan = () => {
                   <Button className="flex-1 h-9 text-sm" onClick={handleSave} disabled={items.length === 0}>Simpan</Button>
                 )}
               </div>
-              <Button variant="outline" className="w-full h-8 text-xs" onClick={() => toast({ title: 'Mengekspor PDF...' })}>Export PDF</Button>
+               <Button variant="outline" className="w-full h-8 text-xs" onClick={() => setIsPreviewOpen(true)}><Eye className="mr-1.5 h-3.5 w-3.5" />Preview & Cetak</Button>
             </CardContent>
           </Card>
         </div>
@@ -258,27 +281,48 @@ const ReturPenjualan = () => {
               Retur senilai <strong>{formatCurrency(totalNilai)}</strong> akan menambah stok dan mengurangi piutang/kas customer. Tindakan ini tidak dapat dibatalkan.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Batal</AlertDialogCancel>
-            <AlertDialogAction onClick={() => {
-              // Build a mock transaction object for the print template
-              const fakeTrx: Transaction = {
-                id: noRetur, invoiceNumber: noRetur, date: new Date().toISOString().split('T')[0],
-                type: 'retur_penjualan', supplierId: null, customerId: selectedCustomer,
-                customer: customers.find(c => c.id === selectedCustomer)?.name ?? undefined,
-                subtotal: totalNilai, discount: 0, tax: 0, total: totalNilai, paid: 0,
-                remaining: totalNilai, status: 'completed', paymentStatus: 'belum_lunas',
-                notes: catatan,
-                items: items.map((i, idx) => ({ id: String(idx), productId: i.productId, productName: i.nama, quantity: i.qty, price: i.harga, discount: 0, subtotal: i.subtotal })),
-                createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-              };
-              setSavedTrx(fakeTrx);
-              setConfirmOpen(false); setSaved(true);
-              toast({ title: 'Retur berhasil', description: noRetur });
-            }}>Ya, Proses Retur</AlertDialogAction>
-          </AlertDialogFooter>
+           <AlertDialogFooter>
+             <AlertDialogCancel>Batal</AlertDialogCancel>
+             <AlertDialogAction onClick={async () => {
+               try {
+                 setIsSaving(true);
+                 const result = await createTx.mutateAsync({
+                   type: 'retur_penjualan',
+                   customerId: selectedCustomer,
+                   notes: `${alasan} — ${catatan}`,
+                   items: items.map(i => ({ productId: i.productId, quantity: i.qty, price: i.harga, discount: 0 })),
+                 });
+                 setSavedTrx(result as Transaction);
+                 setConfirmOpen(false);
+                 setSaved(true);
+                 toast({ title: 'Retur berhasil diproses', description: (result as Transaction).invoiceNumber });
+               } catch (err: unknown) {
+                 const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Gagal menyimpan retur';
+                 toast({ title: 'Error', description: msg, variant: 'destructive' });
+                 setConfirmOpen(false);
+               } finally {
+                 setIsSaving(false);
+               }
+             }} disabled={isSaving}>
+               {isSaving ? 'Memproses...' : 'Ya, Proses Retur'}
+             </AlertDialogAction>
+           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {savedTrx && (
+        <PrintPreviewDialog
+          isOpen={isPreviewOpen}
+          onClose={() => setIsPreviewOpen(false)}
+          title="Surat Retur Penjualan"
+          documentId="retur-penjualan-print"
+          filename={`retur-penjualan-${savedTrx.invoiceNumber}`}
+        >
+          <div id="retur-penjualan-print">
+            <ReturPenjualanPrint transaction={savedTrx} />
+          </div>
+        </PrintPreviewDialog>
+      )}
     </MainLayout>
   );
 };

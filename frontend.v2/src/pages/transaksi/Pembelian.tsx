@@ -8,16 +8,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Plus, Trash2, ShoppingCart, Calculator, FileDown, CheckCircle2, Search, Printer } from 'lucide-react';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Plus, Trash2, ShoppingCart, Calculator, Eye, CheckCircle2, Search } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useProducts } from '@/hooks/api/useProducts';
 import { useSuppliers } from '@/hooks/api/useSuppliers';
 import { useWarehouses } from '@/hooks/api/useWarehouses';
 import { useCreateTransaction } from '@/hooks/api/useTransactions';
-import { usePrint } from '@/contexts/PrintContext';
+import { PrintPreviewDialog } from '@/components/dialogs/PrintPreviewDialog';
+import { FakturPembelian } from '@/components/print/FakturPembelian';
 import { formatCurrency } from '@/lib/utils';
-import type { Transaction } from '@/types';
+import type { Transaction, Product } from '@/types';
 
 interface CartItem {
   productId: string;
@@ -26,6 +28,13 @@ interface CartItem {
   qty: number;
   harga: number;
   subtotal: number;
+}
+
+interface PriceConflict {
+  show: boolean;
+  existingPrice: number;
+  newPrice: number;
+  productName: string;
 }
 
 const BLANK_STATE = () => ({
@@ -44,7 +53,7 @@ const BLANK_STATE = () => ({
 
 const Pembelian = () => {
   const { toast } = useToast();
-  const { canCreate } = usePermissions();
+  const { canCreate, canPrint } = usePermissions();
   const createTx = useCreateTransaction();
 
   const [state, setState] = useState(BLANK_STATE());
@@ -52,48 +61,18 @@ const Pembelian = () => {
   const [savedInvoice, setSavedInvoice] = useState('');
   const [savedTotal, setSavedTotal] = useState(0);
   const [savedTrx, setSavedTrx] = useState<Transaction | null>(null);
-  const { printDocument } = usePrint();
-  const { canPrint } = usePermissions();
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [priceConflict, setPriceConflict] = useState<PriceConflict>({ show: false, existingPrice: 0, newPrice: 0, productName: '' });
+  const [pendingAddToCart, setPendingAddToCart] = useState<{ product: Product; qty: number; harga: number } | null>(null);
 
-  const handlePrint = useCallback(() => {
-    if (!savedTrx) return;
-    const node = (
-      <div style={{ fontFamily: 'monospace', padding: 24, fontSize: 13 }}>
-        <h2 style={{ textAlign: 'center', marginBottom: 8 }}>FAKTUR PEMBELIAN</h2>
-        <p>No. Faktur : {savedTrx.invoiceNumber}</p>
-        <p>Tanggal   : {savedTrx.date}</p>
-        <p>Supplier  : {savedTrx.supplier ?? '-'}</p>
-        <hr />
-        <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 8 }}>
-          <thead>
-            <tr><th style={{ textAlign: 'left' }}>Produk</th><th>Qty</th><th style={{ textAlign: 'right' }}>Harga</th><th style={{ textAlign: 'right' }}>Subtotal</th></tr>
-          </thead>
-          <tbody>
-            {(savedTrx.items ?? []).map((it, i) => (
-              <tr key={i}>
-                <td>{it.productName ?? it.productId}</td>
-                <td style={{ textAlign: 'center' }}>{it.quantity}</td>
-                <td style={{ textAlign: 'right' }}>{formatCurrency(Number(it.price))}</td>
-                <td style={{ textAlign: 'right' }}>{formatCurrency(Number(it.subtotal))}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <hr />
-        <p style={{ textAlign: 'right', fontWeight: 'bold', fontSize: 15 }}>TOTAL: {formatCurrency(savedTrx.total)}</p>
-        {savedTrx.status === 'kredit' && <p style={{ textAlign: 'right', color: 'orange' }}>Dicatat sebagai Utang</p>}
-      </div>
-    );
-    printDocument(node);
-  }, [savedTrx, printDocument]);
-
-  const { data: productsData } = useProducts({ perPage: 500 });
+  const { data: productsData } = useProducts({ per_page: 500 });
   const { data: suppliersData } = useSuppliers({ perPage: 200 });
-  const { data: warehousesData } = useWarehouses({ perPage: 100 });
+  const { data: warehousesData } = useWarehouses({ per_page: 100 });
 
-  const products = productsData?.data ?? [];
-  const suppliers = suppliersData?.data ?? [];
-  const warehouses = warehousesData?.data ?? [];
+  // Wrap data arrays in useMemo to stabilize references
+  const products = useMemo(() => productsData?.data ?? [], [productsData?.data]);
+  const suppliers = useMemo(() => suppliersData?.data ?? [], [suppliersData?.data]);
+  const warehouses = useMemo(() => warehousesData?.data ?? [], [warehousesData?.data]);
 
   const set = useCallback(<K extends keyof ReturnType<typeof BLANK_STATE>>(key: K, val: ReturnType<typeof BLANK_STATE>[K]) =>
     setState(p => ({ ...p, [key]: val })), []);
@@ -112,31 +91,96 @@ const Pembelian = () => {
     const qtyNum = parseInt(state.qty) || 1;
     const hargaNum = parseFloat(state.harga) || (product.buyPrice ?? 0);
     if (qtyNum <= 0) return toast({ title: 'Qty harus lebih dari 0', variant: 'destructive' });
+    
+    // Check if product already exists in cart
+    const existing = state.cart.findIndex(c => c.productId === state.selectedProduct);
+    if (existing >= 0) {
+      const existingPrice = state.cart[existing].harga;
+      // If price is different, show dialog to confirm action
+      if (hargaNum !== existingPrice) {
+        setPriceConflict({
+          show: true,
+          existingPrice,
+          newPrice: hargaNum,
+          productName: product.name
+        });
+        setPendingAddToCart({ product, qty: qtyNum, harga: hargaNum });
+        return;
+      }
+    }
+    
+    // Proceed with normal add
     setState(prev => {
-      const existing = prev.cart.findIndex(c => c.productId === state.selectedProduct);
+      const idx = prev.cart.findIndex(c => c.productId === state.selectedProduct);
       const newCart = [...prev.cart];
-      if (existing >= 0) {
-        newCart[existing] = { ...newCart[existing], qty: newCart[existing].qty + qtyNum, subtotal: newCart[existing].harga * (newCart[existing].qty + qtyNum) };
+      if (idx >= 0) {
+        newCart[idx] = { ...newCart[idx], qty: newCart[idx].qty + qtyNum, subtotal: newCart[idx].harga * (newCart[idx].qty + qtyNum) };
       } else {
         newCart.push({ productId: product.id, nama: product.name, satuan: product.unit ?? 'pcs', qty: qtyNum, harga: hargaNum, subtotal: hargaNum * qtyNum });
       }
       return { ...prev, cart: newCart, selectedProduct: '', qty: '1', harga: '', searchProduct: '' };
     });
     toast({ title: `${product.name} ditambahkan` });
-  }, [products, state.selectedProduct, state.qty, state.harga, toast]);
+  }, [products, state.selectedProduct, state.qty, state.harga, state.cart, toast]);
 
   const removeItem = useCallback((idx: number) =>
     setState(p => ({ ...p, cart: p.cart.filter((_, i) => i !== idx) })), []);
 
+  const handleConfirmPriceConflict = useCallback((useNewPrice: boolean) => {
+    if (!pendingAddToCart) return;
+    
+    setState(prev => {
+      const idx = prev.cart.findIndex(c => c.productId === pendingAddToCart.product.id);
+      const newCart = [...prev.cart];
+      const { product, qty: qtyNum, harga: hargaNum } = pendingAddToCart;
+      
+      if (idx >= 0) {
+        if (useNewPrice) {
+          // Replace price and recalculate
+          const newPrice = hargaNum;
+          newCart[idx] = { 
+            ...newCart[idx], 
+            harga: newPrice, 
+            qty: newCart[idx].qty + qtyNum, 
+            subtotal: newPrice * (newCart[idx].qty + qtyNum) 
+          };
+          toast({ 
+            title: 'Harga diperbarui', 
+            description: `Qty digabung dengan harga baru ${formatCurrency(newPrice)}` 
+          });
+        } else {
+          // Keep existing price
+          newCart[idx] = { 
+            ...newCart[idx], 
+            qty: newCart[idx].qty + qtyNum, 
+            subtotal: newCart[idx].harga * (newCart[idx].qty + qtyNum) 
+          };
+          toast({ 
+            title: 'Qty digabung', 
+            description: `Harga tetap menggunakan ${formatCurrency(newCart[idx].harga)}` 
+          });
+        }
+      }
+      
+      return { ...prev, cart: newCart, selectedProduct: '', qty: '1', harga: '', searchProduct: '' };
+    });
+    
+    setPriceConflict({ show: false, existingPrice: 0, newPrice: 0, productName: '' });
+    setPendingAddToCart(null);
+  }, [pendingAddToCart, toast]);
+
   const subtotal = state.cart.reduce((s, i) => s + i.subtotal, 0);
-  const diskonNum = parseFloat(state.diskon) || 0;
-  const grandTotal = subtotal - diskonNum;
+  const diskonNum = Math.max(0, parseFloat(state.diskon) || 0);
+  const grandTotal = Math.max(0, subtotal - diskonNum);
   const isKredit = state.metodePembayaran === 'kredit';
   const paid = isKredit ? 0 : grandTotal;
 
   const handleSave = useCallback(async () => {
     if (state.cart.length === 0) return toast({ title: 'Keranjang masih kosong', variant: 'destructive' });
     if (!state.selectedSupplier) return toast({ title: 'Pilih supplier terlebih dahulu', variant: 'destructive' });
+    if (diskonNum < 0) return toast({ title: 'Diskon tidak boleh negatif', variant: 'destructive' });
+    if (diskonNum > subtotal) return toast({ title: 'Diskon tidak boleh melebihi subtotal', variant: 'destructive' });
+    
     try {
       const result = await createTx.mutateAsync({
         type: 'pembelian',
@@ -157,7 +201,7 @@ const Pembelian = () => {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Gagal menyimpan';
       toast({ title: 'Error', description: msg, variant: 'destructive' });
     }
-  }, [state, createTx, diskonNum, paid, grandTotal, toast]);
+  }, [state, createTx, diskonNum, subtotal, paid, grandTotal, toast]);
 
   const reset = useCallback(() => { setState(BLANK_STATE()); setSaved(false); }, []);
 
@@ -176,10 +220,9 @@ const Pembelian = () => {
           </div>
           <div className="flex gap-3">
             {canPrint('transactions.purchase') && (
-              <>
-                <Button variant="outline" onClick={handlePrint}><Printer className="mr-2 h-4 w-4" />Cetak Faktur</Button>
-                <Button variant="outline" onClick={handlePrint}><FileDown className="mr-2 h-4 w-4" />Export PDF</Button>
-              </>
+              <Button variant="outline" onClick={() => setIsPreviewOpen(true)}>
+                <Eye className="mr-2 h-4 w-4" />Preview & Cetak
+              </Button>
             )}
             <Button onClick={reset}>Pembelian Baru</Button>
           </div>
@@ -322,7 +365,18 @@ const Pembelian = () => {
               </div>
               <div className="flex items-center gap-2 text-sm">
                 <span className="text-muted-foreground flex-1">Diskon (Rp)</span>
-                <Input type="number" value={state.diskon} onChange={e => set('diskon', e.target.value)} className="w-32 h-7 text-right text-xs" min="0" />
+                <Input 
+                  type="number" 
+                  value={state.diskon} 
+                  onChange={e => {
+                    const val = e.target.value;
+                    const numVal = parseFloat(val) || 0;
+                    set('diskon', numVal < 0 ? '0' : val);
+                  }}
+                  className="w-32 h-7 text-right text-xs" 
+                  min="0" 
+                  step="1000"
+                />
               </div>
               <Separator />
               <div className="flex justify-between items-center">
@@ -363,6 +417,53 @@ const Pembelian = () => {
           </Card>
         </div>
       </div>
+
+      {/* Print Preview Dialog */}
+      {savedTrx && (
+        <PrintPreviewDialog
+          isOpen={isPreviewOpen}
+          onClose={() => setIsPreviewOpen(false)}
+          title="Faktur Pembelian"
+          documentId="faktur-pembelian-print"
+          filename={`Faktur-Pembelian-${savedTrx.invoiceNumber}`}
+        >
+          <div id="faktur-pembelian-print">
+            <FakturPembelian transaction={savedTrx} />
+          </div>
+        </PrintPreviewDialog>
+      )}
+
+      {/* Price Conflict Dialog */}
+      <AlertDialog open={priceConflict.show} onOpenChange={v => !v && setPriceConflict({ show: false, existingPrice: 0, newPrice: 0, productName: '' })}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Produk dengan Harga Berbeda</AlertDialogTitle>
+            <AlertDialogDescription>
+              Produk <span className="font-semibold text-foreground">{priceConflict.productName}</span> sudah ada di keranjang.
+              <div className="mt-4 space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Harga saat ini:</span>
+                  <span className="font-semibold">{formatCurrency(priceConflict.existingPrice)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Harga baru:</span>
+                  <span className="font-semibold text-primary">{formatCurrency(priceConflict.newPrice)}</span>
+                </div>
+              </div>
+              <p className="mt-4">Qty akan digabung. Pilih harga mana yang ingin digunakan:</p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="flex gap-2">
+            <AlertDialogCancel className="flex-1">Gunakan Harga Lama</AlertDialogCancel>
+            <AlertDialogAction 
+              className="flex-1"
+              onClick={() => handleConfirmPriceConflict(true)}
+            >
+              Ganti Harga Baru
+            </AlertDialogAction>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
     </MainLayout>
   );
 };
