@@ -8,6 +8,15 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableFooter,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { useSaldoPiutang } from '@/hooks/api/useInfo';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
@@ -95,63 +104,78 @@ const SaldoPiutang = () => {
       </div>
 
       <DataTableContainer>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b bg-muted/40 text-xs text-muted-foreground">
-                {['Kode', 'Nama Customer', 'Telepon', 'Total Piutang', 'Limit Kredit', 'Sisa Limit', 'Status'].map(h => (
-                  <th key={h} className="px-4 py-3 text-left font-semibold whitespace-nowrap">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading ? (
-                Array.from({ length: 5 }).map((_, i) => (
-                  <tr key={i}><td colSpan={7} className="px-4 py-2"><Skeleton className="h-8 w-full" /></td></tr>
-                ))
-              ) : filtered.length === 0 ? (
-                <tr><td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">Tidak ada data yang sesuai.</td></tr>
-              ) : (
-                <>
-                  {filtered.map(c => {
-                    const isOverLimit = c.creditLimit > 0 && c.balance > c.creditLimit;
-                    const sisaLimit = c.creditLimit - c.balance;
-                    return (
-                      <tr key={c.id} className={`border-b transition-colors hover:bg-muted/20 ${isOverLimit ? 'bg-destructive/5' : ''}`}>
-                        <td className="px-4 py-3 font-mono text-xs text-primary">{c.code}</td>
-                        <td className="px-4 py-3">
-                          <div className="font-medium">{c.name}</div>
-                          {c.email && <div className="text-xs text-muted-foreground">{c.email}</div>}
-                        </td>
-                        <td className="px-4 py-3 text-muted-foreground">{c.phone}</td>
-                        <td className="px-4 py-3">
-                          {c.balance > 0 ? <CurrencyCell value={c.balance} color="red" /> : <span className="text-muted-foreground text-xs">—</span>}
-                        </td>
-                        <td className="px-4 py-3"><CurrencyCell value={c.creditLimit} /></td>
-                        <td className="px-4 py-3">
-                          {c.creditLimit > 0 ? <CurrencyCell value={Math.abs(sisaLimit)} color={sisaLimit < 0 ? 'red' : 'green'} /> : <span className="text-xs text-muted-foreground">—</span>}
-                        </td>
-                        <td className="px-4 py-3">
-                          {c.balance === 0
-                            ? <Badge variant="outline" className="text-success border-success text-xs">Lunas</Badge>
-                            : isOverLimit
-                              ? <Badge variant="destructive" className="text-xs">Melebihi Limit</Badge>
-                              : <Badge variant="outline" className="text-warning border-warning text-xs">Piutang</Badge>
-                          }
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  <tr className="bg-muted/40 font-bold border-t-2">
-                    <td colSpan={3} className="px-4 py-3 text-sm">GRAND TOTAL PIUTANG</td>
-                    <td className="px-4 py-3"><CurrencyCell value={total} color="red" /></td>
-                    <td colSpan={3} />
-                  </tr>
-                </>
-              )}
-            </tbody>
-          </table>
-        </div>
+        {isLoading ? (
+          <div className="p-8 space-y-2">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Skeleton key={i} className="h-8 w-full" />
+            ))}
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="p-12 text-center">
+            <TrendingUp className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-50" />
+            <p className="text-muted-foreground">
+              Tidak ada data yang sesuai.
+            </p>
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/40">
+                <TableHead>Kode</TableHead>
+                <TableHead>Nama Customer</TableHead>
+                <TableHead>Telepon</TableHead>
+                <TableHead>Total Piutang</TableHead>
+                <TableHead>Limit Kredit</TableHead>
+                <TableHead>Sisa Limit</TableHead>
+                <TableHead>Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filtered.map(c => {
+                const isOverLimit = c.creditLimit > 0 && c.balance > c.creditLimit;
+                const sisaLimit = c.creditLimit - c.balance;
+                return (
+                  <TableRow
+                    key={c.id}
+                    className={`transition-colors hover:bg-muted/20 ${isOverLimit ? 'bg-destructive/5' : ''}`}
+                  >
+                    <TableCell className="font-mono text-xs text-primary">{c.code}</TableCell>
+                    <TableCell>
+                      <div className="font-medium">{c.name}</div>
+                      {c.email && <div className="text-xs text-muted-foreground">{c.email}</div>}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{c.phone}</TableCell>
+                    <TableCell>
+                      {c.balance > 0 ? <CurrencyCell value={c.balance} color="red" /> : <span className="text-muted-foreground text-xs">—</span>}
+                    </TableCell>
+                    <TableCell><CurrencyCell value={c.creditLimit} /></TableCell>
+                    <TableCell>
+                      {c.creditLimit > 0 ? <CurrencyCell value={Math.abs(sisaLimit)} color={sisaLimit < 0 ? 'red' : 'green'} /> : <span className="text-xs text-muted-foreground">—</span>}
+                    </TableCell>
+                    <TableCell>
+                      {c.balance === 0
+                        ? <Badge variant="outline" className="text-success border-success text-xs">Lunas</Badge>
+                        : isOverLimit
+                          ? <Badge variant="destructive" className="text-xs">Melebihi Limit</Badge>
+                          : <Badge variant="outline" className="text-warning border-warning text-xs">Piutang</Badge>
+                      }
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+
+            <TableFooter>
+              <TableRow className="bg-muted/40">
+                <TableCell colSpan={3} className="font-bold text-sm">
+                  GRAND TOTAL PIUTANG
+                </TableCell>
+                <TableCell><CurrencyCell value={total} color="red" /></TableCell>
+                <TableCell colSpan={3} />
+              </TableRow>
+            </TableFooter>
+          </Table>
+        )}
       </DataTableContainer>
     </MainLayout>
   );

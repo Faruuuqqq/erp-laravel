@@ -13,6 +13,7 @@ import { Search, History, Eye, EyeOff, FileDown, ChevronLeft, ChevronRight } fro
 import { useToast } from '@/hooks/use-toast';
 import { useTransactions, useToggleHideTransaction } from '@/hooks/api/useTransactions';
 import { useSuppliers } from '@/hooks/api/useSuppliers';
+import { usePermissions } from '@/hooks/usePermissions';
 import { useLazyPdfExport } from '@/hooks/useLazyPdfExport';
 import { formatCurrency } from '@/lib/utils';
 import type { Transaction } from '@/types';
@@ -30,6 +31,7 @@ const paymentStatusLabel = (t: Transaction) => {
 
 const HistoriPembelian = () => {
   const { toast } = useToast();
+  const { canHideTransactions } = usePermissions();
   const { exportToPdf } = useLazyPdfExport();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterSupplier, setFilterSupplier] = useState('all');
@@ -71,11 +73,14 @@ const HistoriPembelian = () => {
   const hiddenCount = filtered.filter(t => t.isHidden).length;
   const totalNilai = filteredByHidden.reduce((s, t) => s + t.total, 0);
 
-  const handleToggleHide = useCallback(async (id: string) => {
+  const handleToggleHide = useCallback(async (id: string, currentlyHidden: boolean) => {
     setTogglingId(id);
     try {
       await toggleHideMutation.mutateAsync(id);
-      toast({ title: 'Berhasil', description: 'Status transaksi diperbarui' });
+      toast({ 
+        title: 'Berhasil', 
+        description: currentlyHidden ? 'Transaksi ditampilkan kembali' : 'Transaksi disembunyikan' 
+      });
     } catch {
       toast({ title: 'Error', description: 'Gagal mengubah status transaksi', variant: 'destructive' });
     } finally {
@@ -232,21 +237,23 @@ const HistoriPembelian = () => {
                      <TableCell className="text-right tabular-nums text-xs text-success">{formatCurrency(t.paid)}</TableCell>
                      <TableCell className="text-right tabular-nums text-xs text-destructive">{formatCurrency(t.remaining ?? 0)}</TableCell>
                      <TableCell><Badge variant={paymentStatusVariant(t)} className="text-xs">{paymentStatusLabel(t)}</Badge></TableCell>
-                     <TableCell>
-                       <div className="flex gap-0.5">
-                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setSelectedTrx(t)}><Eye className="h-3.5 w-3.5" /></Button>
-                         <Button 
-                           variant="ghost" 
-                           size="icon" 
-                           className="h-7 w-7 text-muted-foreground hover:text-foreground" 
-                           title={t.isHidden ? 'Tampilkan' : 'Sembunyikan'}
-                           onClick={() => handleToggleHide(t.id)}
-                           disabled={togglingId === t.id}
-                         >
-                           {t.isHidden ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
-                         </Button>
-                       </div>
-                     </TableCell>
+                      <TableCell>
+                        <div className="flex gap-0.5">
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setSelectedTrx(t)}><Eye className="h-3.5 w-3.5" /></Button>
+                          {canHideTransactions() && (
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-7 w-7 text-muted-foreground hover:text-foreground" 
+                              title={t.isHidden ? 'Tampilkan' : 'Sembunyikan'}
+                              onClick={() => handleToggleHide(t.id, t.isHidden ?? false)}
+                              disabled={togglingId === t.id}
+                            >
+                              {t.isHidden ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
                    </TableRow>
                  ))}
                </TableBody>

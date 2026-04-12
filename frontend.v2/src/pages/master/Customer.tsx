@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/dialog';
 import { DeleteConfirmDialog } from '@/components/dialogs/DeleteConfirmDialog';
 
-import { Plus, Search, Pencil, Trash2, Phone, MapPin, AlertCircle, Download, Users } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2, Phone, MapPin, AlertCircle, Download, Users, ArrowUp, ArrowDown } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { StatCard } from '@/components/ui/StatCard';
 import { useToast } from '@/hooks/use-toast';
@@ -26,6 +26,8 @@ const CustomerPage = () => {
   const { canCreate, canEdit, canDelete } = usePermissions();
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [sortBy, setSortBy] = useState<'nama' | 'kota' | 'total_piutang'>('nama');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editItem, setEditItem] = useState<Customer | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
@@ -34,7 +36,7 @@ const CustomerPage = () => {
    const { execute: executeRetryable } = useRetryableAction({ maxRetries: 3, delayMs: 1000 });
 
   const debouncedSearch = useDebouncedValue(searchTerm, 300);
-  const { data, isLoading } = useCustomers({ page: currentPage, per_page: 20, search: debouncedSearch || undefined });
+  const { data, isLoading } = useCustomers({ page: currentPage, per_page: 20, search: debouncedSearch || undefined, sort_by: sortBy, sort_direction: sortDirection });
   const createMutation = useCreateCustomer();
   const updateMutation = useUpdateCustomer();
   const deleteMutation = useDeleteCustomer();
@@ -44,6 +46,21 @@ const CustomerPage = () => {
 
    const totalPiutang = formatCurrency(customers.reduce((sum, c) => sum + Number(c.balance ?? 0), 0));
    const overLimit = customers.filter(c => Number(c.balance ?? 0) > Number(c.creditLimit ?? 0)).length;
+
+  const toggleSort = (field: 'nama' | 'kota' | 'total_piutang') => {
+    if (sortBy === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(field);
+      setSortDirection('asc');
+    }
+    setCurrentPage(1);
+  };
+
+  const SortIcon = ({ field }: { field: 'nama' | 'kota' | 'total_piutang' }) => {
+    if (sortBy !== field) return null;
+    return sortDirection === 'asc' ? <ArrowUp className="h-3 w-3 ml-1" /> : <ArrowDown className="h-3 w-3 ml-1" />;
+  };
 
   const openEdit = (c: Customer) => {
     setEditItem(c);
@@ -125,19 +142,25 @@ const CustomerPage = () => {
           <CardContent className="p-0">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-muted/40 text-xs text-muted-foreground">
-                    <th className="px-4 py-3 text-left font-semibold">ID</th>
-                    <th className="px-4 py-3 text-left font-semibold">Nama</th>
-                    <th className="px-4 py-3 text-left font-semibold">Telepon</th>
-                    <th className="px-4 py-3 text-left font-semibold">Email</th>
-                    <th className="px-4 py-3 text-left font-semibold">Alamat</th>
-                    <th className="px-4 py-3 text-right font-semibold">Total Piutang</th>
-                    <th className="px-4 py-3 text-right font-semibold">Limit Kredit</th>
-                    <th className="px-4 py-3 text-right font-semibold">Transaksi</th>
-                    <th className="px-4 py-3 text-center font-semibold">Aksi</th>
-                  </tr>
-                </thead>
+                 <thead>
+                   <tr className="border-b bg-muted/40 text-xs text-muted-foreground">
+                     <th className="px-4 py-3 text-left font-semibold">ID</th>
+                     <th className="px-4 py-3 text-left font-semibold cursor-pointer hover:bg-muted/50" onClick={() => toggleSort('nama')}>
+                       <div className="flex items-center">Nama <SortIcon field="nama" /></div>
+                     </th>
+                     <th className="px-4 py-3 text-left font-semibold">Telepon</th>
+                     <th className="px-4 py-3 text-left font-semibold">Email</th>
+                     <th className="px-4 py-3 text-left font-semibold cursor-pointer hover:bg-muted/50" onClick={() => toggleSort('kota')}>
+                       <div className="flex items-center">Alamat <SortIcon field="kota" /></div>
+                     </th>
+                     <th className="px-4 py-3 text-right font-semibold cursor-pointer hover:bg-muted/50" onClick={() => toggleSort('total_piutang')}>
+                       <div className="flex items-center justify-end">Total Piutang <SortIcon field="total_piutang" /></div>
+                     </th>
+                     <th className="px-4 py-3 text-right font-semibold">Limit Kredit</th>
+                     <th className="px-4 py-3 text-right font-semibold">Transaksi</th>
+                     <th className="px-4 py-3 text-center font-semibold">Aksi</th>
+                   </tr>
+                 </thead>
                  <tbody>
                    {customers.length === 0 ? (
                      <tr><td colSpan={9} className="px-4 py-10 text-center text-muted-foreground">Tidak ada customer yang sesuai.</td></tr>

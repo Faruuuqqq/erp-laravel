@@ -18,7 +18,19 @@ class UpdateAdminRequest extends FormRequest
         return [
             'name' => ['sometimes', 'string', 'min:2', 'max:100'],
             'email' => ['sometimes', 'email', 'unique:users,email,' . ($admin ? $admin->id : null)],
-            'password' => ['sometimes', 'string', 'min:6'],
+            'password' => [
+                'sometimes',
+                'string',
+                'min:8',
+                'regex:/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/',
+            ],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'password.regex' => 'Password harus mengandung huruf besar, huruf kecil, dan angka.',
         ];
     }
 }

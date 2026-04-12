@@ -11,12 +11,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Skeleton } from '@/components/ui/skeleton';
 import { Search, History, Eye, EyeOff, FileDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { usePermissions } from '@/hooks/usePermissions';
 import { useTransactions, useToggleHideTransaction } from '@/hooks/api/useTransactions';
 import { formatCurrency } from '@/lib/utils';
 import type { Transaction } from '@/types';
 
 const HistoriPembayaranUtang = () => {
   const { toast } = useToast();
+  const { canHideTransactions } = usePermissions();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterHidden, setFilterHidden] = useState<'all' | 'visible' | 'hidden'>('visible');
   const [dateFrom, setDateFrom] = useState('');
@@ -51,11 +53,12 @@ const HistoriPembayaranUtang = () => {
   const hiddenCount = transactions.filter(t => t.isHidden).length;
   const totalNilai = filtered.reduce((s, t) => s + t.paid, 0);
 
-  const handleToggleHide = useCallback(async (id: string) => {
+  const handleToggleHide = useCallback(async (id: string, currentlyHidden: boolean) => {
     setTogglingId(id);
     try {
       await toggleHideMutation.mutateAsync(id);
-      toast({ title: 'Berhasil', description: 'Status transaksi diperbarui' });
+      const message = currentlyHidden ? 'Transaksi ditampilkan kembali' : 'Transaksi disembunyikan';
+      toast({ title: 'Berhasil', description: message });
     } catch {
       toast({ title: 'Error', description: 'Gagal mengubah status transaksi', variant: 'destructive' });
     } finally {
@@ -183,21 +186,23 @@ const HistoriPembayaranUtang = () => {
                      <TableCell className="font-medium max-w-[160px] truncate">{t.supplier || '-'}</TableCell>
                      <TableCell className="text-right font-bold tabular-nums text-primary">{formatCurrency(t.paid)}</TableCell>
                      <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">{t.notes || '-'}</TableCell>
-                     <TableCell>
-                       <div className="flex gap-0.5">
-                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setSelectedTrx(t)}><Eye className="h-3.5 w-3.5" /></Button>
-                         <Button 
-                           variant="ghost" 
-                           size="icon" 
-                           className="h-7 w-7 text-muted-foreground hover:text-foreground" 
-                           title={t.isHidden ? 'Tampilkan' : 'Sembunyikan'}
-                           onClick={() => handleToggleHide(t.id)}
-                           disabled={togglingId === t.id}
-                         >
-                           {t.isHidden ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
-                         </Button>
-                       </div>
-                     </TableCell>
+                      <TableCell>
+                        <div className="flex gap-0.5">
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setSelectedTrx(t)}><Eye className="h-3.5 w-3.5" /></Button>
+                          {canHideTransactions() && (
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-7 w-7 text-muted-foreground hover:text-foreground" 
+                              title={t.isHidden ? 'Tampilkan' : 'Sembunyikan'}
+                              onClick={() => handleToggleHide(t.id, t.isHidden ?? false)}
+                              disabled={togglingId === t.id}
+                            >
+                              {t.isHidden ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
                    </TableRow>
                  ))}
                </TableBody>

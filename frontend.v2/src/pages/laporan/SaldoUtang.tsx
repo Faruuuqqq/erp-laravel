@@ -8,6 +8,15 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableFooter,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { useSaldoUtang } from '@/hooks/api/useInfo';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
@@ -93,54 +102,69 @@ const SaldoUtang = () => {
       </div>
 
       <DataTableContainer>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b bg-muted/40 text-xs text-muted-foreground">
-                {['Kode', 'Nama Supplier', 'Telepon', 'Alamat', 'Total Transaksi', 'Saldo Utang', 'Status'].map(h => (
-                  <th key={h} className="px-4 py-3 text-left font-semibold whitespace-nowrap">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading ? (
-                Array.from({ length: 5 }).map((_, i) => (
-                  <tr key={i}><td colSpan={7} className="px-4 py-2"><Skeleton className="h-8 w-full" /></td></tr>
-                ))
-              ) : filtered.length === 0 ? (
-                <tr><td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">Tidak ada data yang sesuai.</td></tr>
-              ) : (
-                <>
-                  {filtered.map(s => (
-                    <tr key={s.id} className={`border-b transition-colors hover:bg-muted/20 ${s.balance > 0 ? 'bg-destructive/5' : ''}`}>
-                      <td className="px-4 py-3 font-mono text-xs text-primary">{s.code}</td>
-                      <td className="px-4 py-3">
-                        <div className="font-medium">{s.name}</div>
-                        {s.email && <div className="text-xs text-muted-foreground">{s.email}</div>}
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground">{s.phone}</td>
-                      <td className="px-4 py-3 text-muted-foreground max-w-48 truncate text-xs">{s.address}</td>
-                      <td className="px-4 py-3"><CurrencyCell value={s.totalTransactions} /></td>
-                      <td className="px-4 py-3">
-                        {s.balance > 0 ? <CurrencyCell value={s.balance} color="red" /> : <span className="text-success text-xs font-medium">Lunas</span>}
-                      </td>
-                      <td className="px-4 py-3">
-                        {s.balance > 0
-                          ? <Badge variant="destructive" className="text-xs">Ada Utang</Badge>
-                          : <Badge variant="outline" className="text-success border-success text-xs">Lunas</Badge>}
-                      </td>
-                    </tr>
-                  ))}
-                  <tr className="bg-muted/40 font-bold border-t-2">
-                    <td colSpan={5} className="px-4 py-3 text-sm">GRAND TOTAL UTANG</td>
-                    <td className="px-4 py-3"><CurrencyCell value={total} color="red" /></td>
-                    <td />
-                  </tr>
-                </>
-              )}
-            </tbody>
-          </table>
-        </div>
+        {isLoading ? (
+          <div className="p-8 space-y-2">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Skeleton key={i} className="h-8 w-full" />
+            ))}
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="p-12 text-center">
+            <Building2 className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-50" />
+            <p className="text-muted-foreground">
+              Tidak ada data yang sesuai.
+            </p>
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/40">
+                <TableHead>Kode</TableHead>
+                <TableHead>Nama Supplier</TableHead>
+                <TableHead>Telepon</TableHead>
+                <TableHead>Alamat</TableHead>
+                <TableHead>Total Transaksi</TableHead>
+                <TableHead>Saldo Utang</TableHead>
+                <TableHead>Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filtered.map(s => (
+                <TableRow
+                  key={s.id}
+                  className={`transition-colors hover:bg-muted/20 ${s.balance > 0 ? 'bg-destructive/5' : ''}`}
+                >
+                  <TableCell className="font-mono text-xs text-primary">{s.code}</TableCell>
+                  <TableCell>
+                    <div className="font-medium">{s.name}</div>
+                    {s.email && <div className="text-xs text-muted-foreground">{s.email}</div>}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{s.phone}</TableCell>
+                  <TableCell className="text-muted-foreground max-w-48 truncate text-xs">{s.address}</TableCell>
+                  <TableCell><CurrencyCell value={s.totalTransactions} /></TableCell>
+                  <TableCell>
+                    {s.balance > 0 ? <CurrencyCell value={s.balance} color="red" /> : <span className="text-success text-xs font-medium">Lunas</span>}
+                  </TableCell>
+                  <TableCell>
+                    {s.balance > 0
+                      ? <Badge variant="destructive" className="text-xs">Ada Utang</Badge>
+                      : <Badge variant="outline" className="text-success border-success text-xs">Lunas</Badge>}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+
+            <TableFooter>
+              <TableRow className="bg-muted/40">
+                <TableCell colSpan={5} className="font-bold text-sm">
+                  GRAND TOTAL UTANG
+                </TableCell>
+                <TableCell><CurrencyCell value={total} color="red" /></TableCell>
+                <TableCell />
+              </TableRow>
+            </TableFooter>
+          </Table>
+        )}
       </DataTableContainer>
     </MainLayout>
   );

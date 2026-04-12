@@ -142,6 +142,37 @@ const LaporanHarian = () => {
               </tr>
             </tfoot>
           </table>
+
+          ${displayExp.length > 0 ? `
+            <div style="margin-top: 20px; padding-top: 12px; padding-bottom: 12px; border-bottom: 2px solid #333;">
+              <h3 style="margin: 0; font-size: 13px; font-weight: bold;">Daftar Biaya Operasional</h3>
+            </div>
+
+            <table style="width: 100%; border-collapse: collapse;">
+              <thead>
+                <tr style="border-bottom: 2px solid #333;">
+                  <th style="padding: 8px; text-align: left; font-weight: bold;">Kategori</th>
+                  <th style="padding: 8px; text-align: left; font-weight: bold;">Deskripsi</th>
+                  <th style="padding: 8px; text-align: right; font-weight: bold;">Jumlah</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${displayExp.map(e => `
+                  <tr style="border-bottom: 1px solid #ddd;">
+                    <td style="padding: 8px; text-align: left; font-size: 11px;">${e.category}</td>
+                    <td style="padding: 8px; text-align: left; font-size: 11px;">${e.description}</td>
+                    <td style="padding: 8px; text-align: right;">${formatCurrency(e.amount)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+              <tfoot>
+                <tr style="border-top: 2px solid #333; font-weight: bold; background-color: #f5f5f5;">
+                  <td colspan="2" style="padding: 8px; text-align: right;">TOTAL BIAYA:</td>
+                  <td style="padding: 8px; text-align: right;">${formatCurrency(displayExp.reduce((s, e) => s + e.amount, 0))}</td>
+                </tr>
+              </tfoot>
+            </table>
+          ` : ''}
         </div>
       `;
 
@@ -165,7 +196,7 @@ const LaporanHarian = () => {
     } finally {
       setIsExporting(false);
     }
-  }, [selectedDate, summary, displayTx, exportToPdf]);
+  }, [selectedDate, summary, displayTx, displayExp, exportToPdf]);
 
   return (
     <MainLayout title="Laporan Harian" subtitle="Ringkasan transaksi harian">

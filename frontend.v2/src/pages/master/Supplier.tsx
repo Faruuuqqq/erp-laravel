@@ -12,7 +12,7 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
-import { Plus, Search, Pencil, Trash2, Building2, Download } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2, Building2, Download, ArrowUp, ArrowDown } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { StatCard } from '@/components/ui/StatCard';
 import { useToast } from '@/hooks/use-toast';
@@ -30,13 +30,15 @@ const Supplier = () => {
    const { execute: executeRetryable } = useRetryableAction({ maxRetries: 3, delayMs: 1000 });
   const [searchTerm, setSearchTerm] = useState('');
    const [currentPage, setCurrentPage] = useState(1);
+   const [sortBy, setSortBy] = useState<'nama' | 'kota' | 'telepon'>('nama');
+   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
    const [isAddOpen, setIsAddOpen] = useState(false);
    const [editItem, setEditItem] = useState<SupplierType | null>(null);
    const [form, setForm] = useState(BLANK_FORM);
    const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
 
   const debouncedSearch = useDebouncedValue(searchTerm, 300);
-  const { data: suppliersData, isLoading } = useSuppliers({ page: currentPage, search: debouncedSearch || undefined, per_page: 20 });
+  const { data: suppliersData, isLoading } = useSuppliers({ page: currentPage, search: debouncedSearch || undefined, per_page: 20, sort_by: sortBy, sort_direction: sortDirection });
   const createMutation = useCreateSupplier();
   const updateMutation = useUpdateSupplier();
   const deleteMutation = useDeleteSupplier();
@@ -46,6 +48,21 @@ const Supplier = () => {
 
    const withDebt = suppliers.filter(s => Number(s.balance ?? 0) > 0).length;
    const totalUtang = formatCurrency(suppliers.reduce((sum, s) => sum + Number(s.balance ?? 0), 0));
+
+  const toggleSort = (field: 'nama' | 'kota' | 'telepon') => {
+    if (sortBy === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(field);
+      setSortDirection('asc');
+    }
+    setCurrentPage(1);
+  };
+
+  const SortIcon = ({ field }: { field: 'nama' | 'kota' | 'telepon' }) => {
+    if (sortBy !== field) return null;
+    return sortDirection === 'asc' ? <ArrowUp className="h-3 w-3 ml-1" /> : <ArrowDown className="h-3 w-3 ml-1" />;
+  };
 
   const openEdit = useCallback((s: SupplierType) => {
     setEditItem(s);
@@ -122,18 +139,22 @@ const Supplier = () => {
 
       <Card>
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Kode</TableHead>
-                <TableHead>Nama Supplier</TableHead>
-                <TableHead>Telepon</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>No. Rekening</TableHead>
-                <TableHead className="text-right">Saldo Utang</TableHead>
-                {(canEdit('suppliers') || canDelete('suppliers')) && <TableHead className="text-center">Aksi</TableHead>}
-              </TableRow>
-            </TableHeader>
+           <Table>
+             <TableHeader>
+               <TableRow>
+                 <TableHead>Kode</TableHead>
+                 <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => toggleSort('nama')}>
+                   <div className="flex items-center">Nama Supplier <SortIcon field="nama" /></div>
+                 </TableHead>
+                 <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => toggleSort('telepon')}>
+                   <div className="flex items-center">Telepon <SortIcon field="telepon" /></div>
+                 </TableHead>
+                 <TableHead>Email</TableHead>
+                 <TableHead>No. Rekening</TableHead>
+                 <TableHead className="text-right">Saldo Utang</TableHead>
+                 {(canEdit('suppliers') || canDelete('suppliers')) && <TableHead className="text-center">Aksi</TableHead>}
+               </TableRow>
+             </TableHeader>
             <TableBody>
               {isLoading ? (
                 <TableRow><TableCell colSpan={(canEdit('suppliers') || canDelete('suppliers')) ? 7 : 6} className="py-10 text-center text-muted-foreground">Memuat data...</TableCell></TableRow>

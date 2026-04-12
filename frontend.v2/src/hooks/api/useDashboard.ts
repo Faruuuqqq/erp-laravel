@@ -63,3 +63,17 @@ export const useCategoryDistribution = () => {
     queryFn: () => api.get<{ data: CategoryDistribution[] }>('/dashboard/category-distribution'),
   });
 };
+
+export interface ExpenseStats {
+  totalExpensesToday: number;
+  totalExpensesMonth: number;
+  topExpenseCategory?: string;
+  topExpenseCategoryAmount?: number;
+}
+
+export const useExpensesStats = (range: string = 'today') => {
+  return useQuery({
+    queryKey: ['dashboard', 'expenses-stats', range],
+    queryFn: () => api.get<ExpenseStats>(`/dashboard/expenses-stats?range=${range}`),
+  });
+};

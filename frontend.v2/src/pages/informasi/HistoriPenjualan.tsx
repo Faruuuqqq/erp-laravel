@@ -11,16 +11,18 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Search, History, Eye, EyeOff, FileDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, History, Eye, EyeOff, FileDown, ChevronLeft, ChevronRight, ArrowUp, ArrowDown } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useTransactions, useToggleHideTransaction } from '@/hooks/api/useTransactions';
 import { useCustomers } from '@/hooks/api/useCustomers';
+import { usePermissions } from '@/hooks/usePermissions';
 import { useLazyPdfExport } from '@/hooks/useLazyPdfExport';
 import { formatCurrency } from '@/lib/utils';
 import type { Transaction } from '@/types';
 
 const HistoriPenjualan = () => {
   const { toast } = useToast();
+  const { canHideTransactions } = usePermissions();
   const { exportToPdf } = useLazyPdfExport();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCustomer, setFilterCustomer] = useState('all');
@@ -29,6 +31,8 @@ const HistoriPenjualan = () => {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [page, setPage] = useState(1);
+  const [sortBy, setSortBy] = useState<'tanggal' | 'no_invoice' | 'total'>('tanggal');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [selectedTrx, setSelectedTrx] = useState<Transaction | null>(null);
   const [showLunasOnly, setShowLunasOnly] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
@@ -45,6 +49,8 @@ const HistoriPenjualan = () => {
     to: dateTo || undefined,
     page,
     perPage: 15,
+    sort_by: sortBy,
+    sort_direction: sortDirection,
   });
   const { data: kreditData, isLoading: l2 } = useTransactions({
     type: 'penjualan_kredit',
@@ -53,6 +59,8 @@ const HistoriPenjualan = () => {
     to: dateTo || undefined,
     page,
     perPage: 15,
+    sort_by: sortBy,
+    sort_direction: sortDirection,
   });
 
   const { data: customersData } = useCustomers({ per_page: 200 });
@@ -60,7 +68,7 @@ const HistoriPenjualan = () => {
 
   const tunai = filterType !== 'kredit' ? (tunaiData?.data ?? []) : [];
   const kredit = filterType !== 'tunai' ? (kreditData?.data ?? []) : [];
-  const allTrx = [...tunai, ...kredit].sort((a, b) => b.date.localeCompare(a.date));
+  const allTrx = [...tunai, ...kredit];
   const isLoading = l1 || l2;
 
   const filtered = allTrx
@@ -76,11 +84,28 @@ const HistoriPenjualan = () => {
   const totalNilai = filtered.reduce((s, t) => s + t.total, 0);
   const totalKredit = allTrx.filter(t => (t.remaining ?? 0) > 0).length;
 
-  const handleToggleHide = useCallback(async (id: string) => {
+  const toggleSort = (field: 'tanggal' | 'no_invoice' | 'total') => {
+    if (sortBy === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const SortIcon = ({ field }: { field: 'tanggal' | 'no_invoice' | 'total' }) => {
+    if (sortBy !== field) return null;
+    return sortDirection === 'asc' ? <ArrowUp className="h-3 w-3 ml-1" /> : <ArrowDown className="h-3 w-3 ml-1" />;
+  };
+
+  const handleToggleHide = useCallback(async (id: string, currentlyHidden: boolean) => {
     setTogglingId(id);
     try {
       await toggleHideMutation.mutateAsync(id);
-      toast({ title: 'Berhasil', description: 'Status transaksi diperbarui' });
+      toast({ 
+        title: 'Berhasil', 
+        description: currentlyHidden ? 'Transaksi ditampilkan kembali' : 'Transaksi disembunyikan' 
+      });
     } catch {
       toast({ title: 'Error', description: 'Gagal mengubah status transaksi', variant: 'destructive' });
     } finally {
@@ -214,21 +239,27 @@ const HistoriPenjualan = () => {
             </Tabs>
           </div>
           <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/50">
-                  <TableHead className="w-8 text-xs">#</TableHead>
-                  <TableHead className="text-xs">No. Faktur</TableHead>
-                  <TableHead className="text-xs">Tanggal</TableHead>
-                  <TableHead className="text-xs">Customer</TableHead>
-                  <TableHead className="text-xs">Tipe</TableHead>
-                  <TableHead className="text-xs text-right">Total</TableHead>
-                  <TableHead className="text-xs text-right">Terbayar</TableHead>
-                  <TableHead className="text-xs text-right">Sisa</TableHead>
-                  <TableHead className="text-xs">Status</TableHead>
-                  <TableHead className="w-16" />
-                </TableRow>
-              </TableHeader>
+             <Table>
+               <TableHeader>
+                 <TableRow className="bg-muted/50">
+                   <TableHead className="w-8 text-xs">#</TableHead>
+                   <TableHead className="text-xs cursor-pointer hover:bg-muted/50" onClick={() => toggleSort('no_invoice')}>
+                     <div className="flex items-center">No. Faktur <SortIcon field="no_invoice" /></div>
+                   </TableHead>
+                   <TableHead className="text-xs cursor-pointer hover:bg-muted/50" onClick={() => toggleSort('tanggal')}>
+                     <div className="flex items-center">Tanggal <SortIcon field="tanggal" /></div>
+                   </TableHead>
+                   <TableHead className="text-xs">Customer</TableHead>
+                   <TableHead className="text-xs">Tipe</TableHead>
+                   <TableHead className="text-xs text-right cursor-pointer hover:bg-muted/50" onClick={() => toggleSort('total')}>
+                     <div className="flex items-center justify-end">Total <SortIcon field="total" /></div>
+                   </TableHead>
+                   <TableHead className="text-xs text-right">Terbayar</TableHead>
+                   <TableHead className="text-xs text-right">Sisa</TableHead>
+                   <TableHead className="text-xs">Status</TableHead>
+                   <TableHead className="w-16" />
+                 </TableRow>
+               </TableHeader>
               <TableBody>
                 {isLoading ? (
                   Array.from({ length: 5 }).map((_, i) => <TableRow key={i}><TableCell colSpan={10}><Skeleton className="h-8 w-full" /></TableCell></TableRow>)
@@ -257,21 +288,23 @@ const HistoriPenjualan = () => {
                           ? <Badge variant="default" className="text-xs">Lunas</Badge>
                           : <Badge variant="destructive" className="text-xs">Piutang</Badge>}
                       </TableCell>
-                      <TableCell>
-                        <div className="flex gap-0.5">
-                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setSelectedTrx(t)}><Eye className="h-3.5 w-3.5" /></Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                            title={t.isHidden ? 'Tampilkan' : 'Sembunyikan'}
-                            onClick={() => handleToggleHide(t.id)}
-                            disabled={togglingId === t.id}
-                          >
-                            {t.isHidden ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
-                          </Button>
-                        </div>
-                      </TableCell>
+                       <TableCell>
+                         <div className="flex gap-0.5">
+                           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setSelectedTrx(t)}><Eye className="h-3.5 w-3.5" /></Button>
+                           {canHideTransactions() && (
+                             <Button
+                               variant="ghost"
+                               size="icon"
+                               className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                               title={t.isHidden ? 'Tampilkan' : 'Sembunyikan'}
+                               onClick={() => handleToggleHide(t.id, t.isHidden ?? false)}
+                               disabled={togglingId === t.id}
+                             >
+                               {t.isHidden ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                             </Button>
+                           )}
+                         </div>
+                       </TableCell>
                     </TableRow>
                   );
                 })}

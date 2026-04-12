@@ -4,13 +4,14 @@ import { StatCard } from '@/components/ui/StatCard';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   TrendingUp, TrendingDown, Package, Users, ShoppingCart,
-  Wallet, AlertTriangle, BarChart3, ArrowRight, Clock, RefreshCw, X,
+  Wallet, AlertTriangle, BarChart3, ArrowRight, Clock, RefreshCw, X, DollarSign,
 } from 'lucide-react';
 import {
   useDashboardStats,
   useRecentTransactions,
   useLowStock,
   useSalesTrend,
+  useExpensesStats,
 } from '@/hooks/api/useDashboard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -34,6 +35,10 @@ interface DashboardStats {
   totalTransaksiHariIni?: number;
   trendPenjualan?: number;
   trendPembelian?: number;
+  totalExpensesToday?: number;
+  totalExpensesMonth?: number;
+  topExpenseCategory?: string;
+  topExpenseCategoryAmount?: number;
 }
 
 interface LowStockItem {
@@ -76,6 +81,7 @@ const DASHBOARD_ROUTES = {
   DELIVERY: '/transaksi/surat-jalan',
   LOW_STOCK: '/laporan/saldo-stok',
   PRODUCTS: '/produk',
+  EXPENSES: '/informasi/biaya-jasa',
 } as const;
 
 // --- Utility functions -------------------------------------------------------
@@ -236,12 +242,18 @@ const Dashboard = () => {
     isLoading: trendLoading,
     isError: trendError,
   } = useSalesTrend(trendRange);
+  const {
+    data: expensesData,
+    isLoading: expensesLoading,
+    isError: expensesError,
+  } = useExpensesStats('today');
 
   // --- Type-safe data extraction -----------------------------------------------
   const stats: DashboardStats = (extractData(statsData, {}) as DashboardStats) ?? {};
   const recentTx: Transaction[] = (extractData(recentData, []) as Transaction[]) ?? [];
   const lowStock: LowStockItem[] = (extractData(lowStockData, []) as LowStockItem[]) ?? [];
   const chartData: SalesTrendItem[] = transformChartData(extractData(trendData, []) as unknown[]);
+  const expensesStats = (extractData(expensesData, {}) as Record<string, unknown>) ?? {};
 
   // --- Callbacks -------------------------------------------------------
   const handleRefreshAll = useCallback(() => {
@@ -363,6 +375,40 @@ const Dashboard = () => {
                 icon={<BarChart3 className="h-5 w-5" />}
                 color="primary"
                 onClick={() => navigate(DASHBOARD_ROUTES.LOW_STOCK)}
+              />
+            </>
+          )}
+        </div>
+      ) : null}
+
+      {/* Row 3 Expense Stat Cards — owner only */}
+      {isOwner ? (
+        <div className="mb-5 grid gap-4 sm:grid-cols-3">
+          {expensesLoading ? (
+            Array.from({ length: 3 }).map((_, i) => <StatCardSkeletonSmall key={i} />)
+          ) : (
+            <>
+              <StatCard
+                title="Pengeluaran Hari Ini"
+                value={(expensesStats as { totalExpensesToday?: number }).totalExpensesToday ?? 0}
+                icon={<DollarSign className="h-5 w-5" />}
+                color="destructive"
+                onClick={() => navigate(DASHBOARD_ROUTES.EXPENSES)}
+              />
+              <StatCard
+                title="Pengeluaran Bulan Ini"
+                value={(expensesStats as { totalExpensesMonth?: number }).totalExpensesMonth ?? 0}
+                icon={<DollarSign className="h-5 w-5" />}
+                color="warning"
+                onClick={() => navigate(DASHBOARD_ROUTES.EXPENSES)}
+              />
+              <StatCard
+                title="Kategori Terbesar"
+                value={(expensesStats as { topExpenseCategoryAmount?: number }).topExpenseCategoryAmount ?? 0}
+                subValue={(expensesStats as { topExpenseCategory?: string }).topExpenseCategory ?? '-'}
+                icon={<BarChart3 className="h-5 w-5" />}
+                color="primary"
+                onClick={() => navigate(DASHBOARD_ROUTES.EXPENSES)}
               />
             </>
           )}

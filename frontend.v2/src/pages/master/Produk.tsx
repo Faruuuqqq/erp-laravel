@@ -15,7 +15,7 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
-import { Plus, Search, Pencil, Trash2, Package, AlertTriangle, Download } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2, Package, AlertTriangle, Download, ArrowUp, ArrowDown } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { StatCard } from '@/components/ui/StatCard';
 import { Progress } from '@/components/ui/progress';
@@ -31,17 +31,19 @@ import type { Product } from '@/types';
 const BLANK_FORM = { name: '', categoryId: '', buyPrice: '', sellPrice: '', stock: '', minimumStock: '', unit: '', warehouseId: '' };
 
 const Produk = () => {
-    const { canCreate, canEdit, canDelete } = usePermissions();
-    const { toast } = useToast();
-    const { execute: executeRetryable } = useRetryableAction({ maxRetries: 3, delayMs: 1000 });
-   const [searchTerm, setSearchTerm] = useState('');
-   const [currentPage, setCurrentPage] = useState(1);
-   const [categoryFilter, setCategoryFilter] = useState<number | undefined>();
-   const [warehouseFilter, setWarehouseFilter] = useState<number | undefined>();
-   const [isAddOpen, setIsAddOpen] = useState(false);
-   const [editItem, setEditItem] = useState<Product | null>(null);
-   const [form, setForm] = useState(BLANK_FORM);
-   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
+     const { canCreate, canEdit, canDelete } = usePermissions();
+     const { toast } = useToast();
+     const { execute: executeRetryable } = useRetryableAction({ maxRetries: 3, delayMs: 1000 });
+    const [searchTerm, setSearchTerm] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const [sortBy, setSortBy] = useState<'nama' | 'kategori' | 'harga_jual' | 'stok_minimum'>('nama');
+    const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+    const [categoryFilter, setCategoryFilter] = useState<number | undefined>();
+    const [warehouseFilter, setWarehouseFilter] = useState<number | undefined>();
+    const [isAddOpen, setIsAddOpen] = useState(false);
+    const [editItem, setEditItem] = useState<Product | null>(null);
+    const [form, setForm] = useState(BLANK_FORM);
+    const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
 
   const debouncedSearch = useDebouncedValue(searchTerm, 300);
   const { data: productsData, isLoading } = useProducts({ 
@@ -49,7 +51,9 @@ const Produk = () => {
     search: debouncedSearch || undefined, 
     per_page: 20, 
     category_id: categoryFilter, 
-    warehouse_id: warehouseFilter 
+    warehouse_id: warehouseFilter,
+    sort_by: sortBy,
+    sort_direction: sortDirection,
   });
   const { data: categoriesData } = useCategories();
   const { data: warehousesData } = useWarehouses({ per_page: 1000 });
@@ -71,6 +75,21 @@ const Produk = () => {
 
   const totalNilai = products.reduce((s, p) => s + Number(p.buyPrice ?? 0) * Number(p.stock ?? 0), 0);
   const lowStock = products.filter(p => Number(p.stock) <= Number(p.minimumStock ?? 0)).length;
+
+  const toggleSort = (field: 'nama' | 'kategori' | 'harga_jual' | 'stok_minimum') => {
+    if (sortBy === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(field);
+      setSortDirection('asc');
+    }
+    setCurrentPage(1);
+  };
+
+  const SortIcon = ({ field }: { field: 'nama' | 'kategori' | 'harga_jual' | 'stok_minimum' }) => {
+    if (sortBy !== field) return null;
+    return sortDirection === 'asc' ? <ArrowUp className="h-3 w-3 ml-1" /> : <ArrowDown className="h-3 w-3 ml-1" />;
+  };
 
   const openEdit = useCallback((p: Product) => {
     setEditItem(p);
@@ -197,19 +216,27 @@ const Produk = () => {
       <Card>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Kode</TableHead>
-                  <TableHead>Nama Produk</TableHead>
-                  <TableHead>Kategori</TableHead>
-                  <TableHead className="text-right">Harga Beli</TableHead>
-                  <TableHead className="text-right">Harga Jual</TableHead>
-                  <TableHead>Stok / Level</TableHead>
-                  <TableHead>Gudang</TableHead>
-                  {canEdit('products') || canDelete('products') ? <TableHead className="text-center">Aksi</TableHead> : null}
-                </TableRow>
-              </TableHeader>
+             <Table>
+               <TableHeader>
+                 <TableRow>
+                   <TableHead>Kode</TableHead>
+                   <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => toggleSort('nama')}>
+                     <div className="flex items-center">Nama Produk <SortIcon field="nama" /></div>
+                   </TableHead>
+                   <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => toggleSort('kategori')}>
+                     <div className="flex items-center">Kategori <SortIcon field="kategori" /></div>
+                   </TableHead>
+                   <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => toggleSort('harga_jual')}>
+                     <div className="flex items-center justify-end">Harga Jual <SortIcon field="harga_jual" /></div>
+                   </TableHead>
+                   <TableHead className="text-right">Harga Beli</TableHead>
+                   <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => toggleSort('stok_minimum')}>
+                     <div className="flex items-center">Stok / Level <SortIcon field="stok_minimum" /></div>
+                   </TableHead>
+                   <TableHead>Gudang</TableHead>
+                   {canEdit('products') || canDelete('products') ? <TableHead className="text-center">Aksi</TableHead> : null}
+                 </TableRow>
+               </TableHeader>
                <TableBody>
                  {isLoading ? (
                    <TableRow><TableCell colSpan={(canEdit('products') || canDelete('products')) ? 8 : 7} className="py-10 text-center text-muted-foreground">Memuat data...</TableCell></TableRow>
