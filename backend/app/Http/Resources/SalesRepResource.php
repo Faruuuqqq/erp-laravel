@@ -14,6 +14,7 @@ class SalesRepResource extends JsonResource
             'phone'      => $this->phone ?? '',
             'email'      => $this->email ?? '',
             'address'    => $this->address ?? '',
+            'area'       => $this->area ?? '',
             'status'     => $this->status,
             'totalSales' => (float) $this->total_sales,
             'createdAt'  => $this->created_at?->toISOString(),

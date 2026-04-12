@@ -21,8 +21,10 @@ class SupplierController extends Controller
         $data = $request->validate([
             'name'    => ['required', 'string', 'min:2', 'max:100'],
             'phone'   => ['nullable', 'string', 'max:20'],
+            'phone2'  => ['nullable', 'string', 'max:20'],
             'email'   => ['nullable', 'email'],
             'address' => ['nullable', 'string'],
+            'city'    => ['nullable', 'string', 'max:50'],
             'no_rekening' => ['nullable', 'string', 'max:50'],
         ], [
             'name.required' => 'Nama supplier wajib diisi.',
@@ -43,8 +45,10 @@ class SupplierController extends Controller
         $data = $request->validate([
             'name'    => ['sometimes', 'required', 'string', 'min:2', 'max:100'],
             'phone'   => ['nullable', 'string', 'max:20'],
+            'phone2'  => ['nullable', 'string', 'max:20'],
             'email'   => ['nullable', 'email'],
             'address' => ['nullable', 'string'],
+            'city'    => ['nullable', 'string', 'max:50'],
             'no_rekening' => ['nullable', 'string', 'max:50'],
         ]);
         $supplier->update($data);

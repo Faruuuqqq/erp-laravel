@@ -11,5 +11,5 @@ class SalesRep extends Model
 
     protected $table = 'sales_reps';
 
-    protected $fillable = ['name', 'phone', 'email', 'address', 'status'];
+    protected $fillable = ['name', 'phone', 'email', 'address', 'area', 'status'];
 }
