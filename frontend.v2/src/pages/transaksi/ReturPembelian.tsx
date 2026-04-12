@@ -1,5 +1,4 @@
 import { useState, useCallback } from 'react';
-import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,7 +11,7 @@ import {
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Plus, Trash2, RotateCcw, Eye, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Plus, Trash2, RotateCcw, Eye, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useProducts } from '@/hooks/api/useProducts';
@@ -20,7 +19,10 @@ import { useSuppliers } from '@/hooks/api/useSuppliers';
 import { useTransactions, useCreateTransaction } from '@/hooks/api/useTransactions';
 import { DraftPreviewDialog } from '@/components/dialogs/DraftPreviewDialog';
 import { PrintPreviewDialog } from '@/components/dialogs/PrintPreviewDialog';
+import { SuccessScreen } from '@/components/layout/SuccessScreen';
 import { ReturPembelianPrint } from '@/components/print/ReturPembelianPrint';
+import { MainLayout } from '@/components/layout/MainLayout';
+import { formatCurrency } from '@/lib/utils';
 import { formatCurrency } from '@/lib/utils';
 import type { Transaction } from '@/types';
 
@@ -130,31 +132,21 @@ const ReturPembelian = () => {
      setSelectedFakturId(''); setSelectedSupplier(''); setAlasan(''); setCatatan(''); setIsDraftPreviewOpen(false);
    }, []);
 
-  if (saved) {
-    return (
-      <MainLayout title="Retur Pembelian" subtitle="Retur berhasil diproses">
-        <div className="flex flex-col items-center justify-center py-16 gap-6">
-          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-success/10">
-            <CheckCircle2 className="h-10 w-10 text-success" />
-          </div>
-          <div className="text-center">
-            <h2 className="text-2xl font-bold">Retur Berhasil Diproses</h2>
-            <p className="text-muted-foreground mt-1">No. Retur: <span className="font-mono font-semibold text-primary">{savedInvoice}</span></p>
-            <p className="text-3xl font-bold text-destructive mt-3">{formatCurrency(totalNilai)}</p>
-            <p className="text-sm text-muted-foreground">Nilai retur dikurangi dari utang</p>
-          </div>
-           <div className="flex gap-3">
-             {canPrint('transactions.return_purchase') && savedTransaction && (
-               <Button variant="outline" onClick={() => setIsPreviewOpen(true)}>
-                 <Eye className="mr-2 h-4 w-4" />Preview & Cetak
-               </Button>
-             )}
-             <Button onClick={reset}>Retur Baru</Button>
-           </div>
-        </div>
-      </MainLayout>
-    );
-  }
+   if (saved) {
+     return (
+       <SuccessScreen
+         title="Retur Berhasil Diproses"
+         invoiceNumber={savedInvoice}
+         invoiceLabel="No. Retur"
+         total={totalNilai}
+         totalLabel="Nilai retur dikurangi dari utang"
+         iconColor="success"
+         onPrint={() => setIsPreviewOpen(true)}
+         canPrint={canPrint('transactions.return_purchase') && !!savedTransaction}
+         onReset={reset}
+       />
+     );
+   }
 
   return (
     <MainLayout title="Retur Pembelian" subtitle="Buat surat retur barang ke supplier">

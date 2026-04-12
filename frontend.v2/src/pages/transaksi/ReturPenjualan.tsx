@@ -1,5 +1,4 @@
 import { useState, useCallback, useMemo } from 'react';
-import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,7 +11,7 @@ import {
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Plus, Trash2, RotateCcw, CheckCircle2, AlertTriangle, Eye } from 'lucide-react';
+import { Plus, Trash2, RotateCcw, AlertTriangle, Eye } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -22,7 +21,9 @@ import { useProducts } from '@/hooks/api/useProducts';
 import { useCreateTransaction } from '@/hooks/api/useTransactions';
 import { DraftPreviewDialog } from '@/components/dialogs/DraftPreviewDialog';
 import { PrintPreviewDialog } from '@/components/dialogs/PrintPreviewDialog';
+import { SuccessScreen } from '@/components/layout/SuccessScreen';
 import { ReturPenjualanPrint } from '@/components/print/ReturPenjualanPrint';
+import { MainLayout } from '@/components/layout/MainLayout';
 import type { Transaction } from '@/types';
 
 interface ReturItem { productId: string; nama: string; qty: number; harga: number; satuan: string; subtotal: number; }
@@ -102,31 +103,21 @@ const ReturPenjualan = () => {
     setConfirmOpen(true);
   }, [items.length, alasan, metodeKembalian, toast]);
 
-  if (saved) {
-    return (
-      <MainLayout title="Retur Penjualan" subtitle="Retur berhasil diproses">
-        <div className="flex flex-col items-center justify-center py-16 gap-6">
-          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-warning/10">
-            <CheckCircle2 className="h-10 w-10 text-warning" />
-          </div>
-          <div className="text-center">
-            <h2 className="text-2xl font-bold">Retur Penjualan Diproses</h2>
-            <p className="text-muted-foreground mt-1">No. Retur: <span className="font-mono font-semibold text-primary">{noRetur}</span></p>
-            <p className="text-3xl font-bold text-warning mt-3">{formatCurrency(totalNilai)}</p>
-            <p className="text-sm text-muted-foreground">Nilai retur - metode: {metodeKembalian}</p>
-          </div>
-           <div className="flex gap-3">
-             {savedTrx && (
-               <Button variant="outline" onClick={() => setIsPreviewOpen(true)}>
-                 <Eye className="mr-2 h-4 w-4" />Preview & Cetak
-               </Button>
-             )}
-             <Button onClick={() => { setItems([]); setSaved(false); setSavedTrx(null); setSelectedFaktur(''); setSelectedCustomer(''); setAlasan(''); setMetodeKembalian(''); setCatatan(''); }}>Retur Baru</Button>
-           </div>
-        </div>
-      </MainLayout>
-    );
-  }
+   if (saved) {
+     return (
+       <SuccessScreen
+         title="Retur Penjualan Diproses"
+         invoiceNumber={noRetur}
+         invoiceLabel="No. Retur"
+         total={totalNilai}
+         totalLabel={`Nilai retur - metode: ${metodeKembalian}`}
+         iconColor="warning"
+         onPrint={() => setIsPreviewOpen(true)}
+         canPrint={!!savedTrx}
+         onReset={() => { setItems([]); setSaved(false); setSavedTrx(null); setSelectedFaktur(''); setSelectedCustomer(''); setAlasan(''); setMetodeKembalian(''); setCatatan(''); }}
+       />
+     );
+   }
 
   return (
     <MainLayout title="Retur Penjualan" subtitle="Terima retur barang dari customer">
