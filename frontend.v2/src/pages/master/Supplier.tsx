@@ -167,34 +167,36 @@ const Supplier = () => {
         <CardContent className="p-0">
            <Table>
              <TableHeader>
-               <TableRow>
-                 <TableHead>Kode</TableHead>
-                 <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => toggleSort('nama')}>
-                   <div className="flex items-center">Nama Supplier <SortIcon field="nama" /></div>
-                 </TableHead>
-                 <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => toggleSort('telepon')}>
-                   <div className="flex items-center">Telepon <SortIcon field="telepon" /></div>
-                 </TableHead>
-                 <TableHead>Email</TableHead>
-                 <TableHead>No. Rekening</TableHead>
-                 <TableHead className="text-right">Saldo Utang</TableHead>
-                 {(canEdit('suppliers') || canDelete('suppliers')) && <TableHead className="text-center">Aksi</TableHead>}
-               </TableRow>
+                <TableRow>
+                  <TableHead>Kode</TableHead>
+                  <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => toggleSort('nama')}>
+                    <div className="flex items-center">Nama Supplier <SortIcon field="nama" /></div>
+                  </TableHead>
+                  <TableHead>Kota</TableHead>
+                  <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => toggleSort('telepon')}>
+                    <div className="flex items-center">Telepon <SortIcon field="telepon" /></div>
+                  </TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>No. Rekening</TableHead>
+                  <TableHead className="text-right">Saldo Utang</TableHead>
+                  {(canEdit('suppliers') || canDelete('suppliers')) && <TableHead className="text-center">Aksi</TableHead>}
+                </TableRow>
              </TableHeader>
             <TableBody>
-              {isLoading ? (
-                <TableRow><TableCell colSpan={(canEdit('suppliers') || canDelete('suppliers')) ? 7 : 6} className="py-10 text-center text-muted-foreground">Memuat data...</TableCell></TableRow>
-              ) : suppliers.length === 0 ? (
-                <TableRow><TableCell colSpan={(canEdit('suppliers') || canDelete('suppliers')) ? 7 : 6} className="py-10 text-center text-muted-foreground">Tidak ada data supplier.</TableCell></TableRow>
+               {isLoading ? (
+                 <TableRow><TableCell colSpan={(canEdit('suppliers') || canDelete('suppliers')) ? 8 : 7} className="py-10 text-center text-muted-foreground">Memuat data...</TableCell></TableRow>
+               ) : suppliers.length === 0 ? (
+                 <TableRow><TableCell colSpan={(canEdit('suppliers') || canDelete('suppliers')) ? 8 : 7} className="py-10 text-center text-muted-foreground">Tidak ada data supplier.</TableCell></TableRow>
               ) : suppliers.map(s => (
                 <TableRow key={s.id}>
                   <TableCell className="font-mono text-xs text-primary">{s.code}</TableCell>
-                  <TableCell>
-                    <div className="font-medium">{s.name}</div>
-                    <div className="text-xs text-muted-foreground truncate max-w-48">{s.address}</div>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{s.phone ?? '—'}</TableCell>
-                  <TableCell className="text-muted-foreground text-xs">{s.email ?? '—'}</TableCell>
+                   <TableCell>
+                     <div className="font-medium">{s.name}</div>
+                     <div className="text-xs text-muted-foreground truncate max-w-48">{s.address}</div>
+                   </TableCell>
+                   <TableCell className="text-muted-foreground">{s.city ?? '—'}</TableCell>
+                   <TableCell className="text-muted-foreground">{s.phone ?? '—'}</TableCell>
+                   <TableCell className="text-muted-foreground text-xs">{s.email ?? '—'}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{s.noRekening ?? '—'}</TableCell>
                   <TableCell className="text-right">
                     {Number(s.balance ?? 0) > 0
