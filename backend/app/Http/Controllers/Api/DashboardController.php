@@ -7,11 +7,14 @@ use App\Http\Resources\ProductResource;
 use App\Http\Resources\TransactionResource;
 use App\Models\Product;
 use App\Models\Transaction;
+use App\Models\TransactionDetail;
 use App\Models\Customer;
 use App\Models\Supplier;
+use App\Models\Expense;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
 {
@@ -256,6 +259,110 @@ class DashboardController extends Controller
 
         return response()->json([
             'data' => $chartData,
+        ]);
+    }
+
+    /**
+     * GET /api/dashboard/expenses-stats?range=today|week|month
+     * Statistik pengeluaran untuk owner: total hari ini, total bulan, kategori top.
+     */
+    public function expensesStats(Request $request): JsonResponse
+    {
+        $range = $request->get('range', 'today');
+        $dateRange = $this->getDateRange($range);
+        $start = $dateRange['start'];
+        $end = $dateRange['end'];
+
+        // Total expenses for period
+        $totalExpenses = Expense::whereBetween('date', [$start, $end])
+            ->sum('amount');
+
+        // Total expenses for current month (regardless of range param)
+        $monthStart = Carbon::today()->startOfMonth();
+        $monthEnd = Carbon::today()->endOfMonth();
+        $totalExpensesMonth = Expense::whereBetween('date', [$monthStart, $monthEnd])
+            ->sum('amount');
+
+        // Top expense category
+        $topExpenseCategory = Expense::whereBetween('date', [$start, $end])
+            ->selectRaw('category, SUM(amount) as total_amount')
+            ->groupBy('category')
+            ->orderByDesc('total_amount')
+            ->first();
+
+        return response()->json([
+            'data' => [
+                'totalExpensesToday' => (float) $totalExpenses,
+                'totalExpensesMonth' => (float) $totalExpensesMonth,
+                'topExpenseCategory' => $topExpenseCategory?->category ?? null,
+                'topExpenseCategoryAmount' => $topExpenseCategory ? (float) $topExpenseCategory->total_amount : null,
+            ],
+        ]);
+    }
+
+    /**
+     * GET /api/dashboard/top-products?range=week|month
+     * Top 10 produk berdasarkan jumlah terjual.
+     */
+    public function topProducts(Request $request): JsonResponse
+    {
+        $range = $request->get('range', 'week');
+        $dateRange = $this->getDateRange($range);
+        $start = $dateRange['start'];
+        $end = $dateRange['end'];
+
+        $topProducts = TransactionDetail::join('products', 'transaction_details.product_id', '=', 'products.id')
+            ->join('transactions', 'transaction_details.transaction_id', '=', 'transactions.id')
+            ->whereHas('transaction', function ($query) use ($start, $end) {
+                $query->whereBetween('date', [$start, $end])->sales();
+            })
+            ->join('categories', 'products.category_id', '=', 'categories.id', 'left')
+            ->selectRaw('
+                products.id,
+                products.name,
+                COALESCE(categories.name, "Uncategorized") as category,
+                SUM(transaction_details.quantity) as total_jumlah,
+                SUM(transaction_details.quantity * transaction_details.price) as total_nilai
+            ')
+            ->groupBy('products.id', 'products.name', 'categories.name')
+            ->orderByDesc('total_jumlah')
+            ->limit(10)
+            ->get()
+            ->map(function ($item) {
+                return [
+                    'id' => (string) $item->id,
+                    'name' => $item->name,
+                    'category' => $item->category,
+                    'total_jumlah' => (int) $item->total_jumlah,
+                    'total_nilai' => (float) $item->total_nilai,
+                ];
+            });
+
+        return response()->json([
+            'data' => $topProducts,
+        ]);
+    }
+
+    /**
+     * GET /api/dashboard/category-distribution
+     * Distribusi kategori produk berdasarkan jumlah terjual.
+     */
+    public function categoryDistribution(): JsonResponse
+    {
+        $categories = Product::join('categories', 'products.category_id', '=', 'categories.id', 'left')
+            ->selectRaw('COALESCE(categories.name, "Uncategorized") as category, COUNT(products.id) as count')
+            ->groupBy('categories.name')
+            ->orderByDesc('count')
+            ->get()
+            ->map(function ($item) {
+                return [
+                    'category' => $item->category,
+                    'count' => (int) $item->count,
+                ];
+            });
+
+        return response()->json([
+            'data' => $categories,
         ]);
     }
 }

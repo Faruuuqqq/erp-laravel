@@ -12,6 +12,11 @@ import {
   useLowStock,
   useSalesTrend,
   useExpensesStats,
+  useFinancialSummary,
+  type FinancialSummary,
+  type SalesTrendItem,
+  type LowStockItem,
+  type ExpenseStats,
 } from '@/hooks/api/useDashboard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -21,43 +26,7 @@ import { StatusBadge, CurrencyCell } from '@/components/ui/DataComponents';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { useNavigate } from 'react-router-dom';
 import { formatCurrency } from '@/lib/utils';
-import type { Transaction } from '@/types';
-
-// --- Type helpers -------------------------------------------------------
-interface DashboardStats {
-  penjualanHariIni?: number;
-  pembelianHariIni?: number;
-  totalPiutang?: number;
-  totalUtang?: number;
-  kasHariIni?: number;
-  produkStokRendah?: number;
-  totalNilaiStok?: number;
-  totalTransaksiHariIni?: number;
-  trendPenjualan?: number;
-  trendPembelian?: number;
-  totalExpensesToday?: number;
-  totalExpensesMonth?: number;
-  topExpenseCategory?: string;
-  topExpenseCategoryAmount?: number;
-}
-
-interface LowStockItem {
-  id: string;
-  name: string;
-  stock: number;
-  minimumStock?: number;
-  unit?: string;
-}
-
-interface SalesTrendItem {
-  hari?: string;
-  day?: string;
-  date?: string;
-  masuk?: number;
-  penjualan?: number;
-  keluar?: number;
-  pembelian?: number;
-}
+import type { Transaction, DashboardStats } from '@/types';
 
 // --- Constants -------------------------------------------------------
 const TIPE_LABEL: Record<string, string> = {
@@ -86,40 +55,14 @@ const DASHBOARD_ROUTES = {
 
 // --- Utility functions -------------------------------------------------------
 /**
- * Type-safe data extraction with validation
+ * Type-safe data extraction from API response
  */
-function extractData<T>(response: unknown, fallback: T | T[]): T | T[] {
-  if (
-    response &&
-    typeof response === 'object' &&
-    'data' in response
-  ) {
+function extractData<T>(response: unknown, fallback: T): T {
+  if (response && typeof response === 'object' && 'data' in response) {
     const data = (response as { data?: unknown }).data;
-    if (Array.isArray(data)) return data;
-    if (typeof fallback === 'object' && Array.isArray(fallback)) return data ?? fallback;
     return data ?? fallback;
   }
   return fallback;
-}
-
-/**
- * Validate and transform chart data
- */
-function transformChartData(data: unknown[]): SalesTrendItem[] {
-  return (Array.isArray(data) ? data : [])
-    .filter(d => {
-      if (!d || typeof d !== 'object') return false;
-      const record = d as Record<string, unknown>;
-      return (record.hari ?? record.day ?? record.date) !== undefined;
-    })
-    .map((d) => {
-      const record = d as Record<string, unknown>;
-      return {
-        hari: (record.hari ?? record.day ?? record.date ?? '') as string,
-        masuk: (record.masuk ?? record.penjualan ?? 0) as number,
-        keluar: (record.keluar ?? record.pembelian ?? 0) as number,
-      };
-    });
 }
 
 // --- Skeleton Components -------------------------------------------------------
@@ -186,7 +129,7 @@ const CashFlowChart = memo(({
         <ResponsiveContainer width="100%" height={200}>
           <BarChart data={chartData} barGap={4}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-            <XAxis dataKey="hari" tick={{ fontSize: 12 }} className="text-muted-foreground" />
+            <XAxis dataKey="name" tick={{ fontSize: 12 }} className="text-muted-foreground" />
             <YAxis tickFormatter={v => `${(v / 1_000_000).toFixed(1)}M`} tick={{ fontSize: 11 }} />
             <Tooltip
               formatter={(v: number) => formatCurrency(v)}
@@ -198,8 +141,8 @@ const CashFlowChart = memo(({
                 padding: '8px',
               }}
             />
-            <Bar dataKey="masuk" name="Masuk" fill="hsl(142,71%,38%)" radius={[3, 3, 0, 0]} />
-            <Bar dataKey="keluar" name="Keluar" fill="hsl(0,84%,55%)" radius={[3, 3, 0, 0]} />
+            <Bar dataKey="sales" name="Masuk" fill="hsl(142,71%,38%)" radius={[3, 3, 0, 0]} />
+            <Bar dataKey="purchases" name="Keluar" fill="hsl(0,84%,55%)" radius={[3, 3, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       )}
@@ -225,35 +168,53 @@ const Dashboard = () => {
     isError: statsError,
     refetch: refetchStats,
   } = useDashboardStats('today');
+  
   const {
     data: recentData,
     isLoading: recentLoading,
     isError: recentError,
     refetch: refetchRecent,
   } = useRecentTransactions('all');
+  
   const {
     data: lowStockData,
     isLoading: lowStockLoading,
     isError: lowStockError,
     refetch: refetchLowStock,
   } = useLowStock();
+  
   const {
     data: trendData,
     isLoading: trendLoading,
     isError: trendError,
   } = useSalesTrend(trendRange);
+  
   const {
     data: expensesData,
     isLoading: expensesLoading,
     isError: expensesError,
   } = useExpensesStats('today');
 
+  const {
+    data: financialData,
+    isLoading: financialLoading,
+  } = useFinancialSummary('today');
+
   // --- Type-safe data extraction -----------------------------------------------
-  const stats: DashboardStats = (extractData(statsData, {}) as DashboardStats) ?? {};
-  const recentTx: Transaction[] = (extractData(recentData, []) as Transaction[]) ?? [];
-  const lowStock: LowStockItem[] = (extractData(lowStockData, []) as LowStockItem[]) ?? [];
-  const chartData: SalesTrendItem[] = transformChartData(extractData(trendData, []) as unknown[]);
-  const expensesStats = (extractData(expensesData, {}) as Record<string, unknown>) ?? {};
+  const stats: DashboardStats = extractData(statsData, {});
+  const recentTx: Transaction[] = extractData(recentData, []);
+  const lowStock: LowStockItem[] = extractData(lowStockData, []);
+  const chartData: SalesTrendItem[] = extractData(trendData, []);
+  const expensesStats: ExpenseStats = extractData(expensesData, {
+    totalExpensesToday: 0,
+    totalExpensesMonth: 0,
+  });
+  const financial: FinancialSummary = extractData(financialData, {
+    totalReceivables: 0,
+    overdueReceivables: 0,
+    totalPayables: 0,
+    pendingPayments: 0,
+  });
 
   // --- Callbacks -------------------------------------------------------
   const handleRefreshAll = useCallback(() => {
@@ -304,50 +265,50 @@ const Dashboard = () => {
         </div>
       )}
 
-      {/* Row 1 Stat Cards — semua user */}
-      <div className="mb-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {statsLoading ? (
-          Array.from({ length: 4 }).map((_, i) => <StatCardSkeleton key={i} />)
-        ) : (
-          <>
-            <StatCard
-              title="Penjualan Hari Ini"
-              value={stats.penjualanHariIni ?? 0}
-              subValue={`${stats.totalTransaksiHariIni ?? 0} transaksi`}
-              icon={<TrendingUp className="h-5 w-5" />}
-              color="success"
-              trend={stats.trendPenjualan != null ? (stats.trendPenjualan >= 0 ? 'up' : 'down') : undefined}
-              trendValue={stats.trendPenjualan != null ? `${stats.trendPenjualan > 0 ? '+' : ''}${stats.trendPenjualan}%` : undefined}
-              onClick={() => navigate(DASHBOARD_ROUTES.SALES)}
-            />
-            <StatCard
-              title="Pembelian Hari Ini"
-              value={stats.pembelianHariIni ?? 0}
-              icon={<ShoppingCart className="h-5 w-5" />}
-              color="primary"
-              trend={stats.trendPembelian != null ? (stats.trendPembelian >= 0 ? 'up' : 'down') : undefined}
-              trendValue={stats.trendPembelian != null ? `${stats.trendPembelian > 0 ? '+' : ''}${stats.trendPembelian}%` : undefined}
-              onClick={() => navigate(DASHBOARD_ROUTES.PURCHASES)}
-            />
-            <StatCard
-              title="Total Piutang"
-              value={stats.totalPiutang ?? 0}
-              subValue="Dari customer aktif"
-              icon={<TrendingUp className="h-5 w-5" />}
-              color="warning"
-              onClick={() => navigate(DASHBOARD_ROUTES.RECEIVABLES)}
-            />
-            <StatCard
-              title="Total Utang"
-              value={stats.totalUtang ?? 0}
-              subValue="Ke supplier"
-              icon={<TrendingDown className="h-5 w-5" />}
-              color="destructive"
-              onClick={() => navigate(DASHBOARD_ROUTES.PAYABLES)}
-            />
-          </>
-        )}
-      </div>
+       {/* Row 1 Stat Cards — semua user */}
+       <div className="mb-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+         {statsLoading || financialLoading ? (
+           Array.from({ length: 4 }).map((_, i) => <StatCardSkeleton key={i} />)
+         ) : (
+           <>
+             <StatCard
+               title="Penjualan Hari Ini"
+               value={stats.penjualanHariIni ?? 0}
+               subValue={`${stats.totalTransaksiHariIni ?? 0} transaksi`}
+               icon={<TrendingUp className="h-5 w-5" />}
+               color="success"
+               trend={stats.trendPenjualan != null ? (stats.trendPenjualan >= 0 ? 'up' : 'down') : undefined}
+               trendValue={stats.trendPenjualan != null ? `${stats.trendPenjualan > 0 ? '+' : ''}${stats.trendPenjualan}%` : undefined}
+               onClick={() => navigate(DASHBOARD_ROUTES.SALES)}
+             />
+             <StatCard
+               title="Pembelian Hari Ini"
+               value={stats.pembelianHariIni ?? 0}
+               icon={<ShoppingCart className="h-5 w-5" />}
+               color="primary"
+               trend={stats.trendPembelian != null ? (stats.trendPembelian >= 0 ? 'up' : 'down') : undefined}
+               trendValue={stats.trendPembelian != null ? `${stats.trendPembelian > 0 ? '+' : ''}${stats.trendPembelian}%` : undefined}
+               onClick={() => navigate(DASHBOARD_ROUTES.PURCHASES)}
+             />
+             <StatCard
+               title="Total Piutang"
+               value={financial.totalReceivables ?? 0}
+               subValue={`${financial.overdueReceivables ?? 0} tertagih`}
+               icon={<TrendingUp className="h-5 w-5" />}
+               color="warning"
+               onClick={() => navigate(DASHBOARD_ROUTES.RECEIVABLES)}
+             />
+             <StatCard
+               title="Total Utang"
+               value={financial.totalPayables ?? 0}
+               subValue={`${financial.pendingPayments ?? 0} pending`}
+               icon={<TrendingDown className="h-5 w-5" />}
+               color="destructive"
+               onClick={() => navigate(DASHBOARD_ROUTES.PAYABLES)}
+             />
+           </>
+         )}
+       </div>
 
       {/* Row 2 Stat Cards — owner only */}
       {isOwner ? (
@@ -381,39 +342,39 @@ const Dashboard = () => {
         </div>
       ) : null}
 
-      {/* Row 3 Expense Stat Cards — owner only */}
-      {isOwner ? (
-        <div className="mb-5 grid gap-4 sm:grid-cols-3">
-          {expensesLoading ? (
-            Array.from({ length: 3 }).map((_, i) => <StatCardSkeletonSmall key={i} />)
-          ) : (
-            <>
-              <StatCard
-                title="Pengeluaran Hari Ini"
-                value={(expensesStats as { totalExpensesToday?: number }).totalExpensesToday ?? 0}
-                icon={<DollarSign className="h-5 w-5" />}
-                color="destructive"
-                onClick={() => navigate(DASHBOARD_ROUTES.EXPENSES)}
-              />
-              <StatCard
-                title="Pengeluaran Bulan Ini"
-                value={(expensesStats as { totalExpensesMonth?: number }).totalExpensesMonth ?? 0}
-                icon={<DollarSign className="h-5 w-5" />}
-                color="warning"
-                onClick={() => navigate(DASHBOARD_ROUTES.EXPENSES)}
-              />
-              <StatCard
-                title="Kategori Terbesar"
-                value={(expensesStats as { topExpenseCategoryAmount?: number }).topExpenseCategoryAmount ?? 0}
-                subValue={(expensesStats as { topExpenseCategory?: string }).topExpenseCategory ?? '-'}
-                icon={<BarChart3 className="h-5 w-5" />}
-                color="primary"
-                onClick={() => navigate(DASHBOARD_ROUTES.EXPENSES)}
-              />
-            </>
-          )}
-        </div>
-      ) : null}
+       {/* Row 3 Expense Stat Cards — owner only */}
+       {isOwner ? (
+         <div className="mb-5 grid gap-4 sm:grid-cols-3">
+           {expensesLoading ? (
+             Array.from({ length: 3 }).map((_, i) => <StatCardSkeletonSmall key={i} />)
+           ) : (
+             <>
+               <StatCard
+                 title="Pengeluaran Hari Ini"
+                 value={expensesStats.totalExpensesToday ?? 0}
+                 icon={<DollarSign className="h-5 w-5" />}
+                 color="destructive"
+                 onClick={() => navigate(DASHBOARD_ROUTES.EXPENSES)}
+               />
+               <StatCard
+                 title="Pengeluaran Bulan Ini"
+                 value={expensesStats.totalExpensesMonth ?? 0}
+                 icon={<DollarSign className="h-5 w-5" />}
+                 color="warning"
+                 onClick={() => navigate(DASHBOARD_ROUTES.EXPENSES)}
+               />
+               <StatCard
+                 title="Kategori Terbesar"
+                 value={expensesStats.topExpenseCategoryAmount ?? 0}
+                 subValue={expensesStats.topExpenseCategory ?? '-'}
+                 icon={<BarChart3 className="h-5 w-5" />}
+                 color="primary"
+                 onClick={() => navigate(DASHBOARD_ROUTES.EXPENSES)}
+               />
+             </>
+           )}
+         </div>
+       ) : null}
 
       <div className="grid gap-5 lg:grid-cols-3">
         {/* Chart Arus Kas — owner only */}

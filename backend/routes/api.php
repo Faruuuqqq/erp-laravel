@@ -81,6 +81,9 @@ Route::middleware(['auth:sanctum', 'throttle:60,1'])->group(function () {
         Route::get('low-stock', [DashboardController::class, 'lowStock']);
         Route::get('financial-summary', [DashboardController::class, 'financialSummary']);
         Route::get('sales-trend', [DashboardController::class, 'salesTrend']);
+        Route::get('expenses-stats', [DashboardController::class, 'expensesStats']);
+        Route::get('top-products', [DashboardController::class, 'topProducts']);
+        Route::get('category-distribution', [DashboardController::class, 'categoryDistribution']);
     });
 
     // ── Owner Only (Laporan & Info Finansial) ────────────────────────
