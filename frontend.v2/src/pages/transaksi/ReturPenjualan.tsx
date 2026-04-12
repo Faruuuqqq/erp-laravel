@@ -39,11 +39,12 @@ const ReturPenjualan = () => {
   const [metodeKembalian, setMetodeKembalian] = useState('');
   const [catatan, setCatatan] = useState('');
   const [tanggal, setTanggal] = useState(new Date().toISOString().split('T')[0]);
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [savedTrx, setSavedTrx] = useState<Transaction | null>(null);
-  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+   const [confirmOpen, setConfirmOpen] = useState(false);
+   const [saved, setSaved] = useState(false);
+   const [savedTrx, setSavedTrx] = useState<Transaction | null>(null);
+   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+   const [isDraftPreviewOpen, setIsDraftPreviewOpen] = useState(false);
+   const [isSaving, setIsSaving] = useState(false);
 
   const { data: customersData } = useCustomers({ perPage: 200 });
   // Query both penjualan_tunai and penjualan_kredit separately or use types array
@@ -259,17 +260,26 @@ const ReturPenjualan = () => {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Catatan</Label>
-                <Input value={catatan} onChange={e => setCatatan(e.target.value)} placeholder="Catatan retur..." className="text-xs h-8" />
-              </div>
-              <div className="flex gap-2 pt-1">
-                <Button variant="outline" className="flex-1 h-9 text-sm" onClick={() => { setItems([]); setSelectedFaktur(''); setAlasan(''); setMetodeKembalian(''); }}>Reset</Button>
-                {canCreate('transactions.return_sale') && (
-                  <Button className="flex-1 h-9 text-sm" onClick={handleSave} disabled={items.length === 0}>Simpan</Button>
+               <div className="space-y-1.5">
+                 <Label className="text-xs">Catatan</Label>
+                 <Input value={catatan} onChange={e => setCatatan(e.target.value)} placeholder="Catatan retur..." className="text-xs h-8" />
+               </div>
+               {items.length > 0 && (
+                 <Button variant="outline" className="w-full h-8 text-xs" onClick={() => setIsDraftPreviewOpen(true)}>
+                   <Eye className="mr-1.5 h-3.5 w-3.5" />Lihat Preview
+                 </Button>
+               )}
+               <div className="flex gap-2 pt-1">
+                 <Button variant="outline" className="flex-1 h-9 text-sm" onClick={() => { setItems([]); setSelectedFaktur(''); setAlasan(''); setMetodeKembalian(''); }}>Reset</Button>
+                 {canCreate('transactions.return_sale') && (
+                   <Button className="flex-1 h-9 text-sm" onClick={handleSave} disabled={items.length === 0}>Simpan</Button>
+                 )}
+               </div>
+                {savedTrx && (
+                  <Button variant="outline" className="w-full h-8 text-xs" onClick={() => setIsPreviewOpen(true)}>
+                    <Eye className="mr-1.5 h-3.5 w-3.5" />Preview & Cetak
+                  </Button>
                 )}
-              </div>
-               <Button variant="outline" className="w-full h-8 text-xs" onClick={() => setIsPreviewOpen(true)}><Eye className="mr-1.5 h-3.5 w-3.5" />Preview & Cetak</Button>
             </CardContent>
           </Card>
         </div>
@@ -277,56 +287,215 @@ const ReturPenjualan = () => {
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Konfirmasi Retur Penjualan</AlertDialogTitle>
-            <AlertDialogDescription>
-              Retur senilai <strong>{formatCurrency(totalNilai)}</strong> akan menambah stok dan mengurangi piutang/kas customer. Tindakan ini tidak dapat dibatalkan.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-           <AlertDialogFooter>
-             <AlertDialogCancel>Batal</AlertDialogCancel>
-              <AlertDialogAction onClick={async () => {
-                try {
-                  setIsSaving(true);
-                  const result = await createTx.mutateAsync({
-                    type: 'retur_penjualan',
-                    date: tanggal,
-                    customerId: selectedCustomer,
-                    notes: `${alasan} — ${catatan}`,
-                    items: items.map(i => ({ productId: i.productId, quantity: i.qty, price: i.harga, discount: 0 })),
-                  });
-                 setSavedTrx(result as Transaction);
-                 setConfirmOpen(false);
-                 setSaved(true);
-                 toast({ title: 'Retur berhasil diproses', description: (result as Transaction).invoiceNumber });
-               } catch (err: unknown) {
-                 const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Gagal menyimpan retur';
-                 toast({ title: 'Error', description: msg, variant: 'destructive' });
-                 setConfirmOpen(false);
-               } finally {
-                 setIsSaving(false);
-               }
-             }} disabled={isSaving}>
-               {isSaving ? 'Memproses...' : 'Ya, Proses Retur'}
-             </AlertDialogAction>
-           </AlertDialogFooter>
+             <AlertDialogTitle>Konfirmasi Retur Penjualan</AlertDialogTitle>
+             <AlertDialogDescription>
+               Retur senilai <strong>{formatCurrency(totalNilai)}</strong> akan menambah stok dan mengurangi piutang/kas customer. Tindakan ini tidak dapat dibatalkan.
+             </AlertDialogDescription>
+           </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Batal</AlertDialogCancel>
+               <AlertDialogAction onClick={async () => {
+                 try {
+                   setIsSaving(true);
+                   const result = await createTx.mutateAsync({
+                     type: 'retur_penjualan',
+                     date: tanggal,
+                     customerId: selectedCustomer,
+                     notes: `${alasan} — ${catatan}`,
+                     items: items.map(i => ({ productId: i.productId, quantity: i.qty, price: i.harga, discount: 0 })),
+                   });
+                  setSavedTrx(result as Transaction);
+                  setConfirmOpen(false);
+                  setSaved(true);
+                  setIsDraftPreviewOpen(false);
+                  toast({ title: 'Retur berhasil diproses', description: (result as Transaction).invoiceNumber });
+                } catch (err: unknown) {
+                  const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Gagal menyimpan retur';
+                  toast({ title: 'Error', description: msg, variant: 'destructive' });
+                  setConfirmOpen(false);
+                } finally {
+                  setIsSaving(false);
+                }
+              }} disabled={isSaving}>
+                {isSaving ? 'Memproses...' : 'Ya, Proses Retur'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {savedTrx && (
-        <PrintPreviewDialog
-          isOpen={isPreviewOpen}
-          onClose={() => setIsPreviewOpen(false)}
-          title="Surat Retur Penjualan"
-          documentId="retur-penjualan-print"
-          filename={`retur-penjualan-${savedTrx.invoiceNumber}`}
-        >
-          <div id="retur-penjualan-print">
-            <ReturPenjualanPrint transaction={savedTrx} />
-          </div>
-        </PrintPreviewDialog>
-      )}
-    </MainLayout>
-  );
-};
+       {savedTrx && (
+         <PrintPreviewDialog
+           isOpen={isPreviewOpen}
+           onClose={() => setIsPreviewOpen(false)}
+           title="Surat Retur Penjualan"
+           documentId="retur-penjualan-print"
+           filename={`retur-penjualan-${savedTrx.invoiceNumber}`}
+         >
+           <div id="retur-penjualan-print">
+             <ReturPenjualanPrint transaction={savedTrx} />
+           </div>
+         </PrintPreviewDialog>
+       )}
 
-export default ReturPenjualan;
+       {/* Draft Preview Dialog */}
+       <PrintPreviewDialog
+         isOpen={isDraftPreviewOpen}
+         onClose={() => setIsDraftPreviewOpen(false)}
+         title="Preview Retur Penjualan (Draft)"
+         documentId="retur-penjualan-draft-print"
+         filename="Retur-Penjualan-Draft"
+         printContent={
+           <div className="w-full text-sm space-y-4 p-4">
+             <div className="border-b pb-4">
+               <p className="font-semibold text-lg">Retur Penjualan (Draft)</p>
+               <p className="text-xs text-muted-foreground">Belum disimpan</p>
+             </div>
+             <div className="space-y-1 text-xs">
+               <div className="flex justify-between">
+                 <span>No. Retur:</span>
+                 <span className="font-semibold">{noRetur}</span>
+               </div>
+               <div className="flex justify-between">
+                 <span>Tanggal Retur:</span>
+                 <span className="font-semibold">{tanggal}</span>
+               </div>
+               <div className="flex justify-between">
+                 <span>Customer:</span>
+                 <span className="font-semibold">{customers.find(c => c.id === selectedCustomer)?.name || '-'}</span>
+               </div>
+               <div className="flex justify-between">
+                 <span>Alasan Retur:</span>
+                 <span className="font-semibold">{alasan || '-'}</span>
+               </div>
+               <div className="flex justify-between">
+                 <span>Metode Pengembalian:</span>
+                 <span className="font-semibold">{metodeKembalian || '-'}</span>
+               </div>
+               {catatan && (
+                 <div className="flex justify-between">
+                   <span>Catatan:</span>
+                   <span className="font-semibold">{catatan}</span>
+                 </div>
+               )}
+             </div>
+             <div className="border-t pt-4">
+               <p className="text-xs font-semibold text-muted-foreground mb-2">Daftar Barang Retur</p>
+               <table className="w-full text-xs">
+                 <thead className="border-b bg-muted/50">
+                   <tr>
+                     <th className="text-left py-2">No</th>
+                     <th className="text-left py-2">Produk</th>
+                     <th className="text-right py-2">Qty</th>
+                     <th className="text-right py-2">Harga</th>
+                     <th className="text-right py-2">Subtotal</th>
+                   </tr>
+                 </thead>
+                 <tbody>
+                   {items.map((item, idx) => (
+                     <tr key={idx} className="border-b">
+                       <td className="py-2">{idx + 1}</td>
+                       <td className="py-2">{item.nama}</td>
+                       <td className="text-right">{item.qty}</td>
+                       <td className="text-right">{formatCurrency(item.harga)}</td>
+                       <td className="text-right font-semibold">{formatCurrency(item.subtotal)}</td>
+                     </tr>
+                   ))}
+                 </tbody>
+               </table>
+             </div>
+             <div className="space-y-1 text-xs border-t pt-4">
+               <div className="flex justify-between">
+                 <span>Total Item:</span>
+                 <span className="font-semibold">{items.length} produk</span>
+               </div>
+               <div className="flex justify-between">
+                 <span>Total Qty:</span>
+                 <span className="font-semibold">{items.reduce((s, i) => s + i.qty, 0)}</span>
+               </div>
+               <div className="flex justify-between font-semibold text-base border-t pt-2">
+                 <span>Total Nilai Retur:</span>
+                 <span className="text-warning">{formatCurrency(totalNilai)}</span>
+               </div>
+             </div>
+           </div>
+         }
+       >
+         <div className="w-full text-sm space-y-4 p-4">
+           <div className="border-b pb-4">
+             <p className="font-semibold text-lg">Retur Penjualan (Draft)</p>
+             <p className="text-xs text-muted-foreground">Belum disimpan</p>
+           </div>
+           <div className="space-y-1 text-xs">
+             <div className="flex justify-between">
+               <span>No. Retur:</span>
+               <span className="font-semibold">{noRetur}</span>
+             </div>
+             <div className="flex justify-between">
+               <span>Tanggal Retur:</span>
+               <span className="font-semibold">{tanggal}</span>
+             </div>
+             <div className="flex justify-between">
+               <span>Customer:</span>
+               <span className="font-semibold">{customers.find(c => c.id === selectedCustomer)?.name || '-'}</span>
+             </div>
+             <div className="flex justify-between">
+               <span>Alasan Retur:</span>
+               <span className="font-semibold">{alasan || '-'}</span>
+             </div>
+             <div className="flex justify-between">
+               <span>Metode Pengembalian:</span>
+               <span className="font-semibold">{metodeKembalian || '-'}</span>
+             </div>
+             {catatan && (
+               <div className="flex justify-between">
+                 <span>Catatan:</span>
+                 <span className="font-semibold">{catatan}</span>
+               </div>
+             )}
+           </div>
+           <div className="border-t pt-4">
+             <p className="text-xs font-semibold text-muted-foreground mb-2">Daftar Barang Retur</p>
+             <table className="w-full text-xs">
+               <thead className="border-b bg-muted/50">
+                 <tr>
+                   <th className="text-left py-2">No</th>
+                   <th className="text-left py-2">Produk</th>
+                   <th className="text-right py-2">Qty</th>
+                   <th className="text-right py-2">Harga</th>
+                   <th className="text-right py-2">Subtotal</th>
+                 </tr>
+               </thead>
+               <tbody>
+                 {items.map((item, idx) => (
+                   <tr key={idx} className="border-b">
+                     <td className="py-2">{idx + 1}</td>
+                     <td className="py-2">{item.nama}</td>
+                     <td className="text-right">{item.qty}</td>
+                     <td className="text-right">{formatCurrency(item.harga)}</td>
+                     <td className="text-right font-semibold">{formatCurrency(item.subtotal)}</td>
+                   </tr>
+                 ))}
+               </tbody>
+             </table>
+           </div>
+           <div className="space-y-1 text-xs border-t pt-4">
+             <div className="flex justify-between">
+               <span>Total Item:</span>
+               <span className="font-semibold">{items.length} produk</span>
+             </div>
+             <div className="flex justify-between">
+               <span>Total Qty:</span>
+               <span className="font-semibold">{items.reduce((s, i) => s + i.qty, 0)}</span>
+             </div>
+             <div className="flex justify-between font-semibold text-base border-t pt-2">
+               <span>Total Nilai Retur:</span>
+               <span className="text-warning">{formatCurrency(totalNilai)}</span>
+             </div>
+           </div>
+         </div>
+       </PrintPreviewDialog>
+     </MainLayout>
+   );
+ };
+ 
+ export default ReturPenjualan;
