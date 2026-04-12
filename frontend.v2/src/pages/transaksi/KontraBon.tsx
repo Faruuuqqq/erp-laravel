@@ -8,16 +8,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Search, ClipboardList, FileDown, Printer } from 'lucide-react';
+import { Search, ClipboardList, Eye, Printer } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useAuth } from '@/contexts/AuthContext';
-import { usePrint } from '@/contexts/PrintContext';
+import { usePrint } from '@/contexts/usePrint';
 import { useCustomers } from '@/hooks/api/useCustomers';
 import { useTransactions } from '@/hooks/api/useTransactions';
-import { usePdfExport } from '@/hooks/usePdfExport';
 import { KontraBonPrint } from '@/components/print/KontraBonPrint';
-import { PdfHeader } from '@/components/PdfHeader';
 import { formatCurrency } from '@/lib/utils';
 import type { Transaction } from '@/types';
 
@@ -26,10 +24,8 @@ const KontraBon = () => {
   const { canPrint } = usePermissions();
   const { user } = useAuth();
   const { printDocument } = usePrint();
-  const { exportToPdf } = usePdfExport();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCustomer, setFilterCustomer] = useState('all');
-  const [isExporting, setIsExporting] = useState(false);
 
   const { data: customersData } = useCustomers({ perPage: 200 });
   // Load all outstanding penjualan_kredit (remaining > 0)
@@ -42,23 +38,35 @@ const KontraBon = () => {
   const customers = customersData?.data ?? [];
   const allPiutang: Transaction[] = (txData?.data ?? []).filter(t => (t.remaining ?? 0) > 0);
 
-  // Group by customer
-  const grouped = allPiutang.reduce<Record<string, { name: string; customerId: string; items: Transaction[] }>>((acc, tx) => {
-    const cid = tx.customerId ?? 'unknown';
-    const cname = tx.customer ?? 'Unknown Customer';
-    if (!acc[cid]) acc[cid] = { name: cname, customerId: cid, items: [] };
-    acc[cid].items.push(tx);
-    return acc;
-  }, {});
+  // Group by customer - memoize to prevent re-computation
+  const grouped = useMemo(() => 
+    allPiutang.reduce<Record<string, { name: string; customerId: string; items: Transaction[] }>>((acc, tx) => {
+      const cid = tx.customerId ?? 'unknown';
+      const cname = tx.customer ?? 'Unknown Customer';
+      if (!acc[cid]) acc[cid] = { name: cname, customerId: cid, items: [] };
+      acc[cid].items.push(tx);
+      return acc;
+    }, {}),
+    [allPiutang]
+  );
 
-  const filteredGrouped = Object.entries(grouped).filter(([cid, group]) => {
-    const matchSearch = group.name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchCustomer = filterCustomer === 'all' || cid === filterCustomer;
-    return matchSearch && matchCustomer;
-  });
+  const filteredGrouped = useMemo(() =>
+    Object.entries(grouped).filter(([cid, group]) => {
+      const matchSearch = group.name.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchCustomer = filterCustomer === 'all' || cid === filterCustomer;
+      return matchSearch && matchCustomer;
+    }),
+    [grouped, searchTerm, filterCustomer]
+  );
 
   const totalNilai = allPiutang.reduce((s, t) => s + (t.remaining ?? 0), 0);
   const uniqueCustomers = Object.keys(grouped).length;
+
+  // Memoize default expanded items - recompute only when filteredGrouped changes
+  const defaultExpanded = useMemo(
+    () => filteredGrouped.map(([cid]) => cid),
+    [filteredGrouped]
+  );
 
   // Print all filtered kontra bon (per-customer)
   const handlePrintAll = useCallback(() => {
@@ -100,87 +108,9 @@ const KontraBon = () => {
         }))}
       />
     );
-  }, [printDocument, user?.name]);
+   }, [printDocument, user?.name]);
 
-  // Export PDF
-  const handleExport = useCallback(async () => {
-    setIsExporting(true);
-    try {
-      // Create content for PDF
-      const pdfContent = document.createElement('div');
-      pdfContent.innerHTML = `
-        <div id="pdf-content-export" style="background: white; padding: 24px; font-family: Arial, sans-serif;">
-          <div style="margin-bottom: 24px; padding-bottom: 12px; border-bottom: 2px solid #ccc;">
-            <h1 style="margin: 0 0 6px 0; font-size: 24px; font-weight: bold;">Toko ABC</h1>
-            <p style="margin: 0; font-size: 12px; color: #666;">Jl. Jalan Raya No. 123, Jakarta 12345 | (021) 1234-5678</p>
-          </div>
-          
-          <div style="margin-bottom: 12px;">
-            <h2 style="margin: 0 0 3px 0; font-size: 20px; font-weight: bold;">Kontra Bon</h2>
-            <p style="margin: 0; font-size: 12px; color: #666;">Daftar bon yang belum dilunasi per customer</p>
-          </div>
-          
-          <div style="font-size: 11px; color: #999; margin-bottom: 12px;">
-            <p style="margin: 0;">Tanggal: ${new Date().toLocaleDateString('id-ID')}</p>
-            <p style="margin: 0;">Waktu: ${new Date().toLocaleTimeString('id-ID')}</p>
-          </div>
-          
-          <table style="width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 12px;">
-            <thead>
-              <tr style="background-color: #f0f0f0;">
-                <th style="padding: 8px; border: 1px solid #ddd; text-align: left; font-weight: bold;">Customer</th>
-                <th style="padding: 8px; border: 1px solid #ddd; text-align: left; font-weight: bold;">No. Faktur</th>
-                <th style="padding: 8px; border: 1px solid #ddd; text-align: left; font-weight: bold;">Tanggal</th>
-                <th style="padding: 8px; border: 1px solid #ddd; text-align: right; font-weight: bold;">Total</th>
-                <th style="padding: 8px; border: 1px solid #ddd; text-align: right; font-weight: bold;">Terbayar</th>
-                <th style="padding: 8px; border: 1px solid #ddd; text-align: right; font-weight: bold;">Sisa</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${allPiutang.map(t => `
-                <tr>
-                  <td style="padding: 6px; border: 1px solid #ddd;">${t.customer || 'Unknown'}</td>
-                  <td style="padding: 6px; border: 1px solid #ddd; font-family: monospace;">${t.invoiceNumber}</td>
-                  <td style="padding: 6px; border: 1px solid #ddd;">${t.date}</td>
-                  <td style="padding: 6px; border: 1px solid #ddd; text-align: right; font-family: monospace;">${formatCurrency(t.total)}</td>
-                  <td style="padding: 6px; border: 1px solid #ddd; text-align: right; font-family: monospace;">${formatCurrency(t.paid)}</td>
-                  <td style="padding: 6px; border: 1px solid #ddd; text-align: right; font-family: monospace; font-weight: bold;">${formatCurrency(t.remaining ?? 0)}</td>
-                </tr>
-              `).join('')}
-              <tr style="background-color: #f9f9f9; font-weight: bold;">
-                <td colspan="5" style="padding: 8px; border: 1px solid #ddd; text-align: right;">TOTAL OUTSTANDING:</td>
-                <td style="padding: 8px; border: 1px solid #ddd; text-align: right; font-family: monospace;">${formatCurrency(totalNilai)}</td>
-              </tr>
-            </tbody>
-          </table>
-          
-          <div style="font-size: 10px; color: #999; margin-top: 12px;">
-            <p style="margin: 0;">Total Bon: ${allPiutang.length} | Unique Customers: ${uniqueCustomers}</p>
-          </div>
-        </div>
-      `;
-      document.body.appendChild(pdfContent);
-      
-      await exportToPdf('pdf-content-export', {
-        filename: `kontra-bon-${new Date().toISOString().slice(0, 10)}.pdf`,
-        title: 'Kontra Bon',
-        subtitle: `${allPiutang.length} bon aktif - Total: ${formatCurrency(totalNilai)}`,
-        companyName: 'Toko ABC',
-        companyAddress: 'Jl. Jalan Raya No. 123, Jakarta 12345',
-        companyPhone: '(021) 1234-5678',
-      });
-      
-      document.body.removeChild(pdfContent);
-      toast({ title: 'PDF berhasil diunduh', description: `Kontra bon untuk ${allPiutang.length} transaksi` });
-    } catch (error) {
-      toast({ title: 'Error', description: 'Gagal mengekspor PDF', variant: 'destructive' });
-      console.error(error);
-    } finally {
-      setIsExporting(false);
-    }
-  }, [allPiutang, totalNilai, uniqueCustomers, exportToPdf, toast]);
-
-  return (
+   return (
     <MainLayout title="Kontra Bon" subtitle="Bon yang belum dilunasi per customer">
       {/* Summary */}
       <div className="mb-4 grid gap-3 md:grid-cols-3">
@@ -214,18 +144,18 @@ const KontraBon = () => {
             </SelectContent>
           </Select>
         </div>
-         <div className="flex gap-2">
-           {canPrint('transactions.kontra_bon') && (
-             <>
-               <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={handleExport} disabled={isExporting}>
-                 <FileDown className="h-3.5 w-3.5" />{isExporting ? 'Generating...' : 'Export PDF'}
-               </Button>
-               <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={handlePrintAll}>
-                 <Printer className="h-3.5 w-3.5" />Cetak Semua
-               </Button>
-             </>
-           )}
-         </div>
+          <div className="flex gap-2">
+             {canPrint('transactions.kontra_bon') && (
+               <>
+                 <Button variant="outline" className="h-8 text-xs gap-1.5" disabled title="Gunakan tombol 'Cetak Kontra Bon' di masing-masing customer untuk export PDF">
+                   <Eye className="h-3.5 w-3.5" />Lihat PDF
+                 </Button>
+                 <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={handlePrintAll}>
+                   <Printer className="h-3.5 w-3.5" />Cetak Semua
+                 </Button>
+               </>
+             )}
+          </div>
       </div>
 
       <Card>
@@ -244,8 +174,8 @@ const KontraBon = () => {
               <ClipboardList className="h-12 w-12 mx-auto mb-3 opacity-20" />
               <p>{allPiutang.length === 0 ? 'Tidak ada piutang outstanding' : 'Tidak ada hasil pencarian'}</p>
             </div>
-          ) : (
-            <Accordion type="multiple" defaultValue={filteredGrouped.map(([cid]) => cid)} className="w-full space-y-2">
+           ) : (
+             <Accordion type="multiple" defaultValue={defaultExpanded} className="w-full space-y-2">
               {filteredGrouped.map(([cid, group]) => {
                 const totalCustomer = group.items.reduce((s, t) => s + (t.remaining ?? 0), 0);
                 const customerData = customers.find(c => c.id === cid);

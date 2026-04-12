@@ -104,27 +104,27 @@ const PenjualanTunai = () => {
   const bayarNum = parseFloat(state.bayar) || 0;
   const kembalian = bayarNum - grandTotal;
 
-   const handleSave = useCallback(async () => {
-     if (state.cart.length === 0) return toast({ title: 'Keranjang masih kosong', variant: 'destructive' });
-     try {
-       const result = await createTx.mutateAsync({
-         type: 'penjualan_tunai',
-         date: state.tanggal,
-         customerId: state.selectedCustomer || null,
-         salesId: state.selectedSales || null,
-         discount: diskonTotalNum,
-         paid: grandTotal,
-         notes: state.catatan,
-         items: state.cart.map(i => ({ productId: i.productId, quantity: i.qty, price: i.harga, discount: i.diskon })),
-       });
-       setSavedTrx(result as Transaction);
-       setSaved(true);
-       toast({ title: 'Transaksi berhasil disimpan', description: (result as Transaction).invoiceNumber });
-     } catch (err: unknown) {
-       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Gagal menyimpan';
-       toast({ title: 'Error', description: msg, variant: 'destructive' });
-     }
-   }, [state, createTx, diskonTotalNum, grandTotal, toast]);
+    const handleSave = useCallback(async () => {
+      if (state.cart.length === 0) return toast({ title: 'Keranjang masih kosong', variant: 'destructive' });
+      try {
+        const result = await createTx.mutateAsync({
+          type: 'penjualan_tunai',
+          date: state.tanggal,
+          customerId: (state.selectedCustomer && state.selectedCustomer !== 'walk-in') ? state.selectedCustomer : null,
+          salesId: state.selectedSales || null,
+          discount: diskonTotalNum,
+          paid: grandTotal,
+          notes: state.catatan,
+          items: state.cart.map(i => ({ productId: i.productId, quantity: i.qty, price: i.harga, discount: i.diskon })),
+        });
+        setSavedTrx(result as Transaction);
+        setSaved(true);
+        toast({ title: 'Transaksi berhasil disimpan', description: (result as Transaction).invoiceNumber });
+      } catch (err: unknown) {
+        const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Gagal menyimpan';
+        toast({ title: 'Error', description: msg, variant: 'destructive' });
+      }
+    }, [state, createTx, diskonTotalNum, grandTotal, toast]);
 
    const reset = useCallback(() => { setState(BLANK()); setSaved(false); setSavedTrx(null); setIsPreviewOpen(false); }, []);
 
