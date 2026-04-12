@@ -58,32 +58,95 @@ const PenjualanKredit = () => {
   const [savedTrx, setSavedTrx] = useState<Transaction | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
-   const handleSave = useCallback(async () => {
-     if (state.cart.length === 0) return toast({ title: 'Keranjang masih kosong', variant: 'destructive' });
-     if (!state.selectedCustomer) return toast({ title: 'Pilih customer terlebih dahulu', variant: 'destructive' });
-     try {
-       const result = await createTx.mutateAsync({
-         type: 'penjualan_kredit',
-         date: state.tanggal,
-         customerId: state.selectedCustomer,
-         salesId: state.selectedSales || null,
-         warehouseId: state.selectedGudang || null,
-         discount: diskonTotalNum,
-         paid: dpNum,
-         dueDate: state.jatuhTempo || undefined,
-         notes: state.catatan,
-         items: state.cart.map(i => ({ productId: i.productId, quantity: i.qty, price: i.harga, discount: i.diskon })),
-       });
-       setSavedTrx(result as Transaction);
-       setSaved(true);
-       toast({ title: 'Penjualan kredit berhasil disimpan', description: (result as Transaction).invoiceNumber });
-     } catch (err: unknown) {
-       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Gagal menyimpan';
-       toast({ title: 'Error', description: msg, variant: 'destructive' });
-     }
-   }, [state, createTx, toast]);
+  // Data hooks
+  const { data: productsData } = useProducts({ perPage: 500 });
+  const { data: customersData } = useCustomers({ perPage: 500 });
+  const { data: salesData } = useSalesReps({ perPage: 100 });
+  const { data: warehousesData } = useWarehouses({ perPage: 100 });
 
-   const reset = useCallback(() => { setState(BLANK()); setSaved(false); setSavedTrx(null); setIsPreviewOpen(false); }, []);
+  // Memoized data
+  const products = useMemo(() => productsData?.data ?? [], [productsData?.data]);
+  const customers = useMemo(() => customersData?.data ?? [], [customersData?.data]);
+  const salesReps = useMemo(() => salesData?.data ?? [], [salesData?.data]);
+  const warehouses = useMemo(() => warehousesData?.data ?? [], [warehousesData?.data]);
+
+  // Helper set callback
+  const set = useCallback(<K extends keyof ReturnType<typeof BLANK>>(key: K, val: ReturnType<typeof BLANK>[K]) =>
+    setState(p => ({ ...p, [key]: val })), []);
+
+  // Filtered products
+  const filteredProducts = useMemo(() =>
+    products.filter(p =>
+      p.name.toLowerCase().includes(state.searchProduct.toLowerCase()) ||
+      (p.code ?? '').toLowerCase().includes(state.searchProduct.toLowerCase())
+    ), [products, state.searchProduct]);
+
+  // Memoized customer
+  const customer = useMemo(() => customers.find(c => c.id === state.selectedCustomer), [customers, state.selectedCustomer]);
+
+  // Add to cart handler
+  const addToCart = useCallback(() => {
+    const product = products.find(p => p.id === state.selectedProduct);
+    if (!product) return toast({ title: 'Pilih produk terlebih dahulu', variant: 'destructive' });
+    const existing = state.cart.find(c => c.productId === product.id);
+    if (existing) return toast({ title: 'Produk sudah ada di keranjang', variant: 'destructive' });
+    const qtyNum = parseInt(state.qty) || 1;
+    if (qtyNum <= 0) return toast({ title: 'Qty harus > 0', variant: 'destructive' });
+    if (qtyNum > (product.stock ?? 0)) return toast({ title: `Stok tidak cukup. Tersedia: ${product.stock ?? 0}`, variant: 'destructive' });
+    const diskonNum = parseFloat(state.diskonItem) || 0;
+    const subtotal = product.sellPrice * qtyNum * (1 - diskonNum / 100);
+    setState(prev => {
+      const newCart = [...prev.cart, { productId: product.id, nama: product.name, satuan: product.unit ?? 'pcs', qty: qtyNum, harga: product.sellPrice, diskon: diskonNum, subtotal }];
+      return { ...prev, cart: newCart, selectedProduct: '', qty: '1', diskonItem: '0', searchProduct: '' };
+    });
+    toast({ title: `${product.name} ditambahkan ke keranjang` });
+  }, [products, state.qty, state.diskonItem, state.selectedProduct, state.cart, toast]);
+
+  // Remove item handler
+  const removeItem = useCallback((idx: number) =>
+    setState(p => ({ ...p, cart: p.cart.filter((_, i) => i !== idx) })), []);
+
+  // Computed values (MUST be before handleSave)
+  const subtotal = state.cart.reduce((s, i) => s + i.subtotal, 0);
+  const diskonTotalNum = parseFloat(state.diskonTotal) || 0;
+  const grandTotal = subtotal - diskonTotalNum;
+  const dpNum = parseFloat(state.dp) || 0;
+  const sisaPiutang = grandTotal - dpNum;
+
+  // Credit limit validation
+  const existingPiutang = customer ? Number(customer.balance ?? 0) : 0;
+  const limitKredit = customer ? Number(customer.creditLimit ?? 0) : 0;
+  const newPiutang = existingPiutang + sisaPiutang;
+  const isOverLimit = newPiutang > limitKredit && limitKredit > 0;
+
+  // Save handler
+  const handleSave = useCallback(async () => {
+    if (state.cart.length === 0) return toast({ title: 'Keranjang masih kosong', variant: 'destructive' });
+    if (!state.selectedCustomer) return toast({ title: 'Pilih customer terlebih dahulu', variant: 'destructive' });
+    try {
+      const result = await createTx.mutateAsync({
+        type: 'penjualan_kredit',
+        date: state.tanggal,
+        customerId: state.selectedCustomer,
+        salesId: state.selectedSales || null,
+        warehouseId: state.selectedGudang || null,
+        discount: diskonTotalNum,
+        paid: dpNum,
+        dueDate: state.jatuhTempo || undefined,
+        notes: state.catatan,
+        items: state.cart.map(i => ({ productId: i.productId, quantity: i.qty, price: i.harga, discount: i.diskon })),
+      });
+      setSavedTrx(result as Transaction);
+      setSaved(true);
+      toast({ title: 'Penjualan kredit berhasil disimpan', description: (result as Transaction).invoiceNumber });
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Gagal menyimpan';
+      toast({ title: 'Error', description: msg, variant: 'destructive' });
+    }
+  }, [state, diskonTotalNum, dpNum, createTx, toast]);
+
+  // Reset handler
+  const reset = useCallback(() => { setState(BLANK()); setSaved(false); setSavedTrx(null); setIsPreviewOpen(false); }, []);
 
   if (saved && savedTrx) {
     return (
