@@ -14,6 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useTransactions, useToggleHideTransaction } from '@/hooks/api/useTransactions';
 import { formatCurrency } from '@/lib/utils';
+import { exportTransactionsToXlsx, getFilenameWithDate } from '@/lib/xlsx-export';
 import type { Transaction } from '@/types';
 
 const HistoriPembayaranUtang = () => {
@@ -27,6 +28,7 @@ const HistoriPembayaranUtang = () => {
   const [selectedTrx, setSelectedTrx] = useState<Transaction | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [isExportingXlsx, setIsExportingXlsx] = useState(false);
 
   const toggleHideMutation = useToggleHideTransaction();
 
@@ -128,6 +130,35 @@ const HistoriPembayaranUtang = () => {
     }
   }, [filtered, totalNilai, dateFrom, dateTo, exportToPdf, toast]);
 
+  const handleExportXlsx = useCallback(async () => {
+    setIsExportingXlsx(true);
+    try {
+      const headers = ['No. Kwitansi', 'Tanggal', 'Supplier', 'Jumlah Dibayar', 'Catatan'];
+      const data = filtered.map(t => [
+        t.invoiceNumber,
+        t.date,
+        t.supplier || '-',
+        t.paid,
+        t.notes || '-',
+      ]);
+
+      await exportTransactionsToXlsx({
+        filename: getFilenameWithDate('histori-pembayaran-utang'),
+        headers,
+        data,
+        currencyColumns: [3],
+        rightAlignColumns: [3],
+      });
+
+      toast({ title: 'Berhasil', description: `${filtered.length} transaksi diekspor ke XLSX` });
+    } catch (error) {
+      toast({ title: 'Error', description: 'Gagal mengekspor ke XLSX', variant: 'destructive' });
+      console.error(error);
+    } finally {
+      setIsExportingXlsx(false);
+    }
+  }, [filtered, toast]);
+
   return (
     <MainLayout title="Histori Pembayaran Utang" subtitle="Riwayat pembayaran utang ke supplier">
       <div className="mb-4 grid gap-3 md:grid-cols-2">
@@ -135,17 +166,20 @@ const HistoriPembayaranUtang = () => {
         <Card><CardContent className="p-3"><p className="text-xs text-muted-foreground">Total Dibayar</p><p className="text-lg font-bold text-primary tabular-nums">{formatCurrency(totalNilai)}</p></CardContent></Card>
       </div>
 
-      <div className="mb-4 flex flex-col sm:flex-row gap-2 items-start sm:items-center justify-between">
-        <div className="flex gap-2 flex-wrap">
-          <div className="relative w-56">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-            <Input placeholder="Cari supplier..." className="pl-8 text-xs h-8" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setPage(1); }} />
-          </div>
-          <Input type="date" className="text-xs h-8 w-36" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setPage(1); }} />
-          <Input type="date" className="text-xs h-8 w-36" value={dateTo} onChange={e => { setDateTo(e.target.value); setPage(1); }} />
-        </div>
-        <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={handleExport} disabled={isExporting}><FileDown className="h-3.5 w-3.5" />{isExporting ? 'Exporting...' : 'Export PDF'}</Button>
-      </div>
+       <div className="mb-4 flex flex-col sm:flex-row gap-2 items-start sm:items-center justify-between">
+         <div className="flex gap-2 flex-wrap">
+           <div className="relative w-56">
+             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+             <Input placeholder="Cari supplier..." className="pl-8 text-xs h-8" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setPage(1); }} />
+           </div>
+           <Input type="date" className="text-xs h-8 w-36" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setPage(1); }} />
+           <Input type="date" className="text-xs h-8 w-36" value={dateTo} onChange={e => { setDateTo(e.target.value); setPage(1); }} />
+         </div>
+         <div className="flex gap-2">
+           <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={handleExport} disabled={isExporting}><FileDown className="h-3.5 w-3.5" />{isExporting ? 'Exporting...' : 'Export PDF'}</Button>
+           <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={handleExportXlsx} disabled={isExportingXlsx}><FileDown className="h-3.5 w-3.5" />{isExportingXlsx ? 'Exporting...' : 'Export XLSX'}</Button>
+         </div>
+       </div>
 
       <Card>
          <CardContent className="p-0">

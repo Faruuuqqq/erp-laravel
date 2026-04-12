@@ -17,6 +17,7 @@ import { useTransactions, useToggleHideTransaction } from '@/hooks/api/useTransa
 import { useCustomers } from '@/hooks/api/useCustomers';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useLazyPdfExport } from '@/hooks/useLazyPdfExport';
+import { exportTransactionsToXlsx, getFilenameWithDate } from '@/lib/xlsx-export';
 import { formatCurrency } from '@/lib/utils';
 import type { Transaction } from '@/types';
 
@@ -37,6 +38,7 @@ const HistoriPenjualan = () => {
   const [showLunasOnly, setShowLunasOnly] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [isExportingXlsx, setIsExportingXlsx] = useState(false);
 
   const toggleHideMutation = useToggleHideTransaction();
 
@@ -179,6 +181,47 @@ const HistoriPenjualan = () => {
     }
   }, [filtered, totalNilai, dateFrom, dateTo, exportToPdf, toast]);
 
+  const handleExportXlsx = useCallback(async () => {
+    setIsExportingXlsx(true);
+    try {
+      const dataForExport = filtered.map(t => ({
+        'No. Faktur': t.invoiceNumber,
+        'Tanggal': t.date,
+        'Customer': t.customer || 'Walk-in',
+        'Tipe': t.type === 'penjualan_kredit' ? 'Kredit' : 'Tunai',
+        'Total': t.total,
+        'Terbayar': t.paid,
+        'Sisa': t.remaining ?? 0,
+        'Status': (t.remaining ?? 0) === 0 ? 'Lunas' : 'Piutang',
+      }));
+
+      exportTransactionsToXlsx(
+        dataForExport,
+        ['No. Faktur', 'Tanggal', 'Customer', 'Tipe', 'Total', 'Terbayar', 'Sisa', 'Status'],
+        {
+          filename: `HistoriPenjualan_${getFilenameWithDate('')}`,
+          sheetName: 'Histori Penjualan',
+          currencyColumns: [4, 5, 6],
+          rightAlignColumns: [4, 5, 6],
+        }
+      );
+
+      toast({
+        title: 'Export berhasil',
+        description: `${filtered.length} transaksi diekspor ke XLSX`,
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Gagal export XLSX',
+        variant: 'destructive',
+      });
+      console.error(error);
+    } finally {
+      setIsExportingXlsx(false);
+    }
+  }, [filtered, toast]);
+
   return (
     <MainLayout title="Histori Penjualan" subtitle="Riwayat transaksi penjualan tunai dan kredit">
       <div className="mb-4 grid gap-3 md:grid-cols-3">
@@ -223,7 +266,10 @@ const HistoriPenjualan = () => {
             <Switch id="show-lunas" checked={showLunasOnly} onCheckedChange={setShowLunasOnly} />
             <Label htmlFor="show-lunas" className="text-xs text-muted-foreground cursor-pointer">Lunas saja</Label>
           </div>
-          <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={handleExport} disabled={isExporting}><FileDown className="h-3.5 w-3.5" />{isExporting ? 'Generating...' : 'Export PDF'}</Button>
+          <div className="flex gap-1.5">
+            <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={handleExportXlsx} disabled={isExportingXlsx}><FileDown className="h-3.5 w-3.5" />{isExportingXlsx ? 'Generating...' : 'Export XLSX'}</Button>
+            <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={handleExport} disabled={isExporting}><FileDown className="h-3.5 w-3.5" />{isExporting ? 'Generating...' : 'Export PDF'}</Button>
+          </div>
         </div>
       </div>
 

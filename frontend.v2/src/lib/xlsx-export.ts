@@ -156,3 +156,130 @@ export function downloadBlob(blob: Blob, filename: string): void {
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 }
+
+/**
+ * Export transaction/informasi data to XLSX with styling
+ * Simplified version for informasi pages
+ *
+ * @example
+ * const data = [
+ *   { invoiceNumber: 'INV-001', date: '2024-01-01', total: 100000, ... },
+ *   { invoiceNumber: 'INV-002', date: '2024-01-02', total: 200000, ... }
+ * ];
+ * exportTransactionsToXlsx(data, ['No. Faktur', 'Tanggal', 'Total'], {
+ *   filename: 'HistoriPenjualan_20260413.xlsx',
+ *   currencyColumns: [2],
+ *   rightAlignColumns: [2]
+ * });
+ */
+export interface TransactionExportOptions {
+  filename: string;
+  sheetName?: string;
+  currencyColumns?: number[]; // 0-indexed column numbers to format as currency
+  rightAlignColumns?: number[]; // 0-indexed column numbers to right-align
+}
+
+export function exportTransactionsToXlsx(
+  data: Record<string, string | number | boolean | null | undefined>[],
+  columnNames: string[],
+  options: TransactionExportOptions
+): void {
+  try {
+    if (!data || data.length === 0) {
+      console.warn('No data to export');
+    }
+
+    // Create header row
+    const headerRow = columnNames;
+
+    // Create data rows - map data to column order
+    const dataRows = data.map(item => {
+      return columnNames.map(colName => {
+        const value = item[colName];
+        return value ?? '';
+      });
+    });
+
+    // Combine header + data
+    const wsData = [headerRow, ...dataRows];
+
+    // Create worksheet from array of arrays
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+    // Style header row
+    const headerStyle = {
+      fill: { fgColor: { rgb: 'FFD3D3D3' } }, // Light gray background
+      font: { bold: true, color: { rgb: 'FF000000' } }, // Bold black text
+      alignment: { horizontal: 'center', vertical: 'center', wrapText: false },
+      border: {
+        top: { style: 'thin', color: { rgb: 'FF000000' } },
+        bottom: { style: 'thin', color: { rgb: 'FF000000' } },
+        left: { style: 'thin', color: { rgb: 'FF000000' } },
+        right: { style: 'thin', color: { rgb: 'FF000000' } },
+      },
+    };
+
+    // Apply header styling
+    for (let i = 0; i < columnNames.length; i++) {
+      const cellRef = XLSX.utils.encode_cell({ r: 0, c: i });
+      if (ws[cellRef]) {
+        ws[cellRef].s = headerStyle;
+      }
+    }
+
+    // Apply borders and styling to all data rows
+    const dataBorder = {
+      top: { style: 'thin', color: { rgb: 'FFC0C0C0' } },
+      bottom: { style: 'thin', color: { rgb: 'FFC0C0C0' } },
+      left: { style: 'thin', color: { rgb: 'FFC0C0C0' } },
+      right: { style: 'thin', color: { rgb: 'FFC0C0C0' } },
+    };
+
+    // Apply styling to data rows
+    for (let r = 1; r <= dataRows.length; r++) {
+      for (let c = 0; c < columnNames.length; c++) {
+        const cellRef = XLSX.utils.encode_cell({ r, c });
+        if (ws[cellRef]) {
+          if (!ws[cellRef].s) {
+            ws[cellRef].s = {};
+          }
+          ws[cellRef].s.border = dataBorder;
+
+          // Apply currency formatting
+          if (options.currencyColumns?.includes(c)) {
+            ws[cellRef].z = '#,##0'; // Number format with thousand separator
+          }
+
+          // Apply right alignment
+          if (options.rightAlignColumns?.includes(c)) {
+            ws[cellRef].s.alignment = {
+              horizontal: 'right',
+              vertical: 'center',
+              wrapText: false,
+            };
+          }
+        }
+      }
+    }
+
+    // Set column widths - auto-fit based on column name length
+    const colWidths = columnNames.map(col => ({
+      wch: Math.max(12, col.length + 3),
+    }));
+    ws['!cols'] = colWidths;
+
+    // Create workbook
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      wb,
+      ws,
+      options.sheetName || 'Data'
+    );
+
+    // Write file
+    XLSX.writeFile(wb, options.filename);
+  } catch (error) {
+    console.error('Export transactions to XLSX failed:', error);
+    throw error;
+  }
+}

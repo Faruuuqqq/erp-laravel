@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { useTableSort } from '@/hooks/useTableSort';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,7 +17,7 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from '@/components/ui/table';
-import { Plus, Search, Download, Pencil, Trash2, Loader2, ArrowUp, ArrowDown, DollarSign, TrendingUp } from 'lucide-react';
+import { Plus, Search, Download, Pencil, Trash2, Loader2, DollarSign, TrendingUp, ArrowUp, ArrowDown } from 'lucide-react';
 import { useExpenses, useCreateExpense, useUpdateExpense, useDeleteExpense } from '@/hooks/api/useExpenses';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -26,16 +27,17 @@ import { id } from 'date-fns/locale';
 import { Expense } from '@/types';
 import { extractErrorMessage } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
+import { exportTransactionsToXlsx, getFilenameWithDate } from '@/lib/xlsx-export';
 
 const BiayaJasa = () => {
   const [search, setSearch] = useState('');
-  const [sortBy, setSortBy] = useState<'tanggal' | 'kategori' | 'jumlah'>('tanggal');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const { sortBy, sortDirection, toggleSort, getSortIcon } = useTableSort<'tanggal' | 'kategori' | 'jumlah'>('tanggal');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [isAddEditOpen, setIsAddEditOpen] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
+  const [isExportingXlsx, setIsExportingXlsx] = useState(false);
   const [formData, setFormData] = useState({
     date: format(new Date(), 'yyyy-MM-dd'),
     category: '',
@@ -63,20 +65,6 @@ const BiayaJasa = () => {
   const total = expenses.reduce((s, e) => s + Number(e.amount), 0);
   const average = expenses.length > 0 ? total / expenses.length : 0;
   const count = expenses.length;
-
-  const toggleSort = (field: 'tanggal' | 'kategori' | 'jumlah') => {
-    if (sortBy === field) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortBy(field);
-      setSortDirection('asc');
-    }
-  };
-
-  const SortIcon = ({ field }: { field: 'tanggal' | 'kategori' | 'jumlah' }) => {
-    if (sortBy !== field) return null;
-    return sortDirection === 'asc' ? <ArrowUp className="h-3 w-3 ml-1" /> : <ArrowDown className="h-3 w-3 ml-1" />;
-  };
 
   const handleOpenAdd = useCallback(() => {
     setSelectedExpense(null);
@@ -174,6 +162,36 @@ const BiayaJasa = () => {
     window.URL.revokeObjectURL(url);
   };
 
+  const handleExportXlsx = useCallback(async () => {
+    setIsExportingXlsx(true);
+    try {
+      const headers = ['No. Ref', 'Tanggal', 'Kategori', 'Keterangan', 'Jumlah', 'Oleh'];
+      const data = expenses.map(e => [
+        e.code,
+        e.date,
+        e.category,
+        e.description || '-',
+        Number(e.amount),
+        e.createdBy || '-',
+      ]);
+
+      await exportTransactionsToXlsx({
+        filename: getFilenameWithDate('biaya-jasa'),
+        headers,
+        data,
+        currencyColumns: [4],
+        rightAlignColumns: [4],
+      });
+
+      toast({ title: 'Berhasil', description: `${expenses.length} data biaya diekspor ke XLSX` });
+    } catch (error) {
+      toast({ title: 'Error', description: 'Gagal mengekspor ke XLSX', variant: 'destructive' });
+      console.error(error);
+    } finally {
+      setIsExportingXlsx(false);
+    }
+  }, [expenses, toast]);
+
   return (
     <MainLayout title="Biaya / Jasa" subtitle="Histori biaya operasional di luar transaksi toko">
       {/* Stat Cards */}
@@ -234,17 +252,20 @@ const BiayaJasa = () => {
           </div>
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={handleExport}>
-            <Download className="h-4 w-4 mr-1" />Export
-          </Button>
-          {canCreate('expenses') && (
-            <Button size="sm" onClick={handleOpenAdd}>
-              <Plus className="h-4 w-4 mr-1" />Tambah Biaya
-            </Button>
-          )}
-        </div>
+         {/* Action Buttons */}
+         <div className="flex gap-2">
+           <Button variant="outline" size="sm" onClick={handleExport}>
+             <Download className="h-4 w-4 mr-1" />Export CSV
+           </Button>
+           <Button variant="outline" size="sm" onClick={handleExportXlsx} disabled={isExportingXlsx}>
+             <Download className="h-4 w-4 mr-1" />{isExportingXlsx ? 'Exporting...' : 'Export XLSX'}
+           </Button>
+           {canCreate('expenses') && (
+             <Button size="sm" onClick={handleOpenAdd}>
+               <Plus className="h-4 w-4 mr-1" />Tambah Biaya
+             </Button>
+           )}
+         </div>
       </div>
 
       {/* Table */}
@@ -254,16 +275,28 @@ const BiayaJasa = () => {
             <TableHeader>
               <TableRow>
                 <TableHead>No. Ref</TableHead>
-                <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => toggleSort('tanggal')}>
-                  <div className="flex items-center">Tanggal <SortIcon field="tanggal" /></div>
-                </TableHead>
-                <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => toggleSort('kategori')}>
-                  <div className="flex items-center">Kategori <SortIcon field="kategori" /></div>
-                </TableHead>
+                 <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => toggleSort('tanggal')}>
+                   <div className="flex items-center">
+                     Tanggal
+                     {getSortIcon('tanggal') === 'asc' && <ArrowUp className="h-3 w-3 ml-1" />}
+                     {getSortIcon('tanggal') === 'desc' && <ArrowDown className="h-3 w-3 ml-1" />}
+                   </div>
+                 </TableHead>
+                 <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => toggleSort('kategori')}>
+                   <div className="flex items-center">
+                     Kategori
+                     {getSortIcon('kategori') === 'asc' && <ArrowUp className="h-3 w-3 ml-1" />}
+                     {getSortIcon('kategori') === 'desc' && <ArrowDown className="h-3 w-3 ml-1" />}
+                   </div>
+                 </TableHead>
                 <TableHead>Keterangan</TableHead>
-                <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => toggleSort('jumlah')}>
-                  <div className="flex items-center justify-end">Jumlah <SortIcon field="jumlah" /></div>
-                </TableHead>
+                 <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => toggleSort('jumlah')}>
+                   <div className="flex items-center justify-end">
+                     Jumlah
+                     {getSortIcon('jumlah') === 'asc' && <ArrowUp className="h-3 w-3 ml-1" />}
+                     {getSortIcon('jumlah') === 'desc' && <ArrowDown className="h-3 w-3 ml-1" />}
+                   </div>
+                 </TableHead>
                 <TableHead>Oleh</TableHead>
                 {(canEdit('expenses') || canDelete('expenses')) && <TableHead className="text-center">Aksi</TableHead>}
               </TableRow>

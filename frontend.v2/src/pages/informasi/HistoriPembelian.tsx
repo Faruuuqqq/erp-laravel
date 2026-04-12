@@ -15,6 +15,7 @@ import { useTransactions, useToggleHideTransaction } from '@/hooks/api/useTransa
 import { useSuppliers } from '@/hooks/api/useSuppliers';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useLazyPdfExport } from '@/hooks/useLazyPdfExport';
+import { exportTransactionsToXlsx, getFilenameWithDate } from '@/lib/xlsx-export';
 import { formatCurrency } from '@/lib/utils';
 import type { Transaction } from '@/types';
 
@@ -42,6 +43,7 @@ const HistoriPembelian = () => {
   const [selectedTrx, setSelectedTrx] = useState<Transaction | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [isExportingXlsx, setIsExportingXlsx] = useState(false);
 
   const toggleHideMutation = useToggleHideTransaction();
 
@@ -154,6 +156,46 @@ const HistoriPembelian = () => {
     }
   }, [filteredByHidden, totalNilai, dateFrom, dateTo, exportToPdf, toast]);
 
+  const handleExportXlsx = useCallback(async () => {
+    setIsExportingXlsx(true);
+    try {
+      const dataForExport = filteredByHidden.map(t => ({
+        'No. Faktur': t.invoiceNumber,
+        'Tanggal': t.date,
+        'Supplier': t.supplier || '-',
+        'Total': t.total,
+        'Terbayar': t.paid,
+        'Sisa': t.remaining ?? 0,
+        'Status': paymentStatusLabel(t),
+      }));
+
+      exportTransactionsToXlsx(
+        dataForExport,
+        ['No. Faktur', 'Tanggal', 'Supplier', 'Total', 'Terbayar', 'Sisa', 'Status'],
+        {
+          filename: `HistoriPembelian_${getFilenameWithDate('')}`,
+          sheetName: 'Histori Pembelian',
+          currencyColumns: [3, 4, 5],
+          rightAlignColumns: [3, 4, 5],
+        }
+      );
+
+      toast({
+        title: 'Export berhasil',
+        description: `${filteredByHidden.length} transaksi diekspor ke XLSX`,
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Gagal export XLSX',
+        variant: 'destructive',
+      });
+      console.error(error);
+    } finally {
+      setIsExportingXlsx(false);
+    }
+  }, [filteredByHidden, toast]);
+
   return (
     <MainLayout title="Histori Pembelian" subtitle="Riwayat pembelian barang dari supplier">
       {/* Summary */}
@@ -187,9 +229,14 @@ const HistoriPembelian = () => {
             </SelectContent>
           </Select>
         </div>
-         <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={handleExport} disabled={isExporting}>
-           <FileDown className="h-3.5 w-3.5" />{isExporting ? 'Generating...' : 'Export PDF'}
-         </Button>
+         <div className="flex gap-1.5">
+           <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={handleExportXlsx} disabled={isExportingXlsx}>
+             <FileDown className="h-3.5 w-3.5" />{isExportingXlsx ? 'Generating...' : 'Export XLSX'}
+           </Button>
+           <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={handleExport} disabled={isExporting}>
+             <FileDown className="h-3.5 w-3.5" />{isExporting ? 'Generating...' : 'Export PDF'}
+           </Button>
+         </div>
       </div>
 
       <Card>
