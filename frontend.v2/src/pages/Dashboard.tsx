@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useState, useCallback, memo } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { StatCard } from '@/components/ui/StatCard';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   TrendingUp, TrendingDown, Package, Users, ShoppingCart,
-  Wallet, AlertTriangle, BarChart3, ArrowRight, Clock, RefreshCw,
+  Wallet, AlertTriangle, BarChart3, ArrowRight, Clock, RefreshCw, X,
 } from 'lucide-react';
 import {
   useDashboardStats,
@@ -54,6 +54,7 @@ interface SalesTrendItem {
   pembelian?: number;
 }
 
+// --- Constants -------------------------------------------------------
 const TIPE_LABEL: Record<string, string> = {
   penjualan_tunai: 'Penjualan Tunai',
   penjualan_kredit: 'Penjualan Kredit',
@@ -65,38 +66,205 @@ const TIPE_LABEL: Record<string, string> = {
   surat_jalan: 'Surat Jalan',
 };
 
+const DASHBOARD_ROUTES = {
+  SALES: '/informasi/penjualan',
+  PURCHASES: '/informasi/pembelian',
+  RECEIVABLES: '/laporan/saldo-piutang',
+  PAYABLES: '/laporan/saldo-utang',
+  CASH_SALES: '/transaksi/penjualan-tunai',
+  CREDIT_SALES: '/transaksi/penjualan-kredit',
+  DELIVERY: '/transaksi/surat-jalan',
+  LOW_STOCK: '/laporan/saldo-stok',
+  PRODUCTS: '/produk',
+} as const;
+
+// --- Utility functions -------------------------------------------------------
+/**
+ * Type-safe data extraction with validation
+ */
+function extractData<T>(response: unknown, fallback: T | T[]): T | T[] {
+  if (
+    response &&
+    typeof response === 'object' &&
+    'data' in response
+  ) {
+    const data = (response as { data?: unknown }).data;
+    if (Array.isArray(data)) return data;
+    if (typeof fallback === 'object' && Array.isArray(fallback)) return data ?? fallback;
+    return data ?? fallback;
+  }
+  return fallback;
+}
+
+/**
+ * Validate and transform chart data
+ */
+function transformChartData(data: unknown[]): SalesTrendItem[] {
+  return (Array.isArray(data) ? data : [])
+    .filter(d => {
+      if (!d || typeof d !== 'object') return false;
+      const record = d as Record<string, unknown>;
+      return (record.hari ?? record.day ?? record.date) !== undefined;
+    })
+    .map((d) => {
+      const record = d as Record<string, unknown>;
+      return {
+        hari: (record.hari ?? record.day ?? record.date ?? '') as string,
+        masuk: (record.masuk ?? record.penjualan ?? 0) as number,
+        keluar: (record.keluar ?? record.pembelian ?? 0) as number,
+      };
+    });
+}
+
+// --- Skeleton Components -------------------------------------------------------
+const StatCardSkeleton = () => (
+  <div className="rounded-xl border bg-card p-5">
+    <Skeleton className="h-10 w-10 rounded-lg mb-4" />
+    <Skeleton className="h-7 w-32 mb-2" />
+    <Skeleton className="h-4 w-24" />
+  </div>
+);
+
+const StatCardSkeletonSmall = () => (
+  <div className="rounded-xl border bg-card p-5">
+    <Skeleton className="h-10 w-10 rounded-lg mb-4" />
+    <Skeleton className="h-7 w-28 mb-2" />
+    <Skeleton className="h-4 w-20" />
+  </div>
+);
+
+// --- Chart Component -------------------------------------------------------
+interface CashFlowChartProps {
+  chartData: SalesTrendItem[];
+  trendLoading: boolean;
+  trendRange: 'week' | 'month';
+  onTrendRangeChange: (range: 'week' | 'month') => void;
+}
+
+const CashFlowChart = memo(({
+  chartData,
+  trendLoading,
+  trendRange,
+  onTrendRangeChange,
+}: CashFlowChartProps) => (
+  <Card className="lg:col-span-2">
+    <CardHeader className="pb-3">
+      <div className="flex items-center justify-between">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <BarChart3 className="h-4 w-4 text-primary" />
+          Arus Kas
+        </CardTitle>
+        <div className="flex gap-1">
+          {(['week', 'month'] as const).map(r => (
+            <Button
+              key={r}
+              variant={trendRange === r ? 'default' : 'ghost'}
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => onTrendRangeChange(r)}
+            >
+              {r === 'week' ? 'Minggu Ini' : 'Bulan Ini'}
+            </Button>
+          ))}
+        </div>
+      </div>
+    </CardHeader>
+    <CardContent>
+      {trendLoading ? (
+        <Skeleton className="h-[200px] w-full rounded-lg" />
+      ) : chartData.length === 0 ? (
+        <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm">
+          Tidak ada data arus kas
+        </div>
+      ) : (
+        <ResponsiveContainer width="100%" height={200}>
+          <BarChart data={chartData} barGap={4}>
+            <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+            <XAxis dataKey="hari" tick={{ fontSize: 12 }} className="text-muted-foreground" />
+            <YAxis tickFormatter={v => `${(v / 1_000_000).toFixed(1)}M`} tick={{ fontSize: 11 }} />
+            <Tooltip
+              formatter={(v: number) => formatCurrency(v)}
+              labelFormatter={(label) => `${label}`}
+              contentStyle={{
+                backgroundColor: 'hsl(var(--background))',
+                border: '1px solid hsl(var(--border))',
+                borderRadius: '8px',
+                padding: '8px',
+              }}
+            />
+            <Bar dataKey="masuk" name="Masuk" fill="hsl(142,71%,38%)" radius={[3, 3, 0, 0]} />
+            <Bar dataKey="keluar" name="Keluar" fill="hsl(0,84%,55%)" radius={[3, 3, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      )}
+      <div className="mt-2 flex gap-4 text-xs text-muted-foreground">
+        <div className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-success inline-block" />Kas Masuk</div>
+        <div className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-destructive inline-block" />Kas Keluar</div>
+      </div>
+    </CardContent>
+  </Card>
+));
+
 // -----------------------------------------------------------------------
 const Dashboard = () => {
   const { user, isOwner } = useAuth();
   const navigate = useNavigate();
   const [trendRange, setTrendRange] = useState<'week' | 'month'>('week');
+  const [dismissedLowStockAlert, setDismissedLowStockAlert] = useState(false);
 
   // --- Real API hooks ---------------------------------------------------
-  const { data: statsData, isLoading: statsLoading, refetch: refetchStats } = useDashboardStats('today');
-  const { data: recentData, isLoading: recentLoading } = useRecentTransactions('all');
-  const { data: lowStockData, isLoading: lowStockLoading } = useLowStock();
-  const { data: trendData, isLoading: trendLoading } = useSalesTrend(trendRange);
+  const {
+    data: statsData,
+    isLoading: statsLoading,
+    isError: statsError,
+    refetch: refetchStats,
+  } = useDashboardStats('today');
+  const {
+    data: recentData,
+    isLoading: recentLoading,
+    isError: recentError,
+    refetch: refetchRecent,
+  } = useRecentTransactions('all');
+  const {
+    data: lowStockData,
+    isLoading: lowStockLoading,
+    isError: lowStockError,
+    refetch: refetchLowStock,
+  } = useLowStock();
+  const {
+    data: trendData,
+    isLoading: trendLoading,
+    isError: trendError,
+  } = useSalesTrend(trendRange);
 
-  const stats: DashboardStats = (statsData as { data?: DashboardStats })?.data ?? {};
-  const recentTx: Transaction[] = (recentData as { data?: Transaction[] })?.data ?? [];
-  const lowStock: LowStockItem[] = (lowStockData as { data?: LowStockItem[] })?.data ?? [];
+  // --- Type-safe data extraction -----------------------------------------------
+  const stats: DashboardStats = (extractData(statsData, {}) as DashboardStats) ?? {};
+  const recentTx: Transaction[] = (extractData(recentData, []) as Transaction[]) ?? [];
+  const lowStock: LowStockItem[] = (extractData(lowStockData, []) as LowStockItem[]) ?? [];
+  const chartData: SalesTrendItem[] = transformChartData(extractData(trendData, []) as unknown[]);
 
-  // Map trend data to chart format
-  const chartData: SalesTrendItem[] = ((trendData as { data?: SalesTrendItem[] })?.data ?? []).map((d) => ({
-    hari: d.hari ?? d.day ?? d.date ?? '',
-    masuk: d.masuk ?? d.penjualan ?? 0,
-    keluar: d.keluar ?? d.pembelian ?? 0,
-  }));
-
-  const overLimitCustomers = stats.produkStokRendah ?? 0; // reuse slot for over-limit if API provides it
+  // --- Callbacks -------------------------------------------------------
+  const handleRefreshAll = useCallback(() => {
+    refetchStats();
+    refetchRecent();
+    refetchLowStock();
+  }, [refetchStats, refetchRecent, refetchLowStock]);
 
   return (
     <MainLayout
       title="Dashboard"
       subtitle={`Selamat datang, ${user?.name} · ${new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}`}
     >
+      {/* Error Messages */}
+      {statsError && (
+        <div className="mb-5 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive flex items-center justify-between">
+          <span>Gagal memuat data dashboard</span>
+          <Button variant="link" size="sm" onClick={() => refetchStats()}>Coba lagi</Button>
+        </div>
+      )}
+
       {/* Smart Alerts */}
-      {isOwner && lowStock.length > 0 && (
+      {isOwner && lowStock.length > 0 && !dismissedLowStockAlert && (
         <div className="mb-5 flex flex-col sm:flex-row gap-3">
           <div className="flex items-center gap-3 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 flex-1">
             <AlertTriangle className="h-4 w-4 text-warning shrink-0" />
@@ -104,9 +272,22 @@ const Dashboard = () => {
               <strong>{lowStock.length} produk</strong> stok di bawah minimum:{' '}
               {lowStock.slice(0, 2).map(p => p.name).join(', ')}{lowStock.length > 2 ? '...' : ''}
             </p>
-            <Button size="sm" variant="outline" className="ml-auto shrink-0 h-7 border-warning text-warning hover:bg-warning/10" onClick={() => navigate('/produk')}>
+            <Button
+              size="sm"
+              variant="outline"
+              className="ml-auto shrink-0 h-7 border-warning text-warning hover:bg-warning/10"
+              onClick={() => navigate(DASHBOARD_ROUTES.PRODUCTS)}
+            >
               Lihat
             </Button>
+            <button
+              className="shrink-0 text-warning hover:text-warning/80 transition-colors"
+              onClick={() => setDismissedLowStockAlert(true)}
+              title="Tutup"
+              aria-label="Tutup alert"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
         </div>
       )}
@@ -114,13 +295,7 @@ const Dashboard = () => {
       {/* Row 1 Stat Cards — semua user */}
       <div className="mb-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {statsLoading ? (
-          Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="rounded-xl border bg-card p-5">
-              <Skeleton className="h-10 w-10 rounded-lg mb-4" />
-              <Skeleton className="h-7 w-32 mb-2" />
-              <Skeleton className="h-4 w-24" />
-            </div>
-          ))
+          Array.from({ length: 4 }).map((_, i) => <StatCardSkeleton key={i} />)
         ) : (
           <>
             <StatCard
@@ -131,7 +306,7 @@ const Dashboard = () => {
               color="success"
               trend={stats.trendPenjualan != null ? (stats.trendPenjualan >= 0 ? 'up' : 'down') : undefined}
               trendValue={stats.trendPenjualan != null ? `${stats.trendPenjualan > 0 ? '+' : ''}${stats.trendPenjualan}%` : undefined}
-              onClick={() => navigate('/informasi/penjualan')}
+              onClick={() => navigate(DASHBOARD_ROUTES.SALES)}
             />
             <StatCard
               title="Pembelian Hari Ini"
@@ -140,7 +315,7 @@ const Dashboard = () => {
               color="primary"
               trend={stats.trendPembelian != null ? (stats.trendPembelian >= 0 ? 'up' : 'down') : undefined}
               trendValue={stats.trendPembelian != null ? `${stats.trendPembelian > 0 ? '+' : ''}${stats.trendPembelian}%` : undefined}
-              onClick={() => navigate('/informasi/pembelian')}
+              onClick={() => navigate(DASHBOARD_ROUTES.PURCHASES)}
             />
             <StatCard
               title="Total Piutang"
@@ -148,7 +323,7 @@ const Dashboard = () => {
               subValue="Dari customer aktif"
               icon={<TrendingUp className="h-5 w-5" />}
               color="warning"
-              onClick={() => navigate('/laporan/saldo-piutang')}
+              onClick={() => navigate(DASHBOARD_ROUTES.RECEIVABLES)}
             />
             <StatCard
               title="Total Utang"
@@ -156,23 +331,17 @@ const Dashboard = () => {
               subValue="Ke supplier"
               icon={<TrendingDown className="h-5 w-5" />}
               color="destructive"
-              onClick={() => navigate('/laporan/saldo-utang')}
+              onClick={() => navigate(DASHBOARD_ROUTES.PAYABLES)}
             />
           </>
         )}
       </div>
 
       {/* Row 2 Stat Cards — owner only */}
-      {isOwner && (
+      {isOwner ? (
         <div className="mb-5 grid gap-4 sm:grid-cols-3">
           {statsLoading ? (
-            Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="rounded-xl border bg-card p-5">
-                <Skeleton className="h-10 w-10 rounded-lg mb-4" />
-                <Skeleton className="h-7 w-28 mb-2" />
-                <Skeleton className="h-4 w-20" />
-              </div>
-            ))
+            Array.from({ length: 3 }).map((_, i) => <StatCardSkeletonSmall key={i} />)
           ) : (
             <>
               <StatCard
@@ -186,73 +355,29 @@ const Dashboard = () => {
                 value={lowStockLoading ? '...' : `${lowStock.length} Produk`}
                 icon={<Package className="h-5 w-5" />}
                 color={lowStock.length > 0 ? 'warning' : 'success'}
-                onClick={() => navigate('/laporan/saldo-stok')}
+                onClick={() => navigate(DASHBOARD_ROUTES.LOW_STOCK)}
               />
               <StatCard
                 title="Total Nilai Stok"
                 value={stats.totalNilaiStok ?? 0}
                 icon={<BarChart3 className="h-5 w-5" />}
                 color="primary"
-                onClick={() => navigate('/laporan/saldo-stok')}
+                onClick={() => navigate(DASHBOARD_ROUTES.LOW_STOCK)}
               />
             </>
           )}
         </div>
-      )}
+      ) : null}
 
       <div className="grid gap-5 lg:grid-cols-3">
         {/* Chart Arus Kas — owner only */}
         {isOwner && (
-          <Card className="lg:col-span-2">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <BarChart3 className="h-4 w-4 text-primary" />
-                  Arus Kas
-                </CardTitle>
-                <div className="flex gap-1">
-                  {(['week', 'month'] as const).map(r => (
-                    <Button
-                      key={r}
-                      variant={trendRange === r ? 'default' : 'ghost'}
-                      size="sm"
-                      className="h-7 text-xs"
-                      onClick={() => setTrendRange(r)}
-                    >
-                      {r === 'week' ? 'Minggu Ini' : 'Bulan Ini'}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {trendLoading ? (
-                <Skeleton className="h-[200px] w-full rounded-lg" />
-              ) : chartData.length === 0 ? (
-                <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm">
-                  Tidak ada data arus kas
-                </div>
-              ) : (
-                <ResponsiveContainer width="100%" height={200}>
-                  <BarChart data={chartData} barGap={4}>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                    <XAxis dataKey="hari" tick={{ fontSize: 12 }} className="text-muted-foreground" />
-                    <YAxis tickFormatter={v => `${(v / 1_000_000).toFixed(1)}M`} tick={{ fontSize: 11 }} />
-                    <Tooltip
-                      formatter={(v: number) => [formatCurrency(v), '']}
-                      contentStyle={{ fontSize: 12, borderRadius: 8 }}
-                    />
-                    <Bar dataKey="masuk" name="Masuk" fill="hsl(142,71%,38%)" radius={[3, 3, 0, 0]} />
-                    <Bar dataKey="keluar" name="Keluar" fill="hsl(0,84%,55%)" radius={[3, 3, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-              <div className="mt-2 flex gap-4 text-xs text-muted-foreground">
-                <div className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-success inline-block" />Kas Masuk</div>
-                <div className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-destructive inline-block" />Kas Keluar</div>
-              </div>
-            </CardContent>
-          </Card>
+          <CashFlowChart
+            chartData={chartData}
+            trendLoading={trendLoading}
+            trendRange={trendRange}
+            onTrendRangeChange={setTrendRange}
+          />
         )}
 
         {/* Stok Menipis */}
@@ -266,13 +391,18 @@ const Dashboard = () => {
           <CardContent className="space-y-2">
             {lowStockLoading ? (
               Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-10 w-full rounded" />)
+            ) : lowStockError ? (
+              <div className="text-sm text-destructive text-center py-4">
+                <p>Gagal memuat data stok</p>
+                <Button variant="link" size="sm" onClick={() => refetchLowStock()}>Coba lagi</Button>
+              </div>
             ) : lowStock.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-4">Semua stok aman ✓</p>
             ) : (
               lowStock.map(p => (
                 <div key={p.id} className="flex items-center justify-between py-1.5 border-b border-border last:border-0">
                   <div>
-                    <p className="text-sm font-medium truncate max-w-[140px]">{p.name}</p>
+                    <p className="text-sm font-medium truncate max-w-[140px]" title={p.name}>{p.name}</p>
                     <p className="text-xs text-muted-foreground">Min: {p.minimumStock ?? 0} {p.unit ?? 'pcs'}</p>
                   </div>
                   <Badge variant="destructive" className="tabular-nums">{p.stock} {p.unit ?? 'pcs'}</Badge>
@@ -290,10 +420,22 @@ const Dashboard = () => {
               Transaksi Terbaru
             </CardTitle>
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => refetchStats()} title="Refresh">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={handleRefreshAll}
+                title="Refresh semua data"
+                aria-label="Refresh data"
+              >
                 <RefreshCw className="h-3.5 w-3.5" />
               </Button>
-              <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => navigate('/informasi/penjualan')}>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs gap-1"
+                onClick={() => navigate(DASHBOARD_ROUTES.SALES)}
+              >
                 Lihat Semua <ArrowRight className="h-3 w-3" />
               </Button>
             </div>
@@ -302,6 +444,11 @@ const Dashboard = () => {
             {recentLoading ? (
               <div className="space-y-2">
                 {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-10 w-full rounded" />)}
+              </div>
+            ) : recentError ? (
+              <div className="text-sm text-destructive text-center py-6">
+                <p>Gagal memuat transaksi terbaru</p>
+                <Button variant="link" size="sm" onClick={() => refetchRecent()}>Coba lagi</Button>
               </div>
             ) : recentTx.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-6">Belum ada transaksi hari ini</p>
@@ -321,7 +468,9 @@ const Dashboard = () => {
                     {recentTx.slice(0, 8).map(tx => (
                       <tr key={tx.id} className="border-b last:border-0 hover:bg-muted/30">
                         <td className="py-2.5 font-mono text-xs text-primary">{tx.invoiceNumber}</td>
-                        <td className="py-2.5 truncate max-w-[150px]">{tx.customer || tx.supplier || '-'}</td>
+                        <td className="py-2.5 truncate max-w-[150px]" title={tx.customer || tx.supplier || '-'}>
+                          {tx.customer || tx.supplier || '-'}
+                        </td>
                         <td className="py-2.5">
                           <span className="text-xs text-muted-foreground">{TIPE_LABEL[tx.type] ?? tx.type}</span>
                         </td>
@@ -353,14 +502,15 @@ const Dashboard = () => {
           <CardContent>
             <div className="grid gap-3 sm:grid-cols-3">
               {[
-                { label: 'Penjualan Tunai', icon: ShoppingCart, path: '/transaksi/penjualan-tunai', color: 'bg-success' },
-                { label: 'Penjualan Kredit', icon: Users, path: '/transaksi/penjualan-kredit', color: 'bg-primary' },
-                { label: 'Surat Jalan', icon: Package, path: '/transaksi/surat-jalan', color: 'bg-warning' },
+                { label: 'Penjualan Tunai', icon: ShoppingCart, path: DASHBOARD_ROUTES.CASH_SALES, color: 'bg-success' },
+                { label: 'Penjualan Kredit', icon: Users, path: DASHBOARD_ROUTES.CREDIT_SALES, color: 'bg-primary' },
+                { label: 'Surat Jalan', icon: Package, path: DASHBOARD_ROUTES.DELIVERY, color: 'bg-warning' },
               ].map(a => (
                 <button
                   key={a.label}
                   onClick={() => navigate(a.path)}
-                  className="flex items-center gap-3 rounded-xl border border-border bg-card p-4 hover:bg-accent transition-colors text-left"
+                  className="flex items-center gap-3 rounded-xl border border-border bg-card p-4 hover:bg-accent transition-colors text-left focus:outline-none focus:ring-2 focus:ring-primary"
+                  aria-label={`${a.label} - Buka halaman`}
                 >
                   <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${a.color}`}>
                     <a.icon className="h-5 w-5 text-white" />
