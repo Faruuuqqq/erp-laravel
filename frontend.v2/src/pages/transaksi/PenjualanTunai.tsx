@@ -1,6 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
 import { cn } from '@/lib/utils';
-import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Plus, Trash2, Banknote, Calculator, Eye, CheckCircle2, Search } from 'lucide-react';
+import { Plus, Trash2, Banknote, Calculator, Eye, Search } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useProducts } from '@/hooks/api/useProducts';
@@ -19,7 +18,9 @@ import { useCreateTransaction } from '@/hooks/api/useTransactions';
 import { formatCurrency } from '@/lib/utils';
 import { DraftPreviewDialog } from '@/components/dialogs/DraftPreviewDialog';
 import { PrintPreviewDialog } from '@/components/dialogs/PrintPreviewDialog';
+import { SuccessScreen } from '@/components/layout/SuccessScreen';
 import { FakturPenjualan } from '@/components/print/FakturPenjualan';
+import { MainLayout } from '@/components/layout/MainLayout';
 import type { Transaction } from '@/types';
 
 interface CartItem {
@@ -130,31 +131,19 @@ const PenjualanTunai = () => {
 
    const reset = useCallback(() => { setState(BLANK()); setSaved(false); setSavedTrx(null); setIsPreviewOpen(false); }, []);
 
-  if (saved && savedTrx) {
-    return (
-      <MainLayout title="Penjualan Tunai" subtitle="Transaksi berhasil disimpan">
-        <div className="flex flex-col items-center justify-center py-16 gap-6">
-          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-success/10">
-            <CheckCircle2 className="h-10 w-10 text-success" />
-          </div>
-          <div className="text-center">
-            <h2 className="text-2xl font-bold">Transaksi Berhasil</h2>
-            <p className="text-muted-foreground mt-1">No. Faktur: <span className="font-mono font-semibold text-primary">{savedTrx.invoiceNumber}</span></p>
-            <p className="text-3xl font-bold text-success mt-3">{formatCurrency(savedTrx.total)}</p>
-            {kembalian > 0 && <p className="text-muted-foreground mt-1">Kembalian: <span className="font-semibold text-success">{formatCurrency(kembalian)}</span></p>}
-          </div>
-           <div className="flex gap-3">
-             {canPrint('transactions.cash_sale') && (
-               <Button onClick={() => setIsPreviewOpen(true)}>
-                 <Eye className="mr-2 h-4 w-4" />Preview & Cetak
-               </Button>
-             )}
-             <Button onClick={reset}>Transaksi Baru</Button>
-           </div>
-        </div>
-      </MainLayout>
-    );
-  }
+   if (saved && savedTrx) {
+     return (
+       <SuccessScreen
+         title="Transaksi Berhasil"
+         invoiceNumber={savedTrx.invoiceNumber}
+         total={savedTrx.total}
+         onPrint={() => setIsPreviewOpen(true)}
+         canPrint={canPrint('transactions.cash_sale')}
+         onReset={reset}
+         extra={kembalian > 0 && <p className="text-muted-foreground mt-1">Kembalian: <span className="font-semibold text-success">{formatCurrency(kembalian)}</span></p>}
+       />
+     );
+   }
 
   return (
     <MainLayout title="Penjualan Tunai" subtitle="Buat transaksi penjualan tunai">

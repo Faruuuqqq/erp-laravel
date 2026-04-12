@@ -1,5 +1,4 @@
 import { useState, useMemo, useCallback } from 'react';
-import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Plus, Trash2, ShoppingCart, Calculator, Eye, CheckCircle2, Search } from 'lucide-react';
+import { Plus, Trash2, ShoppingCart, Calculator, Eye, Search } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useProducts } from '@/hooks/api/useProducts';
@@ -18,7 +17,9 @@ import { useWarehouses } from '@/hooks/api/useWarehouses';
 import { useCreateTransaction } from '@/hooks/api/useTransactions';
 import { DraftPreviewDialog } from '@/components/dialogs/DraftPreviewDialog';
 import { PrintPreviewDialog } from '@/components/dialogs/PrintPreviewDialog';
+import { SuccessScreen } from '@/components/layout/SuccessScreen';
 import { FakturPembelian } from '@/components/print/FakturPembelian';
+import { MainLayout } from '@/components/layout/MainLayout';
 import { formatCurrency } from '@/lib/utils';
 import type { Transaction, Product } from '@/types';
 
@@ -209,27 +210,16 @@ const Pembelian = () => {
 
   if (saved) {
     return (
-      <MainLayout title="Transaksi Pembelian" subtitle="Transaksi berhasil disimpan">
-        <div className="flex flex-col items-center justify-center py-16 gap-6">
-          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-success/10">
-            <CheckCircle2 className="h-10 w-10 text-success" />
-          </div>
-          <div className="text-center">
-            <h2 className="text-2xl font-bold">Pembelian Berhasil Disimpan</h2>
-            <p className="text-muted-foreground mt-1">No. Faktur: <span className="font-mono font-semibold text-primary">{savedInvoice}</span></p>
-            <p className="text-3xl font-bold text-primary mt-3">{formatCurrency(savedTotal)}</p>
-            {isKredit && <Badge variant="outline" className="mt-2 text-warning border-warning">Dicatat sebagai Utang</Badge>}
-          </div>
-          <div className="flex gap-3">
-            {canPrint('transactions.purchase') && (
-              <Button variant="outline" onClick={() => setIsPreviewOpen(true)}>
-                <Eye className="mr-2 h-4 w-4" />Preview & Cetak
-              </Button>
-            )}
-            <Button onClick={reset}>Pembelian Baru</Button>
-          </div>
-        </div>
-      </MainLayout>
+      <SuccessScreen
+        title="Pembelian Berhasil Disimpan"
+        subtitle="Transaksi berhasil disimpan"
+        invoiceNumber={savedInvoice}
+        total={savedTotal}
+        onPrint={() => setIsPreviewOpen(true)}
+        canPrint={canPrint('transactions.purchase')}
+        onReset={reset}
+        extra={isKredit && <Badge variant="outline" className="mt-2 text-warning border-warning">Dicatat sebagai Utang</Badge>}
+      />
     );
   }
 
