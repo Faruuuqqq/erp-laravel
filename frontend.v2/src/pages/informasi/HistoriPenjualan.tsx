@@ -15,13 +15,13 @@ import { Search, History, Eye, EyeOff, FileDown, ChevronLeft, ChevronRight } fro
 import { useToast } from '@/hooks/use-toast';
 import { useTransactions, useToggleHideTransaction } from '@/hooks/api/useTransactions';
 import { useCustomers } from '@/hooks/api/useCustomers';
-import { usePdfExport } from '@/hooks/usePdfExport';
+import { useLazyPdfExport } from '@/hooks/useLazyPdfExport';
 import { formatCurrency } from '@/lib/utils';
 import type { Transaction } from '@/types';
 
 const HistoriPenjualan = () => {
   const { toast } = useToast();
-  const { exportToPdf } = usePdfExport();
+  const { exportToPdf } = useLazyPdfExport();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCustomer, setFilterCustomer] = useState('all');
   const [filterType, setFilterType] = useState('all');

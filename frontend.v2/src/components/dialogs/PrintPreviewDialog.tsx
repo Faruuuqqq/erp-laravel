@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Printer, FileDown, X } from 'lucide-react';
-import { usePdfExport } from '@/hooks/usePdfExport';
+import { useLazyPdfExport } from '@/hooks/useLazyPdfExport';
 import { useToast } from '@/hooks/use-toast';
 import { usePrint } from '@/contexts/usePrint';
 
@@ -29,7 +29,7 @@ export const PrintPreviewDialog = ({
 }: PrintPreviewDialogProps) => {
   const { toast } = useToast();
   const { printDocument } = usePrint();
-  const { exportToPdf } = usePdfExport();
+  const { exportToPdf } = useLazyPdfExport();
   const [isExporting, setIsExporting] = useState(false);
   const [customFilename, setCustomFilename] = useState(filename);
 

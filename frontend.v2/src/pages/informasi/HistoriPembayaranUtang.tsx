@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
-import { usePdfExport } from '@/hooks/usePdfExport';
+import { useLazyPdfExport } from '@/hooks/useLazyPdfExport';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,7 +28,7 @@ const HistoriPembayaranUtang = () => {
 
   const toggleHideMutation = useToggleHideTransaction();
 
-  const { exportToPdf } = usePdfExport();
+  const { exportToPdf } = useLazyPdfExport();
   const { data, isLoading } = useTransactions({
     type: 'pembayaran_utang',
     search: searchTerm || undefined,

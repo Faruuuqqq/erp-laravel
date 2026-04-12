@@ -10,7 +10,7 @@ import { usePrint } from '@/contexts/usePrint';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLaporanHarian } from '@/hooks/api/useInfo';
-import { usePdfExport } from '@/hooks/usePdfExport';
+import { useLazyPdfExport } from '@/hooks/useLazyPdfExport';
 import { LaporanHarianPrint } from '@/components/print/LaporanHarianPrint';
 import { formatCurrency } from '@/lib/utils';
 import type { Transaction } from '@/types';
@@ -46,7 +46,7 @@ const LaporanHarian = () => {
   const { isOwner, canPrint } = usePermissions();
   const { user } = useAuth();
   const { printDocument } = usePrint();
-  const { exportToPdf } = usePdfExport();
+  const { exportToPdf } = useLazyPdfExport();
 
   const { data, isLoading } = useLaporanHarian(selectedDate);
   const report = data?.data as DailyReport | undefined;

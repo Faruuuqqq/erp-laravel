@@ -13,7 +13,7 @@ import { Search, History, Eye, EyeOff, FileDown, ChevronLeft, ChevronRight } fro
 import { useToast } from '@/hooks/use-toast';
 import { useTransactions, useToggleHideTransaction } from '@/hooks/api/useTransactions';
 import { useSuppliers } from '@/hooks/api/useSuppliers';
-import { usePdfExport } from '@/hooks/usePdfExport';
+import { useLazyPdfExport } from '@/hooks/useLazyPdfExport';
 import { formatCurrency } from '@/lib/utils';
 import type { Transaction } from '@/types';
 
@@ -30,7 +30,7 @@ const paymentStatusLabel = (t: Transaction) => {
 
 const HistoriPembelian = () => {
   const { toast } = useToast();
-  const { exportToPdf } = usePdfExport();
+  const { exportToPdf } = useLazyPdfExport();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterSupplier, setFilterSupplier] = useState('all');
   const [filterHidden, setFilterHidden] = useState<'all' | 'visible' | 'hidden'>('visible');
