@@ -28,10 +28,11 @@ const PembayaranPiutang = () => {
   const [metodePembayaran, setMetodePembayaran] = useState('');
   const [jumlahDiterima, setJumlahDiterima] = useState('');
   const [catatan, setCatatan] = useState('');
-  const [tanggal] = useState(new Date().toISOString().split('T')[0]);
-  const [saved, setSaved] = useState(false);
-  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-  const [savedTransaction, setSavedTransaction] = useState<Transaction | null>(null);
+   const [tanggal] = useState(new Date().toISOString().split('T')[0]);
+   const [saved, setSaved] = useState(false);
+   const [isDraftPreviewOpen, setIsDraftPreviewOpen] = useState(false);
+   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+   const [savedTransaction, setSavedTransaction] = useState<Transaction | null>(null);
 
   const createTx = useCreateTransaction();
   const { data: customersData } = useCustomers({ perPage: 200 });
@@ -87,9 +88,9 @@ const PembayaranPiutang = () => {
     }
   }, [selectedItems, metodePembayaran, jumlahDiterimaNum, piutangList, totalSelected, tanggal, catatan, createTx, toast]);
 
-  const reset = useCallback(() => {
-    setSelectedItems([]); setSaved(false); setJumlahDiterima(''); setMetodePembayaran(''); setCatatan(''); setSavedTransaction(null);
-  }, []);
+   const reset = useCallback(() => {
+     setSelectedItems([]); setSaved(false); setJumlahDiterima(''); setMetodePembayaran(''); setCatatan(''); setSavedTransaction(null); setIsDraftPreviewOpen(false);
+   }, []);
 
 
 
@@ -217,19 +218,25 @@ const PembayaranPiutang = () => {
                   <span className={`font-bold tabular-nums ${sisa <= 0 ? 'text-success' : 'text-warning'}`}>{formatCurrency(Math.abs(sisa))}</span>
                 </div>
               )}
-              <div className="space-y-1.5">
-                <Label className="text-xs">Catatan</Label>
-                <Input value={catatan} onChange={e => setCatatan(e.target.value)} placeholder="Catatan penerimaan..." className="text-xs h-8" />
-              </div>
+               <div className="space-y-1.5">
+                 <Label className="text-xs">Catatan</Label>
+                 <Input value={catatan} onChange={e => setCatatan(e.target.value)} placeholder="Catatan penerimaan..." className="text-xs h-8" />
+               </div>
 
-              {canCreate('transactions.receivable') && (
-                <div className="flex gap-2 pt-1">
-                  <Button variant="outline" className="flex-1 h-9 text-sm" onClick={() => setSelectedItems([])}>Batal</Button>
-                  <Button className="flex-1 h-9 text-sm" onClick={handleSave} disabled={selectedItems.length === 0 || createTx.isPending}>
-                    <Check className="mr-1.5 h-4 w-4" />{createTx.isPending ? 'Menyimpan...' : 'Terima'}
-                  </Button>
-                </div>
-              )}
+               {selectedItems.length > 0 && (
+                 <Button variant="outline" className="w-full h-8 text-xs" onClick={() => setIsDraftPreviewOpen(true)}>
+                   <Eye className="mr-1.5 h-3.5 w-3.5" />Lihat Preview
+                 </Button>
+               )}
+
+               {canCreate('transactions.receivable') && (
+                 <div className="flex gap-2 pt-1">
+                   <Button variant="outline" className="flex-1 h-9 text-sm" onClick={() => setSelectedItems([])}>Batal</Button>
+                   <Button className="flex-1 h-9 text-sm" onClick={handleSave} disabled={selectedItems.length === 0 || createTx.isPending}>
+                     <Check className="mr-1.5 h-4 w-4" />{createTx.isPending ? 'Menyimpan...' : 'Terima'}
+                   </Button>
+                 </div>
+               )}
                 {savedTransaction && (
                   <Button variant="outline" className="w-full h-8 text-xs" onClick={() => setIsPreviewOpen(true)}>
                     <Eye className="mr-1.5 h-3.5 w-3.5" />Preview & Cetak
@@ -240,21 +247,151 @@ const PembayaranPiutang = () => {
         </div>
       </div>
 
-      {savedTransaction && (
-        <PrintPreviewDialog
-          isOpen={isPreviewOpen}
-          onClose={() => setIsPreviewOpen(false)}
-          title="Bukti Pembayaran Piutang"
-          documentId="pembayaran-piutang-print"
-          filename={`pembayaran-piutang-${new Date().toISOString().slice(0, 10)}`}
-        >
-          <div id="pembayaran-piutang-print">
-            <PembayaranPiutangPrint transaction={savedTransaction} />
-          </div>
-        </PrintPreviewDialog>
-      )}
-    </MainLayout>
-  );
-};
+       {savedTransaction && (
+         <PrintPreviewDialog
+           isOpen={isPreviewOpen}
+           onClose={() => setIsPreviewOpen(false)}
+           title="Bukti Pembayaran Piutang"
+           documentId="pembayaran-piutang-print"
+           filename={`pembayaran-piutang-${new Date().toISOString().slice(0, 10)}`}
+         >
+           <div id="pembayaran-piutang-print">
+             <PembayaranPiutangPrint transaction={savedTransaction} />
+           </div>
+         </PrintPreviewDialog>
+       )}
 
-export default PembayaranPiutang;
+       {/* Draft Preview Dialog */}
+       <PrintPreviewDialog
+         isOpen={isDraftPreviewOpen}
+         onClose={() => setIsDraftPreviewOpen(false)}
+         title="Preview Pembayaran Piutang (Draft)"
+         documentId="pembayaran-piutang-draft-print"
+         filename="Pembayaran-Piutang-Draft"
+         printContent={
+           <div className="w-full text-sm space-y-4 p-4">
+             <div className="border-b pb-4">
+               <p className="font-semibold text-lg">Pembayaran Piutang (Draft)</p>
+               <p className="text-xs text-muted-foreground">Belum disimpan</p>
+             </div>
+             <div className="space-y-1 text-xs">
+               <div className="flex justify-between">
+                 <span>Tanggal Terima:</span>
+                 <span className="font-semibold">{tanggal}</span>
+               </div>
+               <div className="flex justify-between">
+                 <span>Metode Pembayaran:</span>
+                 <span className="font-semibold">{metodePembayaran || '-'}</span>
+               </div>
+               {catatan && (
+                 <div className="flex justify-between">
+                   <span>Catatan:</span>
+                   <span className="font-semibold">{catatan}</span>
+                 </div>
+               )}
+             </div>
+             <div className="border-t pt-4">
+               <p className="text-xs font-semibold text-muted-foreground mb-2">Daftar Faktur Piutang</p>
+               <table className="w-full text-xs">
+                 <thead className="border-b bg-muted/50">
+                   <tr>
+                     <th className="text-left py-2">No. Faktur</th>
+                     <th className="text-left py-2">Customer</th>
+                     <th className="text-right py-2">Sisa Piutang</th>
+                   </tr>
+                 </thead>
+                 <tbody>
+                   {piutangList.filter(p => selectedItems.includes(p.id)).map(item => (
+                     <tr key={item.id} className="border-b">
+                       <td className="py-2 font-mono font-semibold">{item.invoiceNumber}</td>
+                       <td className="py-2">{item.customer || '-'}</td>
+                       <td className="text-right py-2">{formatCurrency(item.remaining ?? 0)}</td>
+                     </tr>
+                   ))}
+                 </tbody>
+               </table>
+             </div>
+             <div className="space-y-1 text-xs border-t pt-4">
+               <div className="flex justify-between">
+                 <span>Total Piutang:</span>
+                 <span className="font-semibold">{formatCurrency(totalSelected)}</span>
+               </div>
+               <div className="flex justify-between font-semibold text-base border-t pt-2">
+                 <span>Jumlah Diterima:</span>
+                 <span className="text-success">{formatCurrency(jumlahDiterimaNum)}</span>
+               </div>
+               {sisa !== 0 && (
+                 <div className={`flex justify-between ${sisa <= 0 ? 'text-success' : 'text-warning'}`}>
+                   <span>{sisa <= 0 ? 'Lebih Bayar' : 'Sisa Piutang'}:</span>
+                   <span className="font-semibold">{formatCurrency(Math.abs(sisa))}</span>
+                 </div>
+               )}
+             </div>
+           </div>
+         }
+       >
+         <div className="w-full text-sm space-y-4 p-4">
+           <div className="border-b pb-4">
+             <p className="font-semibold text-lg">Pembayaran Piutang (Draft)</p>
+             <p className="text-xs text-muted-foreground">Belum disimpan</p>
+           </div>
+           <div className="space-y-1 text-xs">
+             <div className="flex justify-between">
+               <span>Tanggal Terima:</span>
+               <span className="font-semibold">{tanggal}</span>
+             </div>
+             <div className="flex justify-between">
+               <span>Metode Pembayaran:</span>
+               <span className="font-semibold">{metodePembayaran || '-'}</span>
+             </div>
+             {catatan && (
+               <div className="flex justify-between">
+                 <span>Catatan:</span>
+                 <span className="font-semibold">{catatan}</span>
+               </div>
+             )}
+           </div>
+           <div className="border-t pt-4">
+             <p className="text-xs font-semibold text-muted-foreground mb-2">Daftar Faktur Piutang</p>
+             <table className="w-full text-xs">
+               <thead className="border-b bg-muted/50">
+                 <tr>
+                   <th className="text-left py-2">No. Faktur</th>
+                   <th className="text-left py-2">Customer</th>
+                   <th className="text-right py-2">Sisa Piutang</th>
+                 </tr>
+               </thead>
+               <tbody>
+                 {piutangList.filter(p => selectedItems.includes(p.id)).map(item => (
+                   <tr key={item.id} className="border-b">
+                     <td className="py-2 font-mono font-semibold">{item.invoiceNumber}</td>
+                     <td className="py-2">{item.customer || '-'}</td>
+                     <td className="text-right py-2">{formatCurrency(item.remaining ?? 0)}</td>
+                   </tr>
+                 ))}
+               </tbody>
+             </table>
+           </div>
+           <div className="space-y-1 text-xs border-t pt-4">
+             <div className="flex justify-between">
+               <span>Total Piutang:</span>
+               <span className="font-semibold">{formatCurrency(totalSelected)}</span>
+             </div>
+             <div className="flex justify-between font-semibold text-base border-t pt-2">
+               <span>Jumlah Diterima:</span>
+               <span className="text-success">{formatCurrency(jumlahDiterimaNum)}</span>
+             </div>
+             {sisa !== 0 && (
+               <div className={`flex justify-between ${sisa <= 0 ? 'text-success' : 'text-warning'}`}>
+                 <span>{sisa <= 0 ? 'Lebih Bayar' : 'Sisa Piutang'}:</span>
+                 <span className="font-semibold">{formatCurrency(Math.abs(sisa))}</span>
+               </div>
+             )}
+           </div>
+         </div>
+       </PrintPreviewDialog>
+     </MainLayout>
+   );
+ };
+ 
+ export default PembayaranPiutang;
