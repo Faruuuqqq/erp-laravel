@@ -5,7 +5,6 @@ namespace Database\Seeders;
 use App\Models\DeliveryNote;
 use App\Models\Transaction;
 use App\Models\User;
-use App\Models\Customer;
 use Illuminate\Database\Seeder;
 
 class DeliveryNoteSeeder extends Seeder
@@ -13,81 +12,47 @@ class DeliveryNoteSeeder extends Seeder
     public function run(): void
     {
         $users = User::all();
-        $customers = Customer::all();
-        $creditSales = Transaction::where('type', 'penjualan_kredit')->get();
+        if ($users->isEmpty()) return;
 
-        $deliveryCount = $this->faker->numberBetween(4, 6);
+        if (DeliveryNote::count() > 0) {
+            $this->command->info('Surat jalan sudah ada, melewati DeliveryNoteSeeder.');
+            return;
+        }
 
-        for ($i = 0; $i < $deliveryCount; $i++) {
-            $creditSale = $creditSales->random();
-            $deliveryNumber = 'SJ-' . now()->format('Ymd') . '-' . str_pad($i + 1, 2, '0');
+        // Buat surat jalan untuk beberapa transaksi penjualan
+        $penjualanTrx = Transaction::whereIn('type', ['penjualan_tunai', 'penjualan_kredit'])
+            ->where('status', 'completed')
+            ->take(12)
+            ->get();
+
+        $drivers = [
+            ['name' => 'Budi Santoso', 'plate' => 'B 1234 KJ'],
+            ['name' => 'Ahmad Fauzi',  'plate' => 'B 5678 MN'],
+            ['name' => 'Dede Gunawan', 'plate' => 'D 9012 PQ'],
+            ['name' => 'Rudi Hartono', 'plate' => 'B 3456 RS'],
+        ];
+
+        $counter  = 1;
+        $statuses = ['delivered', 'delivered', 'delivered', 'pending', 'cancelled'];
+
+        foreach ($penjualanTrx as $trx) {
+            $date   = now()->subDays(rand(0, 14))->format('Y-m-d');
+            $driver = $drivers[array_rand($drivers)];
+            $status = $statuses[array_rand($statuses)];
 
             DeliveryNote::create([
-                'delivery_number' => $deliveryNumber,
-                'transaction_id' => $creditSale ? $creditSale->id : null,
-                'customer_id' => $customers->random()->id,
-                'driver_name' => $this->getDriverName(),
-                'vehicle_plate' => $this->getVehiclePlate(),
-                'address' => $this->getAddress(),
-                'notes' => $this->getNotes(),
-                'status' => $this->getStatus(),
-                'created_by' => $users->random()->id,
+                'delivery_number' => 'SJ-' . str_replace('-', '', $date) . '-' . str_pad($counter++, 3, '0', STR_PAD_LEFT),
+                'date'            => $date,
+                'transaction_id'  => $trx->id,
+                'customer_id'     => $trx->customer_id,
+                'driver'          => $driver['name'],
+                'vehicle_plate'   => $driver['plate'],
+                'notes'           => 'Dikirim oleh ' . $driver['name'],
+                'status'          => $status,
+                'created_by'      => $users->random()->id,
             ]);
         }
-    }
 
-    private function getDriverName(): string
-    {
-        $names = [
-            'Budi Santoso',
-            'Agus Setiawan',
-            'Dedi Kurniawan',
-            'Joko Susilo',
-            'Rudi Hartono',
-            'Wawan Kurniawan',
-        ];
-        return $names[array_rand($names)];
-    }
-
-    private function getVehiclePlate(): string
-    {
-        $plates = [
-            'B 1234 ABC',
-            'B 5678 XYZ',
-            'B 9012 DEF',
-            'B 3456 GHI',
-        ];
-        return $plates[array_rand($plates)];
-    }
-
-    private function getAddress(): string
-    {
-        $addresses = [
-            'Jl. Sudirman No. 123, Jakarta',
-            'Jl. Gatot Subroto Kav. 5, Bandung',
-            'Jl. Basuki Rahmat No. 45, Surabaya',
-        ];
-        return $addresses[array_rand($addresses)];
-    }
-
-    private function getNotes(): ?string
-    {
-        $notes = [
-            'Kirim harian',
-            'Kirim segera',
-            'Antar ke gudang pelanggan',
-            null,
-        ];
-        $randomIndex = array_rand($notes);
-        return $notes[$randomIndex];
-    }
-
-    private function getStatus(): string
-    {
-        $statuses = ['completed', 'completed', 'completed', 'cancelled'];
-        return $statuses[array_rand($statuses)];
-    }
-
-        $this->command->info('Delivery notes seeded: ' . $deliveryCount . ' surat jalan.');
+        $this->command->info('DeliveryNote seeder selesai: ' . DeliveryNote::count() . ' surat jalan dibuat.');
     }
 }

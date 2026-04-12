@@ -1,126 +1,280 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Search, Eye, FileDown, History } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { TRANSACTIONS, CUSTOMERS, SALES_REPS, formatRupiah } from '@/data/mockData';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Search, History, Eye, EyeOff, FileDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useTransactions, useToggleHideTransaction } from '@/hooks/api/useTransactions';
+import { useCustomers } from '@/hooks/api/useCustomers';
+import { usePdfExport } from '@/hooks/usePdfExport';
+import { formatCurrency } from '@/lib/utils';
+import type { Transaction } from '@/types';
 
 const HistoriPenjualan = () => {
   const { toast } = useToast();
+  const { exportToPdf } = usePdfExport();
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState('all');
-  const [filterTipe, setFilterTipe] = useState('all');
-  const [selectedTrx, setSelectedTrx] = useState<typeof TRANSACTIONS[0] | null>(null);
+  const [filterCustomer, setFilterCustomer] = useState('all');
+  const [filterType, setFilterType] = useState('all');
+  const [filterHidden, setFilterHidden] = useState<'all' | 'visible' | 'hidden'>('visible');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [page, setPage] = useState(1);
+  const [selectedTrx, setSelectedTrx] = useState<Transaction | null>(null);
+  const [showLunasOnly, setShowLunasOnly] = useState(false);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
 
-  const penjualanTrx = TRANSACTIONS.filter(t => t.tipe === 'penjualan_tunai' || t.tipe === 'penjualan_kredit');
-  const extraSales = [
-    { id: 'sh1', noFaktur: 'PJ-2025-024-003', tipe: 'penjualan_tunai' as const, tanggal: '24-02-2025', customerId: 'cus1', customerNama: 'Toko Makmur Jaya', salesId: 's1', salesNama: 'Ahmad Fauzi', gudangId: 'g1', gudangNama: 'Gudang Utama', items: [{ productId: 'p8', productNama: 'Chitato Original 68g', qty: 24, harga: 11_000, diskon: 0, subtotal: 264_000, satuan: 'Pcs' }], subtotal: 264_000, diskon: 0, total: 264_000, bayar: 300_000, kembalian: 36_000, status: 'lunas' as const, createdBy: 'admin', createdAt: '24-02-2025' },
-    { id: 'sh2', noFaktur: 'PK-2025-022-001', tipe: 'penjualan_kredit' as const, tanggal: '22-02-2025', customerId: 'cus3', customerNama: 'CV Sumber Rejeki', salesId: 's2', salesNama: 'Dewi Rahmawati', gudangId: 'g2', gudangNama: 'Gudang Cabang Bekasi', items: [{ productId: 'p6', productNama: 'Teh Botol Sosro 250ml', qty: 240, harga: 5_000, diskon: 0, subtotal: 1_200_000, satuan: 'Botol' }], subtotal: 1_200_000, diskon: 0, total: 1_200_000, status: 'kredit' as const, createdBy: 'admin', createdAt: '22-02-2025' },
-    { id: 'sh3', noFaktur: 'PJ-2025-021-002', tipe: 'penjualan_tunai' as const, tanggal: '21-02-2025', customerId: 'cus6', customerNama: 'Mini Market Sejahtera', salesId: 's3', salesNama: 'Riko Prasetyo', gudangId: 'g1', gudangNama: 'Gudang Utama', items: [{ productId: 'p4', productNama: 'Aqua Air Mineral 600ml', qty: 48, harga: 3_500, diskon: 0, subtotal: 168_000, satuan: 'Botol' }, { productId: 'p10', productNama: 'Gudang Garam Surya 12', qty: 30, harga: 25_000, diskon: 0, subtotal: 750_000, satuan: 'Bungkus' }], subtotal: 918_000, diskon: 0, total: 918_000, bayar: 1_000_000, kembalian: 82_000, status: 'lunas' as const, createdBy: 'admin', createdAt: '21-02-2025' },
-  ];
-  const allSales = [...penjualanTrx, ...extraSales];
+  const toggleHideMutation = useToggleHideTransaction();
 
-  const filtered = allSales.filter(t => {
-    const matchSearch = t.noFaktur.toLowerCase().includes(searchTerm.toLowerCase()) || (t.customerNama || '').toLowerCase().includes(searchTerm.toLowerCase());
-    const matchStatus = filterStatus === 'all' || t.status === filterStatus;
-    const matchTipe = filterTipe === 'all' || t.tipe === filterTipe;
-    return matchSearch && matchStatus && matchTipe;
+  const typeParam = filterType === 'kredit' ? 'penjualan_kredit' : filterType === 'tunai' ? 'penjualan_tunai' : undefined;
+
+  const { data: tunaiData, isLoading: l1 } = useTransactions({
+    type: 'penjualan_tunai',
+    search: searchTerm || undefined,
+    from: dateFrom || undefined,
+    to: dateTo || undefined,
+    page,
+    perPage: 15,
+  });
+  const { data: kreditData, isLoading: l2 } = useTransactions({
+    type: 'penjualan_kredit',
+    search: searchTerm || undefined,
+    from: dateFrom || undefined,
+    to: dateTo || undefined,
+    page,
+    perPage: 15,
   });
 
+  const { data: customersData } = useCustomers({ per_page: 200 });
+  const customers = customersData?.data ?? [];
+
+  const tunai = filterType !== 'kredit' ? (tunaiData?.data ?? []) : [];
+  const kredit = filterType !== 'tunai' ? (kreditData?.data ?? []) : [];
+  const allTrx = [...tunai, ...kredit].sort((a, b) => b.date.localeCompare(a.date));
+  const isLoading = l1 || l2;
+
+  const filtered = allTrx
+    .filter(t => filterCustomer === 'all' || t.customerId === filterCustomer)
+    .filter(t => !showLunasOnly || (t.remaining ?? 0) === 0)
+    .filter(t => {
+      if (filterHidden === 'visible') return !t.isHidden;
+      if (filterHidden === 'hidden') return t.isHidden;
+      return true;
+    });
+
+  const hiddenCount = allTrx.filter(t => t.isHidden).length;
   const totalNilai = filtered.reduce((s, t) => s + t.total, 0);
-  const statusVariant = (s: string) => s === 'lunas' ? 'default' : s === 'kredit' ? 'destructive' : 'secondary';
-  const statusLabel = (s: string) => s === 'lunas' ? 'Lunas' : s === 'kredit' ? 'Kredit' : 'Sebagian';
+  const totalKredit = allTrx.filter(t => (t.remaining ?? 0) > 0).length;
+
+  const handleToggleHide = useCallback(async (id: string) => {
+    setTogglingId(id);
+    try {
+      await toggleHideMutation.mutateAsync(id);
+      toast({ title: 'Berhasil', description: 'Status transaksi diperbarui' });
+    } catch {
+      toast({ title: 'Error', description: 'Gagal mengubah status transaksi', variant: 'destructive' });
+    } finally {
+      setTogglingId(null);
+    }
+  }, [toggleHideMutation, toast]);
+
+  const handleExport = useCallback(async () => {
+    setIsExporting(true);
+    try {
+      const htmlContent = `
+        <div style="background: white; padding: 24px; font-family: Arial, sans-serif; font-size: 12px;">
+          <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+              <tr style="border-bottom: 2px solid #333;">
+                <th style="padding: 8px; text-align: left; font-weight: bold;">No. Faktur</th>
+                <th style="padding: 8px; text-align: left; font-weight: bold;">Tanggal</th>
+                <th style="padding: 8px; text-align: left; font-weight: bold;">Customer</th>
+                <th style="padding: 8px; text-align: left; font-weight: bold;">Tipe</th>
+                <th style="padding: 8px; text-align: right; font-weight: bold;">Total</th>
+                <th style="padding: 8px; text-align: right; font-weight: bold;">Terbayar</th>
+                <th style="padding: 8px; text-align: right; font-weight: bold;">Sisa</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${filtered.map(t => `
+                <tr style="border-bottom: 1px solid #ddd;">
+                  <td style="padding: 8px; text-align: left; font-family: monospace;">${t.invoiceNumber}</td>
+                  <td style="padding: 8px; text-align: left;">${t.date}</td>
+                  <td style="padding: 8px; text-align: left;">${t.customer || 'Walk-in'}</td>
+                  <td style="padding: 8px; text-align: left;">${t.type === 'penjualan_kredit' ? 'Kredit' : 'Tunai'}</td>
+                  <td style="padding: 8px; text-align: right;">${formatCurrency(t.total)}</td>
+                  <td style="padding: 8px; text-align: right;">${formatCurrency(t.paid)}</td>
+                  <td style="padding: 8px; text-align: right;">${formatCurrency(t.remaining ?? 0)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+            <tfoot>
+              <tr style="border-top: 2px solid #333; font-weight: bold;">
+                <td colspan="4" style="padding: 8px; text-align: right;">TOTAL:</td>
+                <td style="padding: 8px; text-align: right;">${formatCurrency(totalNilai)}</td>
+                <td colspan="2"></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      `;
+
+      const tempDiv = document.createElement('div');
+      tempDiv.id = 'pdf-export-content';
+      tempDiv.innerHTML = htmlContent;
+      document.body.appendChild(tempDiv);
+
+      const dateRange = dateFrom || dateTo ? ` (${dateFrom || '-'} s/d ${dateTo || '-'})` : '';
+      await exportToPdf('pdf-export-content', {
+        filename: `histori-penjualan-${new Date().toISOString().slice(0, 10)}.pdf`,
+        title: 'Histori Penjualan',
+        subtitle: `${filtered.length} transaksi${dateRange}`,
+        companyName: 'Toko ABC',
+        companyPhone: '(021) 1234-5678',
+        companyAddress: 'Jl. Jalan Raya No. 123, Jakarta 12345',
+      });
+
+      document.body.removeChild(tempDiv);
+      toast({ title: 'Export berhasil', description: `${filtered.length} transaksi diekspor ke PDF` });
+    } catch (error) {
+      toast({ title: 'Error', description: 'Gagal mengekspor ke PDF', variant: 'destructive' });
+      console.error(error);
+    } finally {
+      setIsExporting(false);
+    }
+  }, [filtered, totalNilai, dateFrom, dateTo, exportToPdf, toast]);
 
   return (
-    <MainLayout title="Histori Penjualan" subtitle="Riwayat penjualan barang ke customer">
-      {/* Summary */}
-      <div className="mb-4 grid gap-3 md:grid-cols-4">
+    <MainLayout title="Histori Penjualan" subtitle="Riwayat transaksi penjualan tunai dan kredit">
+      <div className="mb-4 grid gap-3 md:grid-cols-3">
         {[
-          { label: 'Total Transaksi', value: String(allSales.length) },
-          { label: 'Nilai Ditampilkan', value: formatRupiah(totalNilai), cls: 'text-primary' },
-          { label: 'Tunai', value: String(allSales.filter(t => t.tipe === 'penjualan_tunai').length), cls: 'text-success' },
-          { label: 'Kredit', value: String(allSales.filter(t => t.tipe === 'penjualan_kredit').length), cls: 'text-warning' },
+          { label: 'Total Transaksi', value: String(allTrx.length) },
+          { label: 'Nilai Ditampilkan', value: formatCurrency(totalNilai), color: 'text-primary' },
+          { label: 'Piutang Belum Lunas', value: String(totalKredit), color: 'text-warning' },
         ].map(s => (
-          <Card key={s.label}><CardContent className="p-3"><p className="text-xs text-muted-foreground">{s.label}</p><p className={`text-lg font-bold tabular-nums ${s.cls || ''}`}>{s.value}</p></CardContent></Card>
+          <Card key={s.label}><CardContent className="p-3">
+            <p className="text-xs text-muted-foreground">{s.label}</p>
+            <p className={`text-lg font-bold tabular-nums ${s.color ?? ''}`}>{s.value}</p>
+          </CardContent></Card>
         ))}
       </div>
 
       <div className="mb-4 flex flex-col sm:flex-row gap-2 items-start sm:items-center justify-between">
         <div className="flex gap-2 flex-wrap">
-          <div className="relative w-60">
+          <div className="relative w-56">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-            <Input placeholder="Cari faktur/customer..." className="pl-8 text-xs h-8" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+            <Input placeholder="Cari faktur..." className="pl-8 text-xs h-8" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setPage(1); }} />
           </div>
-          <Select value={filterTipe} onValueChange={setFilterTipe}>
-            <SelectTrigger className="w-36 text-xs h-8"><SelectValue placeholder="Tipe" /></SelectTrigger>
+          <Input type="date" className="text-xs h-8 w-36" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setPage(1); }} />
+          <Input type="date" className="text-xs h-8 w-36" value={dateTo} onChange={e => { setDateTo(e.target.value); setPage(1); }} />
+          <Select value={filterType} onValueChange={v => { setFilterType(v); setPage(1); }}>
+            <SelectTrigger className="w-36 text-xs h-8"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Semua Tipe</SelectItem>
-              <SelectItem value="penjualan_tunai">Tunai</SelectItem>
-              <SelectItem value="penjualan_kredit">Kredit</SelectItem>
+              <SelectItem value="all">Tunai + Kredit</SelectItem>
+              <SelectItem value="tunai">Tunai</SelectItem>
+              <SelectItem value="kredit">Kredit</SelectItem>
             </SelectContent>
           </Select>
-          <Select value={filterStatus} onValueChange={setFilterStatus}>
-            <SelectTrigger className="w-32 text-xs h-8"><SelectValue placeholder="Status" /></SelectTrigger>
+          <Select value={filterCustomer} onValueChange={v => { setFilterCustomer(v); setPage(1); }}>
+            <SelectTrigger className="w-44 text-xs h-8"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Semua Status</SelectItem>
-              <SelectItem value="lunas">Lunas</SelectItem>
-              <SelectItem value="kredit">Belum Bayar</SelectItem>
-              <SelectItem value="sebagian">Sebagian</SelectItem>
+              <SelectItem value="all">Semua Customer</SelectItem>
+              {customers.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
-        <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={() => toast({ title: 'Mengekspor PDF...' })}>
-          <FileDown className="h-3.5 w-3.5" />Export PDF
-        </Button>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            <Switch id="show-lunas" checked={showLunasOnly} onCheckedChange={setShowLunasOnly} />
+            <Label htmlFor="show-lunas" className="text-xs text-muted-foreground cursor-pointer">Lunas saja</Label>
+          </div>
+          <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={handleExport} disabled={isExporting}><FileDown className="h-3.5 w-3.5" />{isExporting ? 'Generating...' : 'Export PDF'}</Button>
+        </div>
       </div>
 
       <Card>
         <CardContent className="p-0">
+          <div className="border-b">
+            <Tabs value={filterHidden} onValueChange={(v) => setFilterHidden(v as 'all' | 'visible' | 'hidden')}>
+              <TabsList className="w-full justify-start rounded-none h-10 bg-transparent border-b">
+                <TabsTrigger value="visible" className="text-xs">Ditampilkan ({allTrx.filter(t => !t.isHidden).length})</TabsTrigger>
+                <TabsTrigger value="hidden" className="text-xs">Tersembunyi ({hiddenCount})</TabsTrigger>
+                <TabsTrigger value="all" className="text-xs">Semua ({allTrx.length})</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/50">
+                  <TableHead className="w-8 text-xs">#</TableHead>
                   <TableHead className="text-xs">No. Faktur</TableHead>
                   <TableHead className="text-xs">Tanggal</TableHead>
                   <TableHead className="text-xs">Customer</TableHead>
-                  <TableHead className="text-xs">Sales</TableHead>
                   <TableHead className="text-xs">Tipe</TableHead>
                   <TableHead className="text-xs text-right">Total</TableHead>
+                  <TableHead className="text-xs text-right">Terbayar</TableHead>
+                  <TableHead className="text-xs text-right">Sisa</TableHead>
                   <TableHead className="text-xs">Status</TableHead>
-                  <TableHead className="w-10"></TableHead>
+                  <TableHead className="w-16" />
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.length === 0 ? (
-                  <TableRow><TableCell colSpan={8} className="text-center py-10 text-muted-foreground">Tidak ada data</TableCell></TableRow>
-                ) : (
-                  filtered.map(t => (
-                    <TableRow key={t.id} className="text-sm hover:bg-muted/30">
-                      <TableCell className="font-mono text-xs text-primary font-semibold">{t.noFaktur}</TableCell>
-                      <TableCell className="text-xs">{t.tanggal}</TableCell>
-                      <TableCell className="font-medium max-w-[140px] truncate">{t.customerNama}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{t.salesNama || '-'}</TableCell>
+                {isLoading ? (
+                  Array.from({ length: 5 }).map((_, i) => <TableRow key={i}><TableCell colSpan={10}><Skeleton className="h-8 w-full" /></TableCell></TableRow>)
+                ) : filtered.length === 0 ? (
+                  <TableRow><TableCell colSpan={10} className="text-center py-10 text-muted-foreground">Tidak ada data</TableCell></TableRow>
+                ) : filtered.map((t, idx) => {
+                  const isLunas = (t.remaining ?? 0) === 0;
+                  return (
+                    <TableRow key={t.id} className={`text-sm hover:bg-muted/30 ${t.isHidden ? 'opacity-60' : ''}`}>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {t.isHidden ? <Badge variant="outline" className="text-xs">🔒</Badge> : ''}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs text-primary font-semibold">{t.invoiceNumber}</TableCell>
+                      <TableCell className="text-xs">{t.date}</TableCell>
+                      <TableCell className="max-w-[140px] truncate">{t.customer || 'Walk-in'}</TableCell>
                       <TableCell>
-                        <Badge variant={t.tipe === 'penjualan_tunai' ? 'secondary' : 'outline'} className="text-xs">
-                          {t.tipe === 'penjualan_tunai' ? 'Tunai' : 'Kredit'}
+                        <Badge variant={t.type === 'penjualan_kredit' ? 'outline' : 'secondary'} className="text-xs">
+                          {t.type === 'penjualan_kredit' ? 'Kredit' : 'Tunai'}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-right font-semibold tabular-nums">{formatRupiah(t.total)}</TableCell>
-                      <TableCell><Badge variant={statusVariant(t.status)} className="text-xs">{statusLabel(t.status)}</Badge></TableCell>
+                      <TableCell className="text-right font-semibold tabular-nums">{formatCurrency(t.total)}</TableCell>
+                      <TableCell className="text-right tabular-nums text-xs text-success">{formatCurrency(t.paid)}</TableCell>
+                      <TableCell className="text-right tabular-nums text-xs text-warning">{formatCurrency(t.remaining ?? 0)}</TableCell>
                       <TableCell>
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setSelectedTrx(t)}>
-                          <Eye className="h-3.5 w-3.5" />
-                        </Button>
+                        {isLunas
+                          ? <Badge variant="default" className="text-xs">Lunas</Badge>
+                          : <Badge variant="destructive" className="text-xs">Piutang</Badge>}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-0.5">
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setSelectedTrx(t)}><Eye className="h-3.5 w-3.5" /></Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                            title={t.isHidden ? 'Tampilkan' : 'Sembunyikan'}
+                            onClick={() => handleToggleHide(t.id)}
+                            disabled={togglingId === t.id}
+                          >
+                            {t.isHidden ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
@@ -130,50 +284,40 @@ const HistoriPenjualan = () => {
       <Dialog open={!!selectedTrx} onOpenChange={() => setSelectedTrx(null)}>
         <DialogContent className="max-w-xl">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <History className="h-4 w-4" />
-              Detail Penjualan - {selectedTrx?.noFaktur}
-            </DialogTitle>
+            <DialogTitle className="flex items-center gap-2"><History className="h-4 w-4" />Detail Penjualan – {selectedTrx?.invoiceNumber}</DialogTitle>
           </DialogHeader>
           {selectedTrx && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3 text-sm">
-                <div><p className="text-xs text-muted-foreground">Tanggal</p><p className="font-medium">{selectedTrx.tanggal}</p></div>
-                <div><p className="text-xs text-muted-foreground">Customer</p><p className="font-medium">{selectedTrx.customerNama}</p></div>
-                <div><p className="text-xs text-muted-foreground">Sales</p><p className="font-medium">{selectedTrx.salesNama || '-'}</p></div>
-                <div><p className="text-xs text-muted-foreground">Status</p><Badge variant={statusVariant(selectedTrx.status)} className="text-xs">{statusLabel(selectedTrx.status)}</Badge></div>
-                {selectedTrx.bayar && <div><p className="text-xs text-muted-foreground">Bayar</p><p className="font-semibold text-success tabular-nums">{formatRupiah(selectedTrx.bayar)}</p></div>}
-                {selectedTrx.kembalian && <div><p className="text-xs text-muted-foreground">Kembalian</p><p className="font-semibold tabular-nums">{formatRupiah(selectedTrx.kembalian)}</p></div>}
+                <div><p className="text-xs text-muted-foreground">Tanggal</p><p className="font-medium">{selectedTrx.date}</p></div>
+                <div><p className="text-xs text-muted-foreground">Customer</p><p className="font-medium">{selectedTrx.customer || 'Walk-in'}</p></div>
+                <div><p className="text-xs text-muted-foreground">Total</p><p className="font-bold text-primary">{formatCurrency(selectedTrx.total)}</p></div>
+                <div><p className="text-xs text-muted-foreground">Sisa Piutang</p><p className="font-bold text-warning">{formatCurrency(selectedTrx.remaining ?? 0)}</p></div>
               </div>
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-muted/50">
-                    <TableHead className="text-xs">Produk</TableHead>
-                    <TableHead className="text-xs text-right">Qty</TableHead>
-                    <TableHead className="text-xs text-right">Harga</TableHead>
-                    <TableHead className="text-xs text-right">Subtotal</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {selectedTrx.items.map((item, i) => (
-                    <TableRow key={i} className="text-sm">
-                      <TableCell>{item.productNama}</TableCell>
-                      <TableCell className="text-right tabular-nums">{item.qty} {item.satuan}</TableCell>
-                      <TableCell className="text-right tabular-nums text-xs">{formatRupiah(item.harga)}</TableCell>
-                      <TableCell className="text-right font-semibold tabular-nums">{formatRupiah(item.subtotal)}</TableCell>
+              {selectedTrx.items && selectedTrx.items.length > 0 && (
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/50">
+                      <TableHead className="text-xs">Produk</TableHead>
+                      <TableHead className="text-xs text-right">Qty</TableHead>
+                      <TableHead className="text-xs text-right">Harga</TableHead>
+                      <TableHead className="text-xs text-right">Subtotal</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              {selectedTrx.diskon > 0 && (
-                <div className="flex justify-between text-sm"><span className="text-muted-foreground">Diskon</span><span className="text-destructive">-{formatRupiah(selectedTrx.diskon)}</span></div>
+                  </TableHeader>
+                  <TableBody>
+                    {selectedTrx.items.map((item, i) => (
+                      <TableRow key={i} className="text-sm">
+                        <TableCell>{item.productName}</TableCell>
+                        <TableCell className="text-right tabular-nums">{item.quantity}</TableCell>
+                        <TableCell className="text-right tabular-nums text-xs">{formatCurrency(item.price)}</TableCell>
+                        <TableCell className="text-right font-semibold tabular-nums">{formatCurrency(item.subtotal)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               )}
-              <div className="flex justify-between text-sm border-t pt-3">
-                <span className="font-semibold">Grand Total</span>
-                <span className="text-lg font-bold text-primary tabular-nums">{formatRupiah(selectedTrx.total)}</span>
-              </div>
               <div className="flex gap-2 justify-end">
-                <Button variant="outline" size="sm" onClick={() => toast({ title: 'Mengekspor PDF...' })}><FileDown className="mr-1.5 h-3.5 w-3.5" />Export PDF</Button>
+                <Button variant="outline" size="sm" onClick={handleExport}><FileDown className="mr-1.5 h-3.5 w-3.5" />Export PDF</Button>
                 <Button size="sm" onClick={() => setSelectedTrx(null)}>Tutup</Button>
               </div>
             </div>

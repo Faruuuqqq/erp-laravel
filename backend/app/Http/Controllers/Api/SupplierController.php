@@ -23,6 +23,7 @@ class SupplierController extends Controller
             'phone'   => ['nullable', 'string', 'max:20'],
             'email'   => ['nullable', 'email'],
             'address' => ['nullable', 'string'],
+            'no_rekening' => ['nullable', 'string', 'max:50'],
         ], [
             'name.required' => 'Nama supplier wajib diisi.',
         ]);
@@ -44,6 +45,7 @@ class SupplierController extends Controller
             'phone'   => ['nullable', 'string', 'max:20'],
             'email'   => ['nullable', 'email'],
             'address' => ['nullable', 'string'],
+            'no_rekening' => ['nullable', 'string', 'max:50'],
         ]);
         $supplier->update($data);
         return response()->json(['data' => new SupplierResource($supplier->fresh()), 'message' => 'Supplier berhasil diperbarui.']);

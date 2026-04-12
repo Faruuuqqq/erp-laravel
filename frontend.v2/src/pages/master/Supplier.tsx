@@ -1,11 +1,13 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { useRetryableAction } from '@/hooks/useRetryableAction';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
+  Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -17,92 +19,83 @@ import {
 import { Plus, Search, Pencil, Trash2, Building2, Download } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { StatCard } from '@/components/ui/StatCard';
-import { SUPPLIERS, Supplier as SupplierType, formatRupiah } from '@/data/mockData';
 import { useToast } from '@/hooks/use-toast';
+import { usePermissions } from '@/hooks/usePermissions';
+import { formatCurrency } from '@/lib/utils';
+import { useSuppliers, useCreateSupplier, useUpdateSupplier, useDeleteSupplier } from '@/hooks/api/useSuppliers';
+import type { Supplier as SupplierType } from '@/types';
+
+const BLANK_FORM = { name: '', phone: '', email: '', address: '', noRekening: '' };
 
 const Supplier = () => {
-  const [suppliers, setSuppliers] = useState<SupplierType[]>(SUPPLIERS);
+   const { canCreate, canEdit, canDelete } = usePermissions();
+   const { toast } = useToast();
+   const { execute: executeRetryable } = useRetryableAction({ maxRetries: 3, delayMs: 1000 });
   const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editItem, setEditItem] = useState<SupplierType | null>(null);
-  const [form, setForm] = useState({ nama: '', telepon: '', email: '', alamat: '' });
-  const { toast } = useToast();
+  const [form, setForm] = useState(BLANK_FORM);
 
-  const filtered = suppliers.filter(s =>
-    s.nama.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    s.kode.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const debouncedSearch = useDebouncedValue(searchTerm, 300);
+  const { data: suppliersData, isLoading } = useSuppliers({ page: currentPage, search: debouncedSearch || undefined, per_page: 20 });
+  const createMutation = useCreateSupplier();
+  const updateMutation = useUpdateSupplier();
+  const deleteMutation = useDeleteSupplier();
 
-  const totalUtang = suppliers.reduce((s, sup) => s + sup.totalUtang, 0);
-  const withDebt = suppliers.filter(s => s.totalUtang > 0).length;
+   const suppliers = suppliersData?.data ?? [];
+   const pagination = suppliersData?.meta;
 
-  const openEdit = (s: SupplierType) => {
+   const withDebt = suppliers.filter(s => Number(s.balance ?? 0) > 0).length;
+   const totalUtang = formatCurrency(suppliers.reduce((sum, s) => sum + Number(s.balance ?? 0), 0));
+
+  const openEdit = useCallback((s: SupplierType) => {
     setEditItem(s);
-    setForm({ nama: s.nama, telepon: s.telepon, email: s.email, alamat: s.alamat });
-  };
+    setForm({ name: s.name, phone: s.phone ?? '', email: s.email ?? '', address: s.address ?? '', noRekening: s.noRekening ?? '' });
+  }, []);
 
-  const handleSave = () => {
-    if (!form.nama.trim()) return;
-    if (editItem) {
-      setSuppliers(prev => prev.map(s => s.id === editItem.id ? { ...s, ...form } : s));
-      toast({ title: 'Supplier diperbarui', description: `${form.nama} berhasil diperbarui.` });
-      setEditItem(null);
-    } else {
-      const newSupplier: SupplierType = {
-        id: `sup${Date.now()}`,
-        kode: `SUP-${String(suppliers.length + 1).padStart(3, '0')}`,
-        ...form,
-        totalUtang: 0,
-        totalTransaksi: 0,
-        createdAt: new Date().toISOString().slice(0, 10),
-      };
-      setSuppliers(prev => [...prev, newSupplier]);
-      toast({ title: 'Supplier ditambahkan', description: `${form.nama} berhasil ditambahkan.` });
-      setIsAddOpen(false);
-    }
-    setForm({ nama: '', telepon: '', email: '', alamat: '' });
-  };
+   const handleSave = async () => {
+     if (!form.name.trim()) return;
+     const payload = { name: form.name, phone: form.phone, email: form.email, address: form.address, no_rekening: form.noRekening };
+     await executeRetryable(
+       async () => {
+         if (editItem) {
+           await updateMutation.mutateAsync({ id: editItem.id, data: payload });
+           setEditItem(null);
+         } else {
+           await createMutation.mutateAsync(payload);
+           setIsAddOpen(false);
+         }
+         setForm(BLANK_FORM);
+       },
+       {
+         title: editItem ? 'Supplier diperbarui' : 'Supplier ditambahkan',
+         description: `${form.name} berhasil ${editItem ? 'diperbarui' : 'ditambahkan'}.`,
+         errorTitle: `Gagal ${editItem ? 'memperbarui' : 'menambahkan'} supplier`,
+       }
+     );
+   };
 
-  const handleDelete = (id: string, nama: string) => {
-    setSuppliers(prev => prev.filter(s => s.id !== id));
-    toast({ title: 'Supplier dihapus', description: `${nama} telah dihapus.`, variant: 'destructive' });
-  };
+   const handleDelete = async (id: string, name: string) => {
+     await executeRetryable(
+       () => deleteMutation.mutateAsync(id),
+       {
+         title: 'Supplier dihapus',
+         description: `${name} telah dihapus.`,
+         errorTitle: 'Gagal menghapus supplier',
+       }
+     );
+   };
 
-  const handleExport = () => {
-    const rows = [
-      ['Kode', 'Nama', 'Telepon', 'Email', 'Alamat', 'Total Utang', 'Total Transaksi'],
-      ...filtered.map(s => [s.kode, s.nama, s.telepon, s.email, s.alamat, formatRupiah(s.totalUtang), formatRupiah(s.totalTransaksi)]),
-    ];
-    const csv = rows.map(r => r.join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = 'supplier.csv'; a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const FormDialog = ({ open, onOpenChange, title }: { open: boolean; onOpenChange: (v: boolean) => void; title: string }) => (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
-        <div className="space-y-4 pt-1">
-          <div className="space-y-1.5"><Label>Nama Supplier *</Label>
-            <Input placeholder="Nama supplier" value={form.nama} onChange={e => setForm(p => ({ ...p, nama: e.target.value }))} /></div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5"><Label>No. Telepon</Label>
-              <Input placeholder="021-..." value={form.telepon} onChange={e => setForm(p => ({ ...p, telepon: e.target.value }))} /></div>
-            <div className="space-y-1.5"><Label>Email</Label>
-              <Input type="email" placeholder="email@..." value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} /></div>
-          </div>
-          <div className="space-y-1.5"><Label>Alamat</Label>
-            <Input placeholder="Alamat lengkap" value={form.alamat} onChange={e => setForm(p => ({ ...p, alamat: e.target.value }))} /></div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => { onOpenChange(false); setEditItem(null); setForm({ nama: '', telepon: '', email: '', alamat: '' }); }}>Batal</Button>
-            <Button onClick={handleSave}>Simpan</Button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
+   const handleExport = () => {
+     const rows = [['Kode', 'Nama', 'Telepon', 'Email', 'Alamat', 'Total Utang'],
+       ...suppliers.map(s => [s.code ?? '', s.name, s.phone ?? '', s.email ?? '', s.address ?? '', formatCurrency(Number(s.balance ?? 0))])];
+     const csv = rows.map(r => r.join(',')).join('\n');
+     const blob = new Blob([csv], { type: 'text/csv' });
+     const url = URL.createObjectURL(blob);
+     const a = document.createElement('a'); a.href = url; a.download = 'supplier.csv'; a.click();
+     URL.revokeObjectURL(url);
+   };
 
   return (
     <MainLayout title="Supplier" subtitle="Kelola data supplier toko Anda">
@@ -112,18 +105,20 @@ const Supplier = () => {
         <StatCard title="Total Utang" value={totalUtang} icon={<Building2 className="h-5 w-5" />} color="destructive" />
       </div>
 
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="relative w-full sm:w-72">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input placeholder="Cari supplier..." className="pl-9 h-9" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-        </div>
+       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+         <div className="relative w-full sm:w-72">
+           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+           <Input placeholder="Cari supplier..." className="pl-9 h-9" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }} />
+         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={handleExport}>
             <Download className="mr-1.5 h-4 w-4" />Export CSV
           </Button>
-          <Button size="sm" onClick={() => { setForm({ nama: '', telepon: '', email: '', alamat: '' }); setIsAddOpen(true); }}>
-            <Plus className="mr-1.5 h-4 w-4" />Tambah Supplier
-          </Button>
+          {canCreate('suppliers') && (
+            <Button size="sm" onClick={() => { setForm(BLANK_FORM); setIsAddOpen(true); }}>
+              <Plus className="mr-1.5 h-4 w-4" />Tambah Supplier
+            </Button>
+          )}
         </div>
       </div>
 
@@ -136,62 +131,139 @@ const Supplier = () => {
                 <TableHead>Nama Supplier</TableHead>
                 <TableHead>Telepon</TableHead>
                 <TableHead>Email</TableHead>
-                <TableHead className="text-right">Total Transaksi</TableHead>
+                <TableHead>No. Rekening</TableHead>
                 <TableHead className="text-right">Saldo Utang</TableHead>
-                <TableHead className="text-center">Aksi</TableHead>
+                {(canEdit('suppliers') || canDelete('suppliers')) && <TableHead className="text-center">Aksi</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.length === 0 ? (
-                <TableRow><TableCell colSpan={7} className="py-10 text-center text-muted-foreground">Tidak ada data supplier.</TableCell></TableRow>
-              ) : filtered.map(s => (
+              {isLoading ? (
+                <TableRow><TableCell colSpan={(canEdit('suppliers') || canDelete('suppliers')) ? 7 : 6} className="py-10 text-center text-muted-foreground">Memuat data...</TableCell></TableRow>
+              ) : suppliers.length === 0 ? (
+                <TableRow><TableCell colSpan={(canEdit('suppliers') || canDelete('suppliers')) ? 7 : 6} className="py-10 text-center text-muted-foreground">Tidak ada data supplier.</TableCell></TableRow>
+              ) : suppliers.map(s => (
                 <TableRow key={s.id}>
-                  <TableCell className="font-mono text-xs text-primary">{s.kode}</TableCell>
+                  <TableCell className="font-mono text-xs text-primary">{s.code}</TableCell>
                   <TableCell>
-                    <div className="font-medium">{s.nama}</div>
-                    <div className="text-xs text-muted-foreground truncate max-w-48">{s.alamat}</div>
+                    <div className="font-medium">{s.name}</div>
+                    <div className="text-xs text-muted-foreground truncate max-w-48">{s.address}</div>
                   </TableCell>
-                  <TableCell className="text-muted-foreground">{s.telepon}</TableCell>
-                  <TableCell className="text-muted-foreground text-xs">{s.email || '—'}</TableCell>
-                  <TableCell className="text-right font-medium">{formatRupiah(s.totalTransaksi)}</TableCell>
+                  <TableCell className="text-muted-foreground">{s.phone ?? '—'}</TableCell>
+                  <TableCell className="text-muted-foreground text-xs">{s.email ?? '—'}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{s.noRekening ?? '—'}</TableCell>
                   <TableCell className="text-right">
-                    {s.totalUtang > 0
-                      ? <span className="font-semibold text-destructive">{formatRupiah(s.totalUtang)}</span>
+                    {Number(s.balance ?? 0) > 0
+                      ? <span className="font-semibold text-destructive">{formatCurrency(Number(s.balance))}</span>
                       : <Badge variant="outline" className="text-success border-success text-xs">Lunas</Badge>}
                   </TableCell>
-                  <TableCell>
-                    <div className="flex justify-center gap-1">
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(s)}>
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive">
-                            <Trash2 className="h-3.5 w-3.5" />
+                  {(canEdit('suppliers') || canDelete('suppliers')) && (
+                    <TableCell>
+                      <div className="flex justify-center gap-1">
+                        {canEdit('suppliers') && (
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(s)}>
+                            <Pencil className="h-3.5 w-3.5" />
                           </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Hapus Supplier</AlertDialogTitle>
-                            <AlertDialogDescription>Apakah Anda yakin ingin menghapus <strong>{s.nama}</strong>? Tindakan ini tidak dapat dibatalkan.</AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Batal</AlertDialogCancel>
-                            <AlertDialogAction className="bg-destructive hover:bg-destructive/90" onClick={() => handleDelete(s.id, s.nama)}>Hapus</AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
-                  </TableCell>
+                        )}
+                        {canDelete('suppliers') && (
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive">
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Hapus Supplier</AlertDialogTitle>
+                                <AlertDialogDescription>Apakah Anda yakin ingin menghapus <strong>{s.name}</strong>? Tindakan ini tidak dapat dibatalkan.</AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Batal</AlertDialogCancel>
+                                <AlertDialogAction className="bg-destructive hover:bg-destructive/90" onClick={() => handleDelete(s.id, s.name)}>Hapus</AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        )}
+                      </div>
+                    </TableCell>
+                  )}
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </CardContent>
-      </Card>
+       </Card>
 
-      <FormDialog open={isAddOpen} onOpenChange={setIsAddOpen} title="Tambah Supplier Baru" />
-      <FormDialog open={!!editItem} onOpenChange={(v) => { if (!v) setEditItem(null); }} title="Edit Supplier" />
+       {/* Pagination UI */}
+       {pagination && (
+         <div className="mt-4 flex items-center justify-between rounded-lg border border-border p-4 bg-card">
+           <div className="text-sm text-muted-foreground">
+             Menampilkan {((pagination.current_page - 1) * pagination.per_page) + 1} - {Math.min(pagination.current_page * pagination.per_page, pagination.total)} dari {pagination.total} total
+           </div>
+           <div className="flex items-center gap-2">
+             <Button 
+               variant="outline" 
+               size="sm"
+               disabled={pagination.current_page === 1}
+               onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+             >
+               Sebelumnya
+             </Button>
+             <span className="text-sm text-muted-foreground px-2">
+               Halaman {pagination.current_page} dari {pagination.last_page}
+             </span>
+             <Button 
+               variant="outline" 
+               size="sm"
+               disabled={pagination.current_page === pagination.last_page}
+               onClick={() => setCurrentPage(prev => prev + 1)}
+             >
+               Selanjutnya
+             </Button>
+           </div>
+         </div>
+       )}
+
+      <Dialog open={isAddOpen || !!editItem} onOpenChange={v => {
+        if (!v) { setIsAddOpen(false); setEditItem(null); setForm(BLANK_FORM); }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editItem ? 'Edit Supplier' : 'Tambah Supplier Baru'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">Nama Supplier *</Label>
+              <Input id="name" placeholder="Masukkan nama supplier" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="phone">Telepon</Label>
+              <Input id="phone" placeholder="08xxxxxxxxxx" value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input id="email" type="email" placeholder="supplier@example.com" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="address">Alamat</Label>
+              <Input id="address" placeholder="Masukkan alamat supplier" value={form.address} onChange={e => setForm(p => ({ ...p, address: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="noRekening">No. Rekening</Label>
+              <Input id="noRekening" placeholder="Masukkan nomor rekening" value={form.noRekening} onChange={e => setForm(p => ({ ...p, noRekening: e.target.value }))} />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-4">
+            <Button variant="outline" onClick={() => {
+              setIsAddOpen(false);
+              setEditItem(null);
+              setForm(BLANK_FORM);
+            }}>Batal</Button>
+            <Button onClick={handleSave} disabled={createMutation.isPending || updateMutation.isPending}>
+              {createMutation.isPending || updateMutation.isPending ? 'Menyimpan...' : 'Simpan'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </MainLayout>
   );
 };

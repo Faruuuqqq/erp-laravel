@@ -13,7 +13,7 @@ class Transaction extends Model
         'invoice_number', 'date', 'type',
         'supplier_id', 'customer_id', 'sales_rep_id',
         'subtotal', 'discount', 'tax', 'total', 'paid', 'remaining',
-        'status', 'notes', 'created_by',
+        'status', 'notes', 'created_by', 'is_hidden'
     ];
 
     protected $casts = [

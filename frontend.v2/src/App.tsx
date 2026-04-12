@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { PrintProvider } from "./contexts/PrintContext";
 
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
@@ -23,6 +24,10 @@ import SuratJalan from "./pages/transaksi/SuratJalan";
 import KontraBon from "./pages/transaksi/KontraBon";
 import HistoriPembelian from "./pages/informasi/HistoriPembelian";
 import HistoriPenjualan from "./pages/informasi/HistoriPenjualan";
+import HistoriReturPembelian from "./pages/informasi/HistoriReturPembelian";
+import HistoriReturPenjualan from "./pages/informasi/HistoriReturPenjualan";
+import HistoriPembayaranUtang from "./pages/informasi/HistoriPembayaranUtang";
+import HistoriPembayaranPiutang from "./pages/informasi/HistoriPembayaranPiutang";
 import BiayaJasa from "./pages/informasi/BiayaJasa";
 import SaldoPiutang from "./pages/laporan/SaldoPiutang";
 import SaldoUtang from "./pages/laporan/SaldoUtang";
@@ -33,7 +38,21 @@ import Pengaturan from "./pages/Pengaturan";
 import AdminManagement from "./pages/pengaturan/AdminManagement";
 import NotFound from "./pages/NotFound";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000, // 5 minutes - data stays fresh for 5 min
+      gcTime: 10 * 60 * 1000, // 10 minutes - cache persists for 10 min after unused
+      refetchOnWindowFocus: false, // Don't refetch when window regains focus
+      refetchOnReconnect: 'stale', // Refetch only if data is stale when reconnecting
+      refetchOnMount: 'stale', // Refetch only if data is stale when component mounts
+      retry: 1, // Retry failed requests once
+    },
+    mutations: {
+      retry: 1, // Retry failed mutations once
+    },
+  },
+});
 
 const ProtectedRoute = ({ children, ownerOnly }: { children: React.ReactNode; ownerOnly?: boolean }) => {
   const { isAuthenticated, isOwner, isLoading } = useAuth();
@@ -85,11 +104,11 @@ const AppRoutes = () => {
       <Route path="/transaksi/kontra-bon" element={<ProtectedRoute><KontraBon /></ProtectedRoute>} />
       <Route path="/informasi/pembelian" element={<ProtectedRoute><HistoriPembelian /></ProtectedRoute>} />
       <Route path="/informasi/penjualan" element={<ProtectedRoute><HistoriPenjualan /></ProtectedRoute>} />
-      <Route path="/informasi/retur-pembelian" element={<ProtectedRoute><HistoriPembelian /></ProtectedRoute>} />
-      <Route path="/informasi/retur-penjualan" element={<ProtectedRoute><HistoriPenjualan /></ProtectedRoute>} />
+      <Route path="/informasi/retur-pembelian" element={<ProtectedRoute><HistoriReturPembelian /></ProtectedRoute>} />
+      <Route path="/informasi/retur-penjualan" element={<ProtectedRoute><HistoriReturPenjualan /></ProtectedRoute>} />
       <Route path="/informasi/biaya-jasa" element={<ProtectedRoute><BiayaJasa /></ProtectedRoute>} />
-      <Route path="/informasi/pembayaran-utang" element={<ProtectedRoute><HistoriPembelian /></ProtectedRoute>} />
-      <Route path="/informasi/pembayaran-piutang" element={<ProtectedRoute><HistoriPenjualan /></ProtectedRoute>} />
+      <Route path="/informasi/pembayaran-utang" element={<ProtectedRoute><HistoriPembayaranUtang /></ProtectedRoute>} />
+      <Route path="/informasi/pembayaran-piutang" element={<ProtectedRoute><HistoriPembayaranPiutang /></ProtectedRoute>} />
       <Route path="/laporan/saldo-piutang" element={<ProtectedRoute><SaldoPiutang /></ProtectedRoute>} />
       <Route path="/laporan/saldo-utang" element={<ProtectedRoute><SaldoUtang /></ProtectedRoute>} />
       <Route path="/laporan/saldo-stok" element={<ProtectedRoute ownerOnly><SaldoStok /></ProtectedRoute>} />
@@ -109,7 +128,9 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
-          <AppRoutes />
+          <PrintProvider>
+            <AppRoutes />
+          </PrintProvider>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>

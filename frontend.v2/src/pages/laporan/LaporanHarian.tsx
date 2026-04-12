@@ -1,149 +1,233 @@
-import { useState } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
-import { PageHeader, DataTableContainer, StatusBadge, CurrencyCell } from '@/components/ui/DataComponents';
+import { PageHeader, DataTableContainer, CurrencyCell, StatusBadge } from '@/components/ui/DataComponents';
 import { StatCard } from '@/components/ui/StatCard';
-import { TRANSACTIONS, EXPENSES, getDashboardStats, TIPE_TRANSAKSI_LABELS, getTodayID, formatRupiah } from '@/data/mockData';
+import { Skeleton } from '@/components/ui/skeleton';
 import { TrendingUp, TrendingDown, Banknote, ShoppingCart, Printer, Download, Calendar, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { usePrint } from '@/contexts/usePrint';
+import { usePermissions } from '@/hooks/usePermissions';
+import { useAuth } from '@/contexts/AuthContext';
+import { useLaporanHarian } from '@/hooks/api/useInfo';
+import { usePdfExport } from '@/hooks/usePdfExport';
+import { LaporanHarianPrint } from '@/components/print/LaporanHarianPrint';
+import { formatCurrency } from '@/lib/utils';
+import type { Transaction } from '@/types';
+
+interface DailyReport {
+  date: string;
+  summary: {
+    totalPenjualan: number;
+    totalPembelian: number;
+    totalBiaya: number;
+    kasBersih: number;
+    penjualanTunai: number;
+    penjualanKredit: number;
+  };
+  transactions: Transaction[];
+  expenses: { id: string; category: string; description: string; amount: number }[];
+}
+
+const TIPE_LABELS: Record<string, string> = {
+  penjualan_tunai: 'Penjualan Tunai',
+  penjualan_kredit: 'Penjualan Kredit',
+  pembelian: 'Pembelian',
+  pembayaran_piutang: 'Pembayaran Piutang',
+  pembayaran_utang: 'Pembayaran Utang',
+  retur_penjualan: 'Retur Penjualan',
+  retur_pembelian: 'Retur Pembelian',
+};
 
 const LaporanHarian = () => {
-  const stats = getDashboardStats();
-  const today = getTodayID();
-  const [selectedDate, setSelectedDate] = useState('');
+  const today = new Date().toISOString().split('T')[0];
+  const [selectedDate, setSelectedDate] = useState(today);
+  const [isExporting, setIsExporting] = useState(false);
+  const { isOwner, canPrint } = usePermissions();
+  const { user } = useAuth();
+  const { printDocument } = usePrint();
+  const { exportToPdf } = usePdfExport();
 
-  // Filter by date — default to today's data, allow selecting from available dates
-  const availableDates = [...new Set(TRANSACTIONS.map(t => t.tanggal))].sort().reverse();
+  const { data, isLoading } = useLaporanHarian(selectedDate);
+  const report = data?.data as DailyReport | undefined;
+  const d = report;
 
-  const activeDate = selectedDate || today;
-  const txFiltered = TRANSACTIONS.filter(t => t.tanggal === activeDate);
-  const expFiltered = EXPENSES.filter(e => e.tanggal === activeDate);
+  const summary = useMemo(() => d?.summary ?? { totalPenjualan: 0, totalPembelian: 0, totalBiaya: 0, kasBersih: 0, penjualanTunai: 0, penjualanKredit: 0 }, [d]);
+  const displayTx: Transaction[] = useMemo(() => d?.transactions ?? [], [d]);
+  const displayExp = useMemo(() => d?.expenses ?? [], [d]);
 
-  // Fallback: if no transactions for today, show most recent date
-  const displayTx = txFiltered.length > 0 ? txFiltered : TRANSACTIONS.filter(t => t.tanggal === availableDates[0]);
-  const displayExp = expFiltered.length > 0 ? expFiltered : EXPENSES.filter(e => e.tanggal === availableDates[0]);
-  const displayDate = txFiltered.length > 0 ? activeDate : availableDates[0];
+  const handlePrint = useCallback(() => {
+    printDocument(
+      <LaporanHarianPrint
+        date={selectedDate}
+        printedBy={user?.name}
+        summary={{
+          penjualanTunai: summary.penjualanTunai,
+          penjualanKredit: summary.penjualanKredit,
+          penerimaanPiutang: 0, // populated from pembayaran_piutang if available
+          totalPembelian: summary.totalPembelian,
+          pembayaranUtang: 0,
+          biayaJasa: summary.totalBiaya,
+          saldoKas: summary.kasBersih,
+        }}
+        transactions={displayTx.map(t => ({ invoiceNumber: t.invoiceNumber, type: t.type, description: t.customer || t.supplier || '-', amount: t.total }))}
+      />
+    );
+  }, [printDocument, selectedDate, user?.name, summary, displayTx]);
 
-  const totalPenjualan = displayTx
-    .filter(t => t.tipe === 'penjualan_tunai' || t.tipe === 'penjualan_kredit')
-    .reduce((s, t) => s + t.total, 0);
-  const totalPembelian = displayTx
-    .filter(t => t.tipe === 'pembelian')
-    .reduce((s, t) => s + t.total, 0);
-  const totalBiaya = displayExp.reduce((s, e) => s + e.jumlah, 0);
-  const kasmasuk = displayTx
-    .filter(t => t.tipe === 'penjualan_tunai')
-    .reduce((s, t) => s + t.total, 0);
-  const kasBersih = kasmasuk - totalBiaya;
+  const handleExportPDF = useCallback(async () => {
+    setIsExporting(true);
+    try {
+      const htmlContent = `
+        <div style="background: white; padding: 24px; font-family: Arial, sans-serif; font-size: 12px;">
+          <div style="margin-bottom: 20px; padding-bottom: 12px; border-bottom: 2px solid #333;">
+            <h3 style="margin: 0 0 4px 0; font-size: 14px; font-weight: bold;">Ringkasan Laporan Harian</h3>
+            <p style="margin: 0; font-size: 11px; color: #666;">Tanggal: ${selectedDate}</p>
+          </div>
 
-  const handlePrint = () => window.print();
+          <div style="margin-bottom: 20px;">
+            <table style="width: 100%; border-collapse: collapse;">
+              <tbody>
+                <tr style="border-bottom: 1px solid #ddd;">
+                  <td style="padding: 8px; text-align: left; width: 50%;">Total Penjualan Tunai</td>
+                  <td style="padding: 8px; text-align: right; font-weight: bold;">${formatCurrency(summary.penjualanTunai)}</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #ddd;">
+                  <td style="padding: 8px; text-align: left;">Total Penjualan Kredit</td>
+                  <td style="padding: 8px; text-align: right; font-weight: bold;">${formatCurrency(summary.penjualanKredit)}</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #ddd;">
+                  <td style="padding: 8px; text-align: left;">Total Pembelian</td>
+                  <td style="padding: 8px; text-align: right; font-weight: bold;">${formatCurrency(summary.totalPembelian)}</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #ddd;">
+                  <td style="padding: 8px; text-align: left;">Biaya Operasional</td>
+                  <td style="padding: 8px; text-align: right; font-weight: bold;">${formatCurrency(summary.totalBiaya)}</td>
+                </tr>
+                <tr style="border-top: 2px solid #333; background-color: #f5f5f5;">
+                  <td style="padding: 8px; text-align: left; font-weight: bold;">Kas Bersih (Tunai)</td>
+                  <td style="padding: 8px; text-align: right; font-weight: bold; font-size: 13px;">${formatCurrency(summary.kasBersih)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
 
-  const handleExportPDF = () => {
-    const content = `
-LAPORAN HARIAN - TOKOSYNC ERP
-Tanggal : ${displayDate}
-Dicetak : ${new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}
-${'='.repeat(70)}
+          <div style="margin-bottom: 20px; padding-bottom: 12px; border-bottom: 2px solid #333;">
+            <h3 style="margin: 0; font-size: 13px; font-weight: bold;">Daftar Transaksi</h3>
+          </div>
 
-RINGKASAN:
-Total Penjualan  : ${formatRupiah(totalPenjualan)}
-Total Pembelian  : ${formatRupiah(totalPembelian)}
-Biaya Operasional: ${formatRupiah(totalBiaya)}
-Kas Bersih       : ${formatRupiah(kasBersih)}
+          <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+              <tr style="border-bottom: 2px solid #333;">
+                <th style="padding: 8px; text-align: left; font-weight: bold;">No. Faktur</th>
+                <th style="padding: 8px; text-align: left; font-weight: bold;">Tipe</th>
+                <th style="padding: 8px; text-align: left; font-weight: bold;">Customer / Supplier</th>
+                <th style="padding: 8px; text-align: right; font-weight: bold;">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${displayTx.map(tx => `
+                <tr style="border-bottom: 1px solid #ddd;">
+                  <td style="padding: 8px; text-align: left; font-family: monospace; font-size: 11px;">${tx.invoiceNumber}</td>
+                  <td style="padding: 8px; text-align: left; font-size: 11px;">${TIPE_LABELS[tx.type] ?? tx.type}</td>
+                  <td style="padding: 8px; text-align: left;">${tx.customer || tx.supplier || '—'}</td>
+                  <td style="padding: 8px; text-align: right;">${formatCurrency(tx.total)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+            <tfoot>
+              <tr style="border-top: 2px solid #333; font-weight: bold; background-color: #f5f5f5;">
+                <td colspan="3" style="padding: 8px; text-align: right;">TOTAL TRANSAKSI:</td>
+                <td style="padding: 8px; text-align: right;">${formatCurrency(displayTx.reduce((s, t) => s + t.total, 0))}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      `;
 
-${'='.repeat(70)}
-DAFTAR TRANSAKSI (${displayTx.length} transaksi):
-${['No. Faktur', 'Tipe', 'Customer/Supplier', 'Total', 'Status'].join('\t')}
-${'-'.repeat(70)}
-${displayTx.map(tx =>
-      [tx.noFaktur, TIPE_TRANSAKSI_LABELS[tx.tipe],
-        tx.customerNama || tx.supplierNama || '-',
-        formatRupiah(tx.total), tx.status.toUpperCase()].join('\t')
-    ).join('\n')}
+      const tempDiv = document.createElement('div');
+      tempDiv.id = 'pdf-export-content';
+      tempDiv.innerHTML = htmlContent;
+      document.body.appendChild(tempDiv);
 
-${'='.repeat(70)}
-BIAYA OPERASIONAL (${displayExp.length} item):
-${displayExp.map(e => `${e.kategori}: ${e.keterangan} — ${formatRupiah(e.jumlah)}`).join('\n')}
-    `;
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `laporan-harian-${displayDate.replace(/-/g, '')}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+      await exportToPdf('pdf-export-content', {
+        filename: `laporan-harian-${selectedDate}.pdf`,
+        title: 'Laporan Harian',
+        subtitle: `${selectedDate} - ${displayTx.length} transaksi`,
+        companyName: 'Toko ABC',
+        companyPhone: '(021) 1234-5678',
+        companyAddress: 'Jl. Jalan Raya No. 123, Jakarta 12345',
+      });
+
+      document.body.removeChild(tempDiv);
+    } catch (error) {
+      console.error('PDF export failed:', error);
+    } finally {
+      setIsExporting(false);
+    }
+  }, [selectedDate, summary, displayTx, exportToPdf]);
 
   return (
-    <MainLayout title="Laporan Harian" subtitle={`Ringkasan transaksi harian`}>
+    <MainLayout title="Laporan Harian" subtitle="Ringkasan transaksi harian">
       <PageHeader
         title="Laporan Harian"
-        description={`Tanggal: ${displayDate}`}
+        description={`Tanggal: ${selectedDate}`}
         actions={
           <>
             <div className="flex items-center gap-1.5 text-sm text-muted-foreground border rounded-md px-2.5 py-1.5 bg-background">
               <Calendar className="h-4 w-4" />
-              <select
+              <input
+                type="date"
                 className="bg-transparent text-sm outline-none cursor-pointer"
                 value={selectedDate}
+                max={today}
                 onChange={e => setSelectedDate(e.target.value)}
-              >
-                <option value="">Hari ini ({today})</option>
-                {availableDates.map(d => (
-                  <option key={d} value={d}>{d}</option>
-                ))}
-              </select>
+              />
             </div>
-            <Button variant="outline" size="sm" onClick={handlePrint}>
-              <Printer className="h-4 w-4 mr-1.5" />Cetak
-            </Button>
-            <Button variant="outline" size="sm" onClick={handleExportPDF}>
-              <Download className="h-4 w-4 mr-1.5" />Export PDF
-            </Button>
+            {canPrint('__owner_only__') && (
+              <Button variant="outline" size="sm" onClick={handlePrint}><Printer className="h-4 w-4 mr-1.5" />Cetak</Button>
+            )}
+            <Button variant="outline" size="sm" onClick={handleExportPDF} disabled={isExporting}><Download className="h-4 w-4 mr-1.5" />{isExporting ? 'Generating...' : 'Export PDF'}</Button>
           </>
         }
       />
 
-      {/* Stats */}
       <div className="mb-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard title="Total Penjualan" value={totalPenjualan} icon={<TrendingUp className="h-5 w-5" />} color="success" />
-        <StatCard title="Total Pembelian" value={totalPembelian} icon={<ShoppingCart className="h-5 w-5" />} color="primary" />
-        <StatCard title="Biaya Operasional" value={totalBiaya} icon={<TrendingDown className="h-5 w-5" />} color="destructive" />
-        <StatCard title="Kas Bersih (Tunai)" value={kasBersih} icon={<Banknote className="h-5 w-5" />} color={kasBersih >= 0 ? 'success' : 'destructive'} />
+        <StatCard title="Total Penjualan" value={isLoading ? '...' : summary.totalPenjualan} icon={<TrendingUp className="h-5 w-5" />} color="success" />
+        <StatCard title="Total Pembelian" value={isLoading ? '...' : summary.totalPembelian} icon={<ShoppingCart className="h-5 w-5" />} color="primary" />
+        <StatCard title="Biaya Operasional" value={isLoading ? '...' : summary.totalBiaya} icon={<TrendingDown className="h-5 w-5" />} color="destructive" />
+        <StatCard title="Kas Bersih (Tunai)" value={isLoading ? '...' : summary.kasBersih} icon={<Banknote className="h-5 w-5" />} color={summary.kasBersih >= 0 ? 'success' : 'destructive'} />
       </div>
 
-      {/* Summary breakdown */}
       <div className="mb-5 grid gap-4 sm:grid-cols-3">
         <div className="rounded-xl border bg-card p-4">
           <p className="text-xs font-medium text-muted-foreground mb-2">Komposisi Penjualan</p>
-          {['penjualan_tunai', 'penjualan_kredit'].map(tipe => {
-            const items = displayTx.filter(t => t.tipe === tipe);
-            const total = items.reduce((s, t) => s + t.total, 0);
-            return total > 0 ? (
-              <div key={tipe} className="flex justify-between items-center py-1 border-b last:border-0">
-                <span className="text-sm">{TIPE_TRANSAKSI_LABELS[tipe as keyof typeof TIPE_TRANSAKSI_LABELS]}</span>
-                <span className="text-sm font-medium text-success">{formatRupiah(total)}</span>
-              </div>
-            ) : null;
-          })}
-          {totalPenjualan === 0 && <p className="text-sm text-muted-foreground">Belum ada penjualan.</p>}
+          {[
+            { label: 'Penjualan Tunai', value: summary.penjualanTunai },
+            { label: 'Penjualan Kredit', value: summary.penjualanKredit },
+          ].filter(i => i.value > 0).map(i => (
+            <div key={i.label} className="flex justify-between items-center py-1 border-b last:border-0">
+              <span className="text-sm">{i.label}</span>
+              <span className="text-sm font-medium text-success">{formatCurrency(i.value)}</span>
+            </div>
+          ))}
+          {summary.totalPenjualan === 0 && <p className="text-sm text-muted-foreground">Belum ada penjualan.</p>}
         </div>
         <div className="rounded-xl border bg-card p-4">
           <p className="text-xs font-medium text-muted-foreground mb-2">Biaya Operasional</p>
-          {displayExp.length === 0 ? (
+          {isLoading ? <Skeleton className="h-20 w-full" /> : displayExp.length === 0 ? (
             <p className="text-sm text-muted-foreground">Tidak ada biaya hari ini.</p>
           ) : displayExp.map(e => (
             <div key={e.id} className="flex justify-between items-center py-1 border-b last:border-0">
-              <span className="text-xs text-muted-foreground truncate max-w-28">{e.keterangan}</span>
-              <span className="text-sm font-medium text-destructive">{formatRupiah(e.jumlah)}</span>
+              <span className="text-xs text-muted-foreground truncate max-w-28">{e.description}</span>
+              <span className="text-sm font-medium text-destructive">{formatCurrency(e.amount)}</span>
             </div>
           ))}
         </div>
         <div className="rounded-xl border bg-card p-4">
           <p className="text-xs font-medium text-muted-foreground mb-2">Status Transaksi</p>
-          {(['lunas', 'kredit', 'sebagian'] as const).map(status => {
-            const count = displayTx.filter(t => t.status === status).length;
+          {isLoading ? <Skeleton className="h-20 w-full" /> : (['lunas', 'kredit', 'sebagian'] as const).map(status => {
+            const count = displayTx.filter(t => (t.remaining === 0 ? 'lunas' : (t.paid ?? 0) > 0 ? 'sebagian' : 'kredit') === status).length;
             return count > 0 ? (
               <div key={status} className="flex justify-between items-center py-1 border-b last:border-0">
                 <StatusBadge status={status.charAt(0).toUpperCase() + status.slice(1)} variant={status} />
@@ -155,21 +239,18 @@ ${displayExp.map(e => `${e.kategori}: ${e.keterangan} — ${formatRupiah(e.jumla
         </div>
       </div>
 
-      {/* Transaction Table */}
       <DataTableContainer>
         <div className="p-4 border-b flex items-center justify-between">
           <div className="flex items-center gap-2">
             <FileText className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium">
-              Daftar Transaksi — {displayDate}
-            </span>
+            <span className="text-sm font-medium">Daftar Transaksi — {selectedDate}</span>
             <Badge variant="secondary" className="text-xs">{displayTx.length} transaksi</Badge>
           </div>
-          <span className="text-sm font-bold text-foreground">
-            Total: <CurrencyCell value={displayTx.reduce((s, t) => s + t.total, 0)} />
-          </span>
+          <span className="text-sm font-bold">Total: <CurrencyCell value={displayTx.reduce((s, t) => s + t.total, 0)} /></span>
         </div>
-        {displayTx.length === 0 ? (
+        {isLoading ? (
+          <div className="p-6 space-y-2">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
+        ) : displayTx.length === 0 ? (
           <div className="p-12 text-center">
             <ShoppingCart className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-50" />
             <p className="text-muted-foreground">Belum ada transaksi pada tanggal ini.</p>
@@ -179,40 +260,32 @@ ${displayExp.map(e => `${e.kategori}: ${e.keterangan} — ${formatRupiah(e.jumla
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-muted/40 text-xs text-muted-foreground">
-                  {['No. Faktur', 'Tipe Transaksi', 'Customer / Supplier', 'Gudang', 'Total', 'Bayar', 'Status'].map(h => (
+                  {['No. Faktur', 'Tipe Transaksi', 'Customer / Supplier', 'Total', 'Bayar', 'Status'].map(h => (
                     <th key={h} className="px-4 py-3 text-left font-semibold whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {displayTx.map(tx => (
-                  <tr key={tx.id} className="border-b hover:bg-muted/20 transition-colors">
-                    <td className="px-4 py-3 font-mono text-xs text-primary">{tx.noFaktur}</td>
-                    <td className="px-4 py-3">
-                      <span className="text-xs font-medium">{TIPE_TRANSAKSI_LABELS[tx.tipe]}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="font-medium">{tx.customerNama || tx.supplierNama || '—'}</div>
-                      {tx.salesNama && <div className="text-xs text-muted-foreground">Sales: {tx.salesNama}</div>}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground text-xs">{tx.gudangNama || '—'}</td>
-                    <td className="px-4 py-3"><CurrencyCell value={tx.total} /></td>
-                    <td className="px-4 py-3">
-                      {tx.bayar ? <CurrencyCell value={tx.bayar} /> : <span className="text-muted-foreground text-xs">—</span>}
-                    </td>
-                    <td className="px-4 py-3">
-                      <StatusBadge
-                        status={tx.status === 'lunas' ? 'Lunas' : tx.status === 'kredit' ? 'Kredit' : 'Sebagian'}
-                        variant={tx.status}
-                      />
-                    </td>
-                  </tr>
-                ))}
+                {displayTx.map(tx => {
+                  const txStatus = tx.remaining === 0 ? 'lunas' : (tx.paid ?? 0) > 0 ? 'sebagian' : 'kredit';
+                  return (
+                    <tr key={tx.id} className="border-b hover:bg-muted/20 transition-colors">
+                      <td className="px-4 py-3 font-mono text-xs text-primary">{tx.invoiceNumber}</td>
+                      <td className="px-4 py-3"><span className="text-xs font-medium">{TIPE_LABELS[tx.type] ?? tx.type}</span></td>
+                      <td className="px-4 py-3">
+                        <div className="font-medium">{tx.customer || tx.supplier || '—'}</div>
+                      </td>
+                      <td className="px-4 py-3"><CurrencyCell value={tx.total} /></td>
+                      <td className="px-4 py-3"><CurrencyCell value={tx.paid} /></td>
+                      <td className="px-4 py-3">
+                        <StatusBadge status={txStatus.charAt(0).toUpperCase() + txStatus.slice(1)} variant={txStatus} />
+                      </td>
+                    </tr>
+                  );
+                })}
                 <tr className="bg-muted/40 border-t-2 font-bold">
-                  <td colSpan={4} className="px-4 py-3 text-sm">TOTAL</td>
-                  <td className="px-4 py-3">
-                    <CurrencyCell value={displayTx.reduce((s, t) => s + t.total, 0)} />
-                  </td>
+                  <td colSpan={3} className="px-4 py-3 text-sm">TOTAL</td>
+                  <td className="px-4 py-3"><CurrencyCell value={displayTx.reduce((s, t) => s + t.total, 0)} /></td>
                   <td colSpan={2} />
                 </tr>
               </tbody>
@@ -223,4 +296,5 @@ ${displayExp.map(e => `${e.kategori}: ${e.keterangan} — ${formatRupiah(e.jumla
     </MainLayout>
   );
 };
+
 export default LaporanHarian;

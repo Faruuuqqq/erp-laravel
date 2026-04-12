@@ -21,7 +21,6 @@ const Login = () => {
   const handleRoleChange = (role: 'owner' | 'admin') => {
     setSelectedRole(role);
     setEmail(role === 'owner' ? 'owner@tokosync.id' : 'admin@tokosync.id');
-    setPassword('');
     setError('');
   };
 
@@ -48,7 +47,7 @@ const Login = () => {
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-sidebar-primary shadow-lg">
             <Zap className="h-8 w-8 text-sidebar-primary-foreground" />
           </div>
-          <h1 className="text-3xl font-bold text-sidebar-foreground">TokoSync ERP</h1>
+          <h1 className="text-3xl font-bold text-sidebar-foreground">Inventaris Toko</h1>
           <p className="mt-1 text-sidebar-muted">Sistem Manajemen Toko Terintegrasi</p>
         </div>
 
@@ -61,16 +60,16 @@ const Login = () => {
             <Tabs value={selectedRole} onValueChange={(v) => handleRoleChange(v as 'owner' | 'admin')} className="mb-5">
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="owner">Owner</TabsTrigger>
-                <TabsTrigger value="admin">Admin/Kasir</TabsTrigger>
+                <TabsTrigger value="admin">Admin</TabsTrigger>
               </TabsList>
               <TabsContent value="owner" className="mt-3">
                 <div className="rounded-lg bg-warning/10 border border-warning/30 p-3 text-xs text-warning">
-                  <strong>Owner</strong> — Akses penuh: laporan keuangan, nilai stok, dan semua laporan laba rugi.
+                  <strong>Owner</strong> — Akses penuh: laporan dan seluruh informasi.
                 </div>
               </TabsContent>
               <TabsContent value="admin" className="mt-3">
                 <div className="rounded-lg bg-primary/10 border border-primary/30 p-3 text-xs text-primary">
-                  <strong>Admin/Kasir</strong> — Akses operasional: transaksi harian dan data pelanggan.
+                  <strong>Admin</strong> — Akses operasional: transaksi harian dan data pelanggan.
                 </div>
               </TabsContent>
             </Tabs>
@@ -81,7 +80,7 @@ const Login = () => {
                 <Input
                   id="email"
                   type="email"
-                  placeholder="email@tokosync.id"
+                  placeholder="email@tokosync.local"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                 />
@@ -117,11 +116,6 @@ const Login = () => {
               </Button>
             </form>
 
-            <div className="mt-5 rounded-lg bg-muted/60 p-3 text-xs text-muted-foreground space-y-1">
-              <p className="font-medium">Demo credentials:</p>
-              <p>Owner: <code className="text-primary">owner@tokosync.id</code> / password: <code className="text-primary">password</code></p>
-              <p>Admin: <code className="text-primary">admin@tokosync.id</code> / password: <code className="text-primary">password</code></p>
-            </div>
           </CardContent>
         </Card>
       </div>

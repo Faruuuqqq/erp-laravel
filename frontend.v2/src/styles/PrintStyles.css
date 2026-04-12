@@ -1,0 +1,49 @@
+/* PrintStyles.css — Dedicated print stylesheet for all ERP documents */
+
+@media print {
+  /* ─── Hide Application UI ──────────────────────────────────────────── */
+  header, nav, aside, .sidebar, .no-print, [data-no-print], button:not(.print-show), .toast-container {
+    display: none !important;
+  }
+
+  /* ─── Reset Page Layout ────────────────────────────────────────────── */
+  html, body {
+    margin: 0; padding: 0;
+    background: white !important; color: black !important;
+    font-size: 11pt;
+    font-family: 'Arial', 'Helvetica', sans-serif;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  @page { size: A4 portrait; margin: 15mm 15mm 15mm 15mm; }
+
+  .print-document { width: 100%; max-width: 100%; margin: 0 !important; padding: 0 !important; box-shadow: none !important; border: none !important; }
+
+  table { width: 100%; border-collapse: collapse; page-break-inside: auto; }
+  tr { page-break-inside: avoid; page-break-after: auto; }
+  th, td { border: 0.5pt solid #888; padding: 3pt 6pt; vertical-align: top; font-size: 9pt; }
+  thead { display: table-header-group; }
+  tfoot { display: table-footer-group; }
+
+  h1 { font-size: 16pt; margin: 0 0 4pt; }
+  h2 { font-size: 13pt; margin: 0 0 3pt; }
+  h3 { font-size: 11pt; margin: 0 0 2pt; }
+  p  { font-size: 10pt; margin: 0 0 2pt; }
+
+  .print-border-top { border-top: 1pt solid #333; }
+  .print-border-bottom { border-bottom: 1pt solid #333; }
+  .print-text-right { text-align: right; }
+  .print-text-center { text-align: center; }
+  .print-bold { font-weight: bold; }
+  .signature-block { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20pt; margin-top: 40pt; }
+  .signature-box { border-top: 1pt solid #333; padding-top: 4pt; text-align: center; font-size: 9pt; }
+  .signature-space { height: 50pt; }
+}
+
+/* ─── Screen preview ──────────────────────────────────────────────────── */
+.print-document-preview {
+  background: white; padding: 30px; max-width: 210mm; margin: 0 auto;
+  box-shadow: 0 0 20px rgba(0,0,0,0.15);
+  font-family: 'Arial', 'Helvetica', sans-serif; font-size: 11pt; color: #222;
+}

@@ -23,8 +23,19 @@ class ProductController extends Controller
         if ($request->category) {
             $query->whereHas('category', fn($q) => $q->where('name', $request->category));
         }
+        
+        // Add category_id filter (more efficient for dropdown selects)
+        if ($request->has('category_id') && is_numeric($request->category_id)) {
+            $query->where('category_id', $request->category_id);
+        }
+        
         if ($request->warehouseId) {
             $query->where('warehouse_id', $request->warehouseId);
+        }
+        
+        // Add warehouse_id filter (alternative parameter name)
+        if ($request->has('warehouse_id') && is_numeric($request->warehouse_id)) {
+            $query->where('warehouse_id', $request->warehouse_id);
         }
 
         $products = $query->latest()->paginate($request->perPage ?? 50);

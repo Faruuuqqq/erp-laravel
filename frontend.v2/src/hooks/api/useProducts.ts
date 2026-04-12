@@ -2,82 +2,150 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import type { Product, PaginatedResponse } from '@/types';
 
-export const useProducts = (params?: any) => {
+interface ProductQueryParams {
+  page?: number;
+  per_page?: number;
+  search?: string;
+  category_id?: number;
+  warehouse_id?: number;
+}
+
+// Query key factory
+export const productKeys = {
+  all: ['products'] as const,
+  lists: () => [...productKeys.all, 'list'] as const,
+  list: (filters?: ProductQueryParams) =>
+    [...productKeys.lists(), { page: filters?.page ?? 1, per_page: filters?.per_page ?? 20, search: filters?.search ?? '', category_id: filters?.category_id, warehouse_id: filters?.warehouse_id }] as const,
+  details: () => [...productKeys.all, 'detail'] as const,
+  detail: (id: string) => [...productKeys.details(), id] as const,
+};
+
+export const useProducts = (params?: ProductQueryParams) => {
   return useQuery({
-    queryKey: ['products', params],
-    queryFn: () => api.get<PaginatedResponse<Product>>('/products', params),
+    queryKey: productKeys.list(params),
+    queryFn: () => api.get<PaginatedResponse<Product>>('/products', {
+      page: params?.page ?? 1,
+      per_page: params?.per_page ?? 20,
+      search: params?.search,
+      category_id: params?.category_id,
+      warehouse_id: params?.warehouse_id,
+    }),
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 };
 
 export const useProduct = (id: string) => {
   return useQuery({
-    queryKey: ['products', id],
+    queryKey: productKeys.detail(id),
     queryFn: () => api.get<Product>(`/products/${id}`),
     enabled: !!id,
   });
 };
 
+interface CreateProductRequest {
+  name: string;
+  code?: string;
+  category?: string;
+  categoryId?: string;
+  buyPrice?: number;
+  sellPrice?: number;
+  unit?: string;
+}
+
 export const useCreateProduct = () => {
-  const queryClient = useQueryClient();
-  
-  return useMutation({
-    mutationFn: (data: any) => api.post('/products', data),
+   const queryClient = useQueryClient();
+   
+   return useMutation({
+     mutationFn: (data: CreateProductRequest) => api.post('/products', data),
     onMutate: async (newProduct) => {
       // Cancel outgoing refetches
-      await queryClient.cancelQueries({ queryKey: ['products'] });
+      await queryClient.cancelQueries({ queryKey: productKeys.lists() });
       
       // Snapshot previous data
-      const previousProducts = queryClient.getQueryData(['products']);
+      const previousProducts = queryClient.getQueryData(productKeys.lists());
       
-      // Optimistically update cache
-      queryClient.setQueryData(['products'], (old: any) => ({
-        ...old,
-        data: [...(old?.data || []), { ...newProduct, id: 'temp-' + Date.now() }],
-      }));
+      // Generate temp ID for optimistic update - fixed timestamp issue
+      const tempId = `temp_${Date.now()}`;
       
-      return { previousProducts };
+       // Optimistically update cache
+       if (previousProducts) {
+         queryClient.setQueryData(productKeys.lists(), (old: PaginatedResponse<Product> | undefined) => ({
+           ...old,
+           data: [...(old?.data || []), { ...newProduct, id: tempId }],
+           meta: { ...old?.meta, total: (old?.meta?.total ?? 0) + 1 },
+         }));
+       }
+      
+      return { previousProducts, tempId };
     },
     onSuccess: (result, newProduct, context) => {
-      // Replace optimistic data dengan real data dari server
-      queryClient.setQueryData(['products'], (old: any) => ({
-        ...old,
-        data: (old?.data || []).map((p: any) => 
-          p.id === 'temp-' + newProduct.timestamp ? result.data : p
-        ),
-      }));
-    },
+       // Replace optimistic data with real data from server
+       if (context?.previousProducts) {
+         queryClient.setQueryData(productKeys.lists(), (old: PaginatedResponse<Product> | undefined) => ({
+           ...old,
+           data: (old?.data || []).map((p: Product) => 
+             p.id === context?.tempId ? result.data : p
+           ),
+         }));
+       }
+       // Add to detail cache
+       queryClient.setQueryData(productKeys.detail(result.data.id), result.data);
+     },
     onError: (err, newProduct, context) => {
-      // Rollback ke previous data jika gagal
+      // Rollback to previous data if failed
       if (context?.previousProducts) {
-        queryClient.setQueryData(['products'], context.previousProducts);
+        queryClient.setQueryData(productKeys.lists(), context.previousProducts);
       }
     },
-    onSettled: () => {
-      // Refetch untuk ensure data up-to-date
-      queryClient.invalidateQueries({ queryKey: ['products'] });
-    },
+    // NO onSettled - let optimistic update work properly
   });
 };
 
+interface UpdateProductRequest {
+  name?: string;
+  code?: string;
+  category?: string;
+  categoryId?: string;
+  buyPrice?: number;
+  sellPrice?: number;
+  unit?: string;
+}
+
 export const useUpdateProduct = () => {
-  const queryClient = useQueryClient();
-  
-  return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) =>
-      api.put(`/products/${id}`, data),
-    onMutate: async ({ id, data }) => {
-      await queryClient.cancelQueries({ queryKey: ['products'] });
-      const previousProduct = queryClient.getQueryData(['products', id]);
-      queryClient.setQueryData(['products', id], { ...previousProduct, ...data });
-      return { previousProduct };
-    },
+   const queryClient = useQueryClient();
+   
+   return useMutation({
+     mutationFn: ({ id, data }: { id: string; data: UpdateProductRequest }) =>
+       api.put(`/products/${id}`, data),
+     onMutate: async ({ id, data }) => {
+       await queryClient.cancelQueries({ queryKey: productKeys.detail(id) });
+       const previousProduct = queryClient.getQueryData(productKeys.detail(id));
+       queryClient.setQueryData(productKeys.detail(id), { ...previousProduct, ...data });
+       
+       // Also update in list view
+       queryClient.setQueryData(productKeys.lists(), (old: PaginatedResponse<Product> | undefined) => ({
+         ...old,
+         data: (old?.data || []).map((p: Product) =>
+           p.id === id ? { ...p, ...data } : p
+         ),
+       }));
+       
+       return { previousProduct };
+     },
+     onSuccess: (result, { id }, context) => {
+       queryClient.setQueryData(productKeys.detail(id), result.data);
+       queryClient.setQueryData(productKeys.lists(), (old: PaginatedResponse<Product> | undefined) => ({
+         ...old,
+         data: (old?.data || []).map((p: Product) =>
+           p.id === id ? result.data : p
+         ),
+       }));
+     },
     onError: (err, { id }, context) => {
       if (context?.previousProduct) {
-        queryClient.setQueryData(['products', id], context.previousProduct);
+        queryClient.setQueryData(productKeys.detail(id), context.previousProduct);
       }
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['products'] });
     },
   });
 };
@@ -86,46 +154,49 @@ export const useDeleteProduct = () => {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: (id: string) => api.delete(`/products/${id}`),
-    onMutate: async (id) => {
-      await queryClient.cancelQueries({ queryKey: ['products'] });
-      const previousProducts = queryClient.getQueryData(['products']);
-      queryClient.setQueryData(['products'], (old: any) => ({
-        ...old,
-        data: old?.data?.filter((p: any) => p.id !== id) || [],
-      }));
-      return { previousProducts };
-    },
+     mutationFn: (id: string) => api.delete(`/products/${id}`),
+     onMutate: async (id) => {
+       await queryClient.cancelQueries({ queryKey: productKeys.lists() });
+       const previousProducts = queryClient.getQueryData(productKeys.lists());
+       queryClient.setQueryData(productKeys.lists(), (old: PaginatedResponse<Product> | undefined) => ({
+         ...old,
+         data: old?.data?.filter((p: Product) => p.id !== id) || [],
+       }));
+       return { previousProducts };
+     },
     onError: (err, id, context) => {
       if (context?.previousProducts) {
-        queryClient.setQueryData(['products'], context.previousProducts);
+        queryClient.setQueryData(productKeys.lists(), context.previousProducts);
       }
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['products'] });
     },
   });
 };
 
 export const useUpdateStock = () => {
-  const queryClient = useQueryClient();
-  
-  return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) =>
-      api.patch(`/products/${id}/stock`, data),
-    onMutate: async ({ id, data }) => {
-      await queryClient.cancelQueries({ queryKey: ['products'] });
-      const previousProduct = queryClient.getQueryData(['products', id]);
-      queryClient.setQueryData(['products', id], { ...previousProduct, stock: data.stock });
-      return { previousProduct };
-    },
+   const queryClient = useQueryClient();
+   
+   return useMutation({
+     mutationFn: ({ id, data }: { id: string; data: { stock: number } }) =>
+       api.patch(`/products/${id}/stock`, data),
+     onMutate: async ({ id, data }) => {
+       await queryClient.cancelQueries({ queryKey: productKeys.detail(id) });
+       const previousProduct = queryClient.getQueryData(productKeys.detail(id));
+       queryClient.setQueryData(productKeys.detail(id), { ...previousProduct, stock: data.stock });
+       
+       // Also update in list view
+       queryClient.setQueryData(productKeys.lists(), (old: PaginatedResponse<Product> | undefined) => ({
+         ...old,
+         data: (old?.data || []).map((p: Product) =>
+           p.id === id ? { ...p, stock: data.stock } : p
+         ),
+       }));
+       
+       return { previousProduct };
+     },
     onError: (err, { id }, context) => {
       if (context?.previousProduct) {
-        queryClient.setQueryData(['products', id], context.previousProduct);
+        queryClient.setQueryData(productKeys.detail(id), context.previousProduct);
       }
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['products'] });
     },
   });
 };

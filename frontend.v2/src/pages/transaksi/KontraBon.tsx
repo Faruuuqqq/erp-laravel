@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback, useMemo, ReactNode } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -6,60 +6,132 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import {
-  Accordion, AccordionContent, AccordionItem, AccordionTrigger,
-} from '@/components/ui/accordion';
-import { Search, ClipboardList, FileDown, Printer } from 'lucide-react';
-import { Badge as BadgeUi } from '@/components/ui/badge';
-import { CUSTOMERS, formatRupiah } from '@/data/mockData';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Search, ClipboardList, Eye, Printer } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-
-interface KontraBonItem {
-  id: string;
-  customerId: string;
-  customer: string;
-  faktur: string;
-  tanggal: string;
-  jumlah: number;
-  status: 'belum_lunas' | 'sebagian';
-}
-
-const kontraBonData: KontraBonItem[] = [
-  { id: '1', customerId: 'cus1', customer: 'Toko Makmur Jaya', faktur: 'PJ-2025-027-001', tanggal: '27-02-2025', jumlah: 4_600_000, status: 'belum_lunas' },
-  { id: '2', customerId: 'cus1', customer: 'Toko Makmur Jaya', faktur: 'PK-2025-020-003', tanggal: '20-02-2025', jumlah: 2_900_000, status: 'sebagian' },
-  { id: '3', customerId: 'cus5', customer: 'UD Berkah Bersama', faktur: 'PJ-2025-026-005', tanggal: '26-02-2025', jumlah: 4_560_000, status: 'belum_lunas' },
-  { id: '4', customerId: 'cus5', customer: 'UD Berkah Bersama', faktur: 'PK-2025-015-001', tanggal: '15-02-2025', jumlah: 17_540_000, status: 'belum_lunas' },
-  { id: '5', customerId: 'cus3', customer: 'CV Sumber Rejeki', faktur: 'PK-2025-022-001', tanggal: '22-02-2025', jumlah: 1_200_000, status: 'belum_lunas' },
-  { id: '6', customerId: 'cus4', customer: 'Toko Aneka Sembako', faktur: 'PK-2025-010-002', tanggal: '10-02-2025', jumlah: 4_200_000, status: 'belum_lunas' },
-];
+import { usePermissions } from '@/hooks/usePermissions';
+import { useAuth } from '@/contexts/AuthContext';
+import { useCustomers } from '@/hooks/api/useCustomers';
+import { useTransactions } from '@/hooks/api/useTransactions';
+import { PrintPreviewDialog } from '@/components/dialogs/PrintPreviewDialog';
+import { KontraBonPrint } from '@/components/print/KontraBonPrint';
+import { formatCurrency } from '@/lib/utils';
+import type { Transaction } from '@/types';
 
 const KontraBon = () => {
   const { toast } = useToast();
+  const { canPrint } = usePermissions();
+  const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCustomer, setFilterCustomer] = useState('all');
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [previewContent, setPreviewContent] = useState<ReactNode>(null);
 
-  const grouped = kontraBonData.reduce<Record<string, KontraBonItem[]>>((acc, item) => {
-    if (!acc[item.customer]) acc[item.customer] = [];
-    acc[item.customer].push(item);
-    return acc;
-  }, {});
-
-  const filteredGrouped = Object.entries(grouped).filter(([customer, items]) => {
-    const matchSearch = customer.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchCustomer = filterCustomer === 'all' || items[0].customerId === filterCustomer;
-    return matchSearch && matchCustomer;
+  const { data: customersData } = useCustomers({ perPage: 200 });
+  // Load all outstanding penjualan_kredit (remaining > 0)
+  const { data: txData, isLoading } = useTransactions({
+    type: 'penjualan_kredit',
+    status: 'completed',
+    perPage: 500,
   });
 
-  const totalNilai = kontraBonData.reduce((s, i) => s + i.jumlah, 0);
-  const uniqueCustomers = [...new Set(kontraBonData.map(i => i.customerId))].length;
+  const customers = customersData?.data ?? [];
+  const allPiutang: Transaction[] = (txData?.data ?? []).filter(t => (t.remaining ?? 0) > 0);
 
-  return (
+  // Group by customer - memoize to prevent re-computation
+  const grouped = useMemo(() => 
+    allPiutang.reduce<Record<string, { name: string; customerId: string; items: Transaction[] }>>((acc, tx) => {
+      const cid = tx.customerId ?? 'unknown';
+      const cname = tx.customer ?? 'Unknown Customer';
+      if (!acc[cid]) acc[cid] = { name: cname, customerId: cid, items: [] };
+      acc[cid].items.push(tx);
+      return acc;
+    }, {}),
+    [allPiutang]
+  );
+
+  const filteredGrouped = useMemo(() =>
+    Object.entries(grouped).filter(([cid, group]) => {
+      const matchSearch = group.name.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchCustomer = filterCustomer === 'all' || cid === filterCustomer;
+      return matchSearch && matchCustomer;
+    }),
+    [grouped, searchTerm, filterCustomer]
+  );
+
+  const totalNilai = allPiutang.reduce((s, t) => s + (t.remaining ?? 0), 0);
+  const uniqueCustomers = Object.keys(grouped).length;
+
+  // Memoize default expanded items - recompute only when filteredGrouped changes
+  const defaultExpanded = useMemo(
+    () => filteredGrouped.map(([cid]) => cid),
+    [filteredGrouped]
+  );
+
+  // Print all filtered kontra bon (per-customer)
+  const handlePrintAll = useCallback(() => {
+    // If filtering to one customer, print just that customer's kontra bon
+    const entries = filteredGrouped;
+    if (entries.length === 0) {
+      toast({ title: 'Tidak ada data untuk dicetak', variant: 'destructive' });
+      return;
+    }
+    setPreviewContent(
+      <div>
+        {entries.map(([cid, group]) => (
+          <KontraBonPrint
+            key={cid}
+            customerName={group.name}
+            printedBy={user?.name}
+            items={group.items.map(t => ({
+              invoiceNumber: t.invoiceNumber,
+              date: t.date,
+              total: t.total,
+              paid: t.paid,
+              remaining: t.remaining ?? 0,
+            }))}
+          />
+        ))}
+      </div>
+    );
+    setIsPreviewOpen(true);
+  }, [filteredGrouped, user?.name, toast]);
+
+  // Per-customer print
+  const handlePrintCustomer = useCallback((cid: string, group: { name: string; items: Transaction[] }) => {
+    setPreviewContent(
+      <KontraBonPrint
+        customerName={group.name}
+        printedBy={user?.name}
+        items={group.items.map(t => ({
+          invoiceNumber: t.invoiceNumber,
+          date: t.date,
+          total: t.total,
+          paid: t.paid,
+          remaining: t.remaining ?? 0,
+        }))}
+      />
+    );
+    setIsPreviewOpen(true);
+   }, [user?.name]);
+
+   return (
     <MainLayout title="Kontra Bon" subtitle="Bon yang belum dilunasi per customer">
       {/* Summary */}
       <div className="mb-4 grid gap-3 md:grid-cols-3">
-        <Card><CardContent className="p-3"><p className="text-xs text-muted-foreground">Customer Dengan Bon</p><p className="text-2xl font-bold">{uniqueCustomers}</p></CardContent></Card>
-        <Card><CardContent className="p-3"><p className="text-xs text-muted-foreground">Total Bon Aktif</p><p className="text-2xl font-bold">{kontraBonData.length}</p></CardContent></Card>
-        <Card><CardContent className="p-3"><p className="text-xs text-muted-foreground">Total Nilai</p><p className="text-2xl font-bold text-warning tabular-nums">{formatRupiah(totalNilai)}</p></CardContent></Card>
+        <Card><CardContent className="p-3">
+          <p className="text-xs text-muted-foreground">Customer Dengan Bon</p>
+          <p className="text-2xl font-bold">{isLoading ? '-' : uniqueCustomers}</p>
+        </CardContent></Card>
+        <Card><CardContent className="p-3">
+          <p className="text-xs text-muted-foreground">Total Bon Aktif</p>
+          <p className="text-2xl font-bold">{isLoading ? '-' : allPiutang.length}</p>
+        </CardContent></Card>
+        <Card><CardContent className="p-3">
+          <p className="text-xs text-muted-foreground">Total Nilai</p>
+          <p className="text-2xl font-bold text-warning tabular-nums">{isLoading ? '-' : formatCurrency(totalNilai)}</p>
+        </CardContent></Card>
       </div>
 
       <div className="mb-4 flex flex-col sm:flex-row gap-2 items-start sm:items-center justify-between">
@@ -72,66 +144,76 @@ const KontraBon = () => {
             <SelectTrigger className="w-44 text-xs h-8"><SelectValue placeholder="Semua Customer" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Semua Customer</SelectItem>
-              {CUSTOMERS.filter(c => kontraBonData.some(k => k.customerId === c.id)).map(c => (
-                <SelectItem key={c.id} value={c.id}>{c.nama}</SelectItem>
+              {customers.filter(c => grouped[c.id]).map(c => (
+                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
               ))}
             </SelectContent>
           </Select>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={() => toast({ title: 'Mengekspor PDF...' })}>
-            <FileDown className="h-3.5 w-3.5" />Export PDF
-          </Button>
-          <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={() => window.print()}>
-            <Printer className="h-3.5 w-3.5" />Cetak
-          </Button>
-        </div>
+           <div className="flex gap-2">
+              {canPrint('transactions.kontra_bon') && (
+                <>
+                  <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={() => setIsPreviewOpen(true)}>
+                    <Eye className="h-3.5 w-3.5" />Lihat PDF
+                  </Button>
+                  <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={handlePrintAll}>
+                    <Printer className="h-3.5 w-3.5" />Cetak Semua
+                  </Button>
+                </>
+              )}
+           </div>
       </div>
 
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
-            <ClipboardList className="h-4 w-4" />
-            Daftar Kontra Bon per Customer
+            <ClipboardList className="h-4 w-4" />Daftar Kontra Bon per Customer
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {filteredGrouped.length === 0 ? (
+          {isLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map(i => <Skeleton key={i} className="h-14 w-full rounded-lg" />)}
+            </div>
+          ) : filteredGrouped.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <ClipboardList className="h-12 w-12 mx-auto mb-3 opacity-20" />
-              <p>Tidak ada kontra bon</p>
+              <p>{allPiutang.length === 0 ? 'Tidak ada piutang outstanding' : 'Tidak ada hasil pencarian'}</p>
             </div>
-          ) : (
-            <Accordion type="multiple" defaultValue={filteredGrouped.map(([c]) => c)} className="w-full space-y-2">
-              {filteredGrouped.map(([customer, items]) => {
-                const totalCustomer = items.reduce((s, i) => s + i.jumlah, 0);
-                const customer_ = CUSTOMERS.find(c => c.id === items[0].customerId);
-                const isOverLimit = customer_ && customer_.totalPiutang > customer_.limitKredit;
+           ) : (
+             <Accordion type="multiple" defaultValue={defaultExpanded} className="w-full space-y-2">
+              {filteredGrouped.map(([cid, group]) => {
+                const totalCustomer = group.items.reduce((s, t) => s + (t.remaining ?? 0), 0);
+                const customerData = customers.find(c => c.id === cid);
+                const limitKredit = Number(customerData?.creditLimit ?? 0);
+                const currentPiutang = Number(customerData?.balance ?? 0);
+                const isOverLimit = limitKredit > 0 && currentPiutang > limitKredit;
+
                 return (
-                  <AccordionItem key={customer} value={customer} className="border rounded-lg overflow-hidden">
+                  <AccordionItem key={cid} value={cid} className="border rounded-lg overflow-hidden">
                     <AccordionTrigger className="hover:no-underline px-4 py-3 hover:bg-muted/30">
                       <div className="flex w-full items-center justify-between pr-3">
                         <div className="flex items-center gap-3">
                           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
-                            {customer.charAt(0)}
+                            {group.name.charAt(0)}
                           </div>
                           <div className="text-left">
                             <div className="flex items-center gap-2">
-                              <span className="font-semibold text-sm">{customer}</span>
+                              <span className="font-semibold text-sm">{group.name}</span>
                               {isOverLimit && <Badge variant="destructive" className="text-[9px] h-4 px-1">Over Limit</Badge>}
                             </div>
-                            <p className="text-xs text-muted-foreground">{items.length} bon aktif</p>
+                            <p className="text-xs text-muted-foreground">{group.items.length} bon aktif</p>
                           </div>
                         </div>
-                        <span className="text-base font-bold text-warning tabular-nums">{formatRupiah(totalCustomer)}</span>
+                        <span className="text-base font-bold text-warning tabular-nums">{formatCurrency(totalCustomer)}</span>
                       </div>
                     </AccordionTrigger>
                     <AccordionContent className="px-4 pb-3">
-                      {customer_ && (
+                      {customerData && limitKredit > 0 && (
                         <div className="mb-3 grid grid-cols-3 gap-2 text-xs rounded-lg bg-muted/30 p-2.5">
-                          <div><p className="text-muted-foreground">Limit Kredit</p><p className="font-semibold">{formatRupiah(customer_.limitKredit)}</p></div>
-                          <div><p className="text-muted-foreground">Total Piutang</p><p className={`font-semibold ${isOverLimit ? 'text-destructive' : 'text-warning'}`}>{formatRupiah(customer_.totalPiutang)}</p></div>
-                          <div><p className="text-muted-foreground">Sisa Limit</p><p className={`font-semibold ${customer_.limitKredit - customer_.totalPiutang < 0 ? 'text-destructive' : 'text-success'}`}>{formatRupiah(customer_.limitKredit - customer_.totalPiutang)}</p></div>
+                          <div><p className="text-muted-foreground">Limit Kredit</p><p className="font-semibold">{formatCurrency(limitKredit)}</p></div>
+                          <div><p className="text-muted-foreground">Total Piutang</p><p className={`font-semibold ${isOverLimit ? 'text-destructive' : 'text-warning'}`}>{formatCurrency(currentPiutang)}</p></div>
+                          <div><p className="text-muted-foreground">Sisa Limit</p><p className={`font-semibold ${limitKredit - currentPiutang < 0 ? 'text-destructive' : 'text-success'}`}>{formatCurrency(limitKredit - currentPiutang)}</p></div>
                         </div>
                       )}
                       <Table>
@@ -139,25 +221,36 @@ const KontraBon = () => {
                           <TableRow className="bg-muted/50">
                             <TableHead className="text-xs">No. Faktur</TableHead>
                             <TableHead className="text-xs">Tanggal</TableHead>
-                            <TableHead className="text-xs text-right">Jumlah</TableHead>
+                            <TableHead className="text-xs text-right">Total</TableHead>
+                            <TableHead className="text-xs text-right">Terbayar</TableHead>
+                            <TableHead className="text-xs text-right">Sisa</TableHead>
                             <TableHead className="text-xs">Status</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {items.map(item => (
+                          {group.items.map(item => (
                             <TableRow key={item.id} className="text-sm">
-                              <TableCell className="font-mono text-xs text-primary font-semibold">{item.faktur}</TableCell>
-                              <TableCell className="text-xs text-muted-foreground">{item.tanggal}</TableCell>
-                              <TableCell className="text-right font-semibold tabular-nums">{formatRupiah(item.jumlah)}</TableCell>
+                              <TableCell className="font-mono text-xs text-primary font-semibold">{item.invoiceNumber}</TableCell>
+                              <TableCell className="text-xs text-muted-foreground">{item.date}</TableCell>
+                              <TableCell className="text-right tabular-nums text-xs">{formatCurrency(item.total)}</TableCell>
+                              <TableCell className="text-right tabular-nums text-xs text-success">{formatCurrency(item.paid)}</TableCell>
+                              <TableCell className="text-right font-semibold tabular-nums">{formatCurrency(item.remaining ?? 0)}</TableCell>
                               <TableCell>
-                                <Badge variant={item.status === 'belum_lunas' ? 'destructive' : 'outline'} className="text-xs">
-                                  {item.status === 'belum_lunas' ? 'Belum Lunas' : 'Sebagian'}
+                                <Badge variant={item.paid > 0 ? 'outline' : 'destructive'} className="text-xs">
+                                  {item.paid > 0 ? 'Sebagian' : 'Belum Lunas'}
                                 </Badge>
                               </TableCell>
                             </TableRow>
                           ))}
                         </TableBody>
                       </Table>
+                      {canPrint('transactions.kontra_bon') && (
+                        <div className="flex justify-end mt-3">
+                          <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5" onClick={() => handlePrintCustomer(cid, group)}>
+                            <Printer className="h-3 w-3" />Cetak Kontra Bon
+                          </Button>
+                        </div>
+                      )}
                     </AccordionContent>
                   </AccordionItem>
                 );
@@ -166,6 +259,16 @@ const KontraBon = () => {
           )}
         </CardContent>
       </Card>
+
+      <PrintPreviewDialog
+        isOpen={isPreviewOpen}
+        onClose={() => setIsPreviewOpen(false)}
+        title="Kontra Bon"
+        documentId="kontra-bon-preview"
+        filename="Kontra Bon"
+      >
+        {previewContent}
+      </PrintPreviewDialog>
     </MainLayout>
   );
 };

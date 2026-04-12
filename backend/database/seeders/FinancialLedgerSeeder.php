@@ -4,35 +4,68 @@ namespace Database\Seeders;
 
 use App\Models\FinancialLedger;
 use App\Models\Transaction;
+use App\Models\Customer;
+use App\Models\Supplier;
+use App\Models\User;
 use Illuminate\Database\Seeder;
 
 class FinancialLedgerSeeder extends Seeder
 {
     public function run(): void
     {
-        $transactions = Transaction::all();
+        $users = User::all();
+        if ($users->isEmpty()) return;
 
-        foreach ($transactions as $transaction) {
-            $existingLedger = FinancialLedger::where('transaction_id', $transaction->id)->first();
-
-            if (!$existingLedger) {
-                $isSale = in_array($transaction->type, ['penjualan_tunai', 'penjualan_kredit']);
-                $type = $isSale ? 'debit' : 'credit';
-                $description = $isSale
-                    ? "Penjualan {$transaction->invoice_number}"
-                    : "Pembelian {$transaction->invoice_number}";
-
-                FinancialLedger::create([
-                    'transaction_id' => $transaction->id,
-                    'type' => $type,
-                    'amount' => $transaction->total,
-                    'description' => $description,
-                    'balance_after' => 50000000 + rand(-5000000, 5000000),
-                    'date' => $transaction->date,
-                ]);
-            }
+        if (FinancialLedger::count() > 0) {
+            $this->command->info('Ledger sudah ada, melewati FinancialLedgerSeeder.');
+            return;
         }
 
-        $this->command->info('Financial ledgers seeded: ' . $transactions->count() . ' entries.');
+        $userId = $users->first()->id;
+        $count  = 0;
+
+        // ── Piutang dari transaksi kredit yang ada remaining ─────────────────
+        $creditTrx = Transaction::where('type', 'penjualan_kredit')
+            ->where('remaining', '>', 0)
+            ->with('customer')
+            ->get();
+
+        foreach ($creditTrx as $trx) {
+            FinancialLedger::create([
+                'type'          => 'PIUTANG',
+                'entity_type'   => 'customer',
+                'entity_id'     => $trx->customer_id,
+                'transaction_id'=> $trx->id,
+                'debit'         => $trx->remaining,
+                'credit'        => 0,
+                'balance_after' => $trx->remaining,
+                'description'   => 'Piutang dari ' . $trx->invoice_number,
+                'created_by'    => $userId,
+            ]);
+            $count++;
+        }
+
+        // ── Utang dari pembelian kredit ──────────────────────────────────────
+        $debtTrx = Transaction::where('type', 'pembelian')
+            ->where('remaining', '>', 0)
+            ->with('supplier')
+            ->get();
+
+        foreach ($debtTrx as $trx) {
+            FinancialLedger::create([
+                'type'          => 'UTANG',
+                'entity_type'   => 'supplier',
+                'entity_id'     => $trx->supplier_id,
+                'transaction_id'=> $trx->id,
+                'debit'         => $trx->remaining,
+                'credit'        => 0,
+                'balance_after' => $trx->remaining,
+                'description'   => 'Utang dari ' . $trx->invoice_number,
+                'created_by'    => $userId,
+            ]);
+            $count++;
+        }
+
+        $this->command->info("FinancialLedger seeder selesai: {$count} entri ledger dibuat.");
     }
 }

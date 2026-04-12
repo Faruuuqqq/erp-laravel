@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { PageHeader, DataTableContainer, CurrencyCell } from '@/components/ui/DataComponents';
 import { StatCard } from '@/components/ui/StatCard';
@@ -9,10 +9,25 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Progress } from '@/components/ui/progress';
 import { Package, AlertTriangle, Search, Download, Printer, TrendingUp } from 'lucide-react';
 import { useStockReport, printStockReport } from '@/hooks/api/useReports';
+import { usePermissions } from '@/hooks/usePermissions';
+import { useAuth } from '@/contexts/AuthContext';
+import { usePrint } from '@/contexts/usePrint';
+import { SaldoStokPrint } from '@/components/print/SaldoStokPrint';
 import { useToast } from '@/hooks/use-toast';
+import { formatCurrency } from '@/lib/utils';
 
-const formatRupiah = (value: number) =>
-  new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(value);
+interface StockItem {
+  id: string;
+  code: string;
+  name: string;
+  category?: string;
+  warehouseName?: string;
+  stock: number;
+  unit?: string;
+  buyPrice?: number;
+  sellPrice?: number;
+  stockValue?: number;
+}
 
 const SaldoStok = () => {
   const [search, setSearch] = useState('');
@@ -20,19 +35,22 @@ const SaldoStok = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [isPrinting, setIsPrinting] = useState(false);
   const { toast } = useToast();
+  const { canPrint } = usePermissions();
+  const { user } = useAuth();
+  const { printDocument } = usePrint();
 
   const { data, isLoading } = useStockReport();
-  const items = data?.data?.data?.items ?? [];
-  const totalValue = data?.data?.data?.totalValue ?? 0;
+  const items = (data?.data?.items as StockItem[]) ?? [];
+  const totalValue = data?.data?.totalValue ?? 0;
 
-  const categories = Array.from(new Set(items.map((p: any) => p.category).filter(Boolean)));
+  const categories = Array.from(new Set((items as StockItem[]).map(p => p.category).filter(Boolean)));
 
   const totalNilai = totalValue;
-  const totalUnit = items.reduce((s: number, p: any) => s + (p.stock || 0), 0);
-  const lowStockItems = items.filter((p: any) => p.stock <= 0);
-  const totalNilaiJual = items.reduce((s: number, p: any) => s + (p.stock || 0) * (p.sellPrice || 0), 0);
+  const totalUnit = (items as StockItem[]).reduce((s, p) => s + (p.stock || 0), 0);
+  const lowStockItems = (items as StockItem[]).filter(p => p.stock <= 0);
+  const totalNilaiJual = (items as StockItem[]).reduce((s, p) => s + (p.stock || 0) * (p.sellPrice || 0), 0);
 
-  const filtered = items.filter((p: any) => {
+  const filtered = (items as StockItem[]).filter(p => {
     const matchSearch = p.name.toLowerCase().includes(search.toLowerCase()) ||
       p.code.toLowerCase().includes(search.toLowerCase());
     const matchKat = katFilter === 'all' || p.category === katFilter;
@@ -42,18 +60,24 @@ const SaldoStok = () => {
     return matchSearch && matchKat && matchStatus;
   });
 
-  const handlePrint = async () => {
-    try {
-      setIsPrinting(true);
-      const url = await printStockReport();
-      window.open(url, '_blank');
-      toast({ title: 'PDF berhasil dibuat', description: 'Laporan stok telah dibuka di tab baru.' });
-    } catch {
-      toast({ title: 'Error', description: 'Gagal membuat PDF laporan stok.', variant: 'destructive' });
-    } finally {
-      setIsPrinting(false);
-    }
-  };
+  const handlePrint = useCallback(() => {
+    printDocument(
+      <SaldoStokPrint
+        printedBy={user?.name}
+        filterKategori={katFilter !== 'all' ? katFilter : undefined}
+        items={filtered.map(p => ({
+          kode: p.code ?? '',
+          nama: p.name ?? '',
+          kategori: p.category ?? '',
+          gudang: p.warehouseName ?? '',
+          saldo: p.stock ?? 0,
+          satuan: p.unit ?? 'pcs',
+          hargaBeli: p.buyPrice ?? 0,
+          nilaiPersediaan: p.stockValue ?? 0,
+        }))}
+      />
+    );
+  }, [printDocument, user?.name, katFilter, filtered]);
 
   const handleExportPDF = async () => {
     try {
@@ -78,12 +102,16 @@ const SaldoStok = () => {
         description="Nilai persediaan berdasarkan harga beli — akses terbatas Owner"
         actions={
           <>
-            <Button variant="outline" size="sm" onClick={handlePrint} disabled={isPrinting}>
-              <Printer className="h-4 w-4 mr-1.5" />{isPrinting ? 'Generating...' : 'Cetak'}
-            </Button>
-            <Button variant="outline" size="sm" onClick={handleExportPDF} disabled={isPrinting}>
-              <Download className="h-4 w-4 mr-1.5" />{isPrinting ? 'Generating...' : 'Export PDF'}
-            </Button>
+            {canPrint('__owner_only__') && (
+              <>
+                <Button variant="outline" size="sm" onClick={handlePrint} disabled={isPrinting}>
+                  <Printer className="h-4 w-4 mr-1.5" />Cetak
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleExportPDF} disabled={isPrinting}>
+                  <Download className="h-4 w-4 mr-1.5" />{isPrinting ? 'Generating...' : 'Export PDF'}
+                </Button>
+              </>
+            )}
           </>
         }
       />
@@ -136,7 +164,7 @@ const SaldoStok = () => {
                   <tr><td colSpan={9} className="px-4 py-10 text-center text-muted-foreground">Tidak ada data yang sesuai.</td></tr>
                 ) : (
                   <>
-                    {filtered.map((p: any) => {
+                    {filtered.map((p: StockItem) => {
                       const pct = Math.min(100, Math.round(((p.stock || 0) / (10 * 3)) * 100));
                       const isLow = (p.stock || 0) <= 0;
                       return (

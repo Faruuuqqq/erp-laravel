@@ -1,0 +1,49 @@
+- generic [ref=e2]:
+  - region "Notifications (F8)":
+    - list
+  - region "Notifications alt+T"
+  - generic [ref=e4]:
+    - generic [ref=e5]:
+      - img [ref=e7]
+      - heading "TokoSync ERP" [level=1] [ref=e9]
+      - paragraph [ref=e10]: Sistem Manajemen Toko Terintegrasi
+    - generic [ref=e11]:
+      - generic [ref=e12]:
+        - heading "Masuk ke Akun" [level=3] [ref=e13]
+        - paragraph [ref=e14]: Pilih role dan masukkan kredensial Anda
+      - generic [ref=e15]:
+        - generic [ref=e16]:
+          - tablist [ref=e17]:
+            - tab "Owner" [active] [selected] [ref=e18] [cursor=pointer]
+            - tab "Admin/Kasir" [ref=e19] [cursor=pointer]
+          - tabpanel "Owner" [ref=e42]:
+            - generic [ref=e43]:
+              - strong [ref=e44]: Owner
+              - text: "— Akses penuh: laporan keuangan, nilai stok, dan semua laporan laba rugi."
+        - generic [ref=e23]:
+          - generic [ref=e24]:
+            - text: Email
+            - textbox "Email" [ref=e25]:
+              - /placeholder: email@tokosync.id
+              - text: owner@tokosync.id
+          - generic [ref=e26]:
+            - text: Password
+            - generic [ref=e27]:
+              - textbox "Password" [ref=e28]:
+                - /placeholder: ••••••••
+              - button [ref=e29] [cursor=pointer]:
+                - img [ref=e30]
+          - button "Masuk sebagai Owner" [ref=e45] [cursor=pointer]
+        - generic [ref=e34]:
+          - paragraph [ref=e35]: "Demo credentials:"
+          - paragraph [ref=e36]:
+            - text: "Owner:"
+            - code [ref=e37]: owner@tokosync.id
+            - text: "/ password:"
+            - code [ref=e38]: password
+          - paragraph [ref=e39]:
+            - text: "Admin:"
+            - code [ref=e40]: admin@tokosync.id
+            - text: "/ password:"
+            - code [ref=e41]: password
+  - iframe

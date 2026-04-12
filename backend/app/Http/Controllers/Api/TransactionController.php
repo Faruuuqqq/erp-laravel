@@ -44,8 +44,32 @@ class TransactionController extends Controller
             $query->whereDate('date', '<=', $request->to);
         }
 
+        // Filter hidden transactions for non-owners
+        $user = auth()->user();
+        if ($user && $user->role !== 'owner') {
+             // In the future we can check for a specific permission like "view_hidden_transactions", 
+             // but for now only owner sees hidden
+             $query->where('is_hidden', false);
+        }
+
         $transactions = $query->latest()->paginate($request->perPage ?? 25);
         return TransactionResource::collection($transactions);
+    }
+
+    // ─── Toggle Hidden (Owner Only) ───────────────────────────────────────────
+    public function toggleHidden(Transaction $transaction): JsonResponse
+    {
+        $user = auth()->user();
+        if (!$user || $user->role !== 'owner') {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $transaction->update(['is_hidden' => !$transaction->is_hidden]);
+        
+        return response()->json([
+            'message' => 'Status hidden berhasil diubah',
+            'data' => new TransactionResource($transaction->fresh())
+        ]);
     }
 
     // ─── Store (Core business logic) ─────────────────────────────────────────

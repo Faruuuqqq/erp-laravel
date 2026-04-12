@@ -1,17 +1,17 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 
-export const useSaldoPiutang = () => {
+export const useSaldoPiutang = (params?: { search?: string; status?: string }) => {
   return useQuery({
-    queryKey: ['info', 'saldo-piutang'],
-    queryFn: () => api.get('/info/saldo-piutang'),
+    queryKey: ['info', 'saldo-piutang', params],
+    queryFn: () => api.get('/info/saldo-piutang', params),
   });
 };
 
-export const useSaldoUtang = () => {
+export const useSaldoUtang = (params?: { search?: string; status?: string }) => {
   return useQuery({
-    queryKey: ['info', 'saldo-utang'],
-    queryFn: () => api.get('/info/saldo-utang'),
+    queryKey: ['info', 'saldo-utang', params],
+    queryFn: () => api.get('/info/saldo-utang', params),
   });
 };
 
@@ -22,7 +22,7 @@ export const useSaldoStok = () => {
   });
 };
 
-interface KartuStokParams {
+interface KartuStokParams extends Record<string, unknown> {
   page?: number;
   per_page?: number;
 }
