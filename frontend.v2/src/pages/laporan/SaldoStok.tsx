@@ -13,8 +13,8 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePrint } from '@/contexts/usePrint';
 import { SaldoStokPrint } from '@/components/print/SaldoStokPrint';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useToast } from '@/hooks/use-toast';
-import { formatCurrency } from '@/lib/utils';
 import { exportToExcel } from '@/lib/export';
 
 interface StockItem {
@@ -29,21 +29,6 @@ interface StockItem {
   sellPrice?: number;
   stockValue?: number;
 }
-
-// Debounce hook
-const useDebouncedValue = <T,>(value: T, delay: number): T => {
-  const [debouncedValue, setDebouncedValue] = useState<T>(value);
-
-  useMemo(() => {
-    const handler = setTimeout(() => {
-      setDebouncedValue(value);
-    }, delay);
-
-    return () => clearTimeout(handler);
-  }, [value, delay]);
-
-  return debouncedValue;
-};
 
 const SaldoStok = () => {
   const [search, setSearch] = useState('');
@@ -84,17 +69,17 @@ const SaldoStok = () => {
       const matchStatus = statusFilter === 'all' ||
         (statusFilter === 'rendah' && p.stock <= 0) ||
         (statusFilter === 'aman' && p.stock > 0);
-      
+
       // Advanced stock range filter
       const minStockVal = minStock ? parseInt(minStock) : 0;
       const maxStockVal = maxStock ? parseInt(maxStock) : Infinity;
       const matchStockRange = p.stock >= minStockVal && p.stock <= maxStockVal;
-      
+
       // Advanced value range filter
       const minValueVal = minValue ? parseInt(minValue) : 0;
       const maxValueVal = maxValue ? parseInt(maxValue) : Infinity;
       const matchValueRange = (p.stockValue || 0) >= minValueVal && (p.stockValue || 0) <= maxValueVal;
-      
+
       return matchSearch && matchKat && matchStatus && matchStockRange && matchValueRange;
     });
     return result;
@@ -213,14 +198,14 @@ const SaldoStok = () => {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <div className="relative flex-1 max-w-72">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input 
-              placeholder="Cari produk..." 
-              className="pl-9 h-9" 
-              value={search} 
+            <Input
+              placeholder="Cari produk..."
+              className="pl-9 h-9"
+              value={search}
               onChange={e => {
                 setSearch(e.target.value);
                 handleFilterChange();
-              }} 
+              }}
             />
           </div>
           <Select value={katFilter} onValueChange={(value) => {
@@ -252,9 +237,9 @@ const SaldoStok = () => {
           <div className="flex gap-2 items-end flex-1">
             <div className="flex-1 max-w-32">
               <label className="text-xs font-medium text-muted-foreground mb-1 block">Min Stok</label>
-              <Input 
-                type="number" 
-                placeholder="0" 
+              <Input
+                type="number"
+                placeholder="0"
                 className="h-8 text-sm"
                 value={minStock}
                 onChange={e => {
@@ -265,9 +250,9 @@ const SaldoStok = () => {
             </div>
             <div className="flex-1 max-w-32">
               <label className="text-xs font-medium text-muted-foreground mb-1 block">Max Stok</label>
-              <Input 
-                type="number" 
-                placeholder="999" 
+              <Input
+                type="number"
+                placeholder="999"
                 className="h-8 text-sm"
                 value={maxStock}
                 onChange={e => {
@@ -278,9 +263,9 @@ const SaldoStok = () => {
             </div>
             <div className="flex-1 max-w-32">
               <label className="text-xs font-medium text-muted-foreground mb-1 block">Min Nilai</label>
-              <Input 
-                type="number" 
-                placeholder="0" 
+              <Input
+                type="number"
+                placeholder="0"
                 className="h-8 text-sm"
                 value={minValue}
                 onChange={e => {
@@ -291,9 +276,9 @@ const SaldoStok = () => {
             </div>
             <div className="flex-1 max-w-32">
               <label className="text-xs font-medium text-muted-foreground mb-1 block">Max Nilai</label>
-              <Input 
-                type="number" 
-                placeholder="999999" 
+              <Input
+                type="number"
+                placeholder="999999"
                 className="h-8 text-sm"
                 value={maxValue}
                 onChange={e => {
@@ -303,8 +288,8 @@ const SaldoStok = () => {
               />
             </div>
           </div>
-          <Button 
-            variant="ghost" 
+          <Button
+            variant="ghost"
             size="sm"
             onClick={handleClearFilters}
             className="text-xs"

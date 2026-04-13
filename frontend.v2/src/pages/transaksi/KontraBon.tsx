@@ -8,12 +8,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Search, ClipboardList, Eye, Printer } from 'lucide-react';
+import { ClipboardList, Eye, Printer } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCustomers } from '@/hooks/api/useCustomers';
 import { useTransactions } from '@/hooks/api/useTransactions';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { SearchInput } from '@/components/common';
 import { PrintPreviewDialog } from '@/components/dialogs/PrintPreviewDialog';
 import { KontraBonPrint } from '@/components/print/KontraBonPrint';
 import { formatCurrency } from '@/lib/utils';
@@ -36,29 +38,31 @@ const KontraBon = () => {
     perPage: 500,
   });
 
-  const customers = customersData?.data ?? [];
-  const allPiutang: Transaction[] = (txData?.data ?? []).filter(t => (t.remaining ?? 0) > 0);
+   const customers = customersData?.data ?? [];
+   const allPiutang: Transaction[] = (txData?.data ?? []).filter(t => (t.remaining ?? 0) > 0);
 
-  // Group by customer - memoize to prevent re-computation
-  const grouped = useMemo(() => 
-    allPiutang.reduce<Record<string, { name: string; customerId: string; items: Transaction[] }>>((acc, tx) => {
-      const cid = tx.customerId ?? 'unknown';
-      const cname = tx.customer ?? 'Unknown Customer';
-      if (!acc[cid]) acc[cid] = { name: cname, customerId: cid, items: [] };
-      acc[cid].items.push(tx);
-      return acc;
-    }, {}),
-    [allPiutang]
-  );
+   const debouncedSearch = useDebouncedValue(searchTerm, 300);
 
-  const filteredGrouped = useMemo(() =>
-    Object.entries(grouped).filter(([cid, group]) => {
-      const matchSearch = group.name.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchCustomer = filterCustomer === 'all' || cid === filterCustomer;
-      return matchSearch && matchCustomer;
-    }),
-    [grouped, searchTerm, filterCustomer]
-  );
+   // Group by customer - memoize to prevent re-computation
+   const grouped = useMemo(() => 
+     allPiutang.reduce<Record<string, { name: string; customerId: string; items: Transaction[] }>>((acc, tx) => {
+       const cid = tx.customerId ?? 'unknown';
+       const cname = tx.customer ?? 'Unknown Customer';
+       if (!acc[cid]) acc[cid] = { name: cname, customerId: cid, items: [] };
+       acc[cid].items.push(tx);
+       return acc;
+     }, {}),
+     [allPiutang]
+   );
+
+   const filteredGrouped = useMemo(() =>
+     Object.entries(grouped).filter(([cid, group]) => {
+       const matchSearch = group.name.toLowerCase().includes(debouncedSearch.toLowerCase());
+       const matchCustomer = filterCustomer === 'all' || cid === filterCustomer;
+       return matchSearch && matchCustomer;
+     }),
+     [grouped, debouncedSearch, filterCustomer]
+   );
 
   const totalNilai = allPiutang.reduce((s, t) => s + (t.remaining ?? 0), 0);
   const uniqueCustomers = Object.keys(grouped).length;
@@ -135,21 +139,24 @@ const KontraBon = () => {
       </div>
 
       <div className="mb-4 flex flex-col sm:flex-row gap-2 items-start sm:items-center justify-between">
-        <div className="flex gap-2 flex-wrap">
-          <div className="relative w-60">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-            <Input placeholder="Cari customer..." className="pl-8 text-xs h-8" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-          </div>
-          <Select value={filterCustomer} onValueChange={setFilterCustomer}>
-            <SelectTrigger className="w-44 text-xs h-8"><SelectValue placeholder="Semua Customer" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Semua Customer</SelectItem>
-              {customers.filter(c => grouped[c.id]).map(c => (
-                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+         <div className="flex gap-2 flex-wrap">
+           <div className="w-60">
+             <SearchInput 
+               placeholder="Cari customer..." 
+               value={searchTerm}
+               onChange={setSearchTerm}
+             />
+           </div>
+           <Select value={filterCustomer} onValueChange={setFilterCustomer}>
+             <SelectTrigger className="w-44 text-xs h-8"><SelectValue placeholder="Semua Customer" /></SelectTrigger>
+             <SelectContent>
+               <SelectItem value="all">Semua Customer</SelectItem>
+               {customers.filter(c => grouped[c.id]).map(c => (
+                 <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+               ))}
+             </SelectContent>
+           </Select>
+         </div>
            <div className="flex gap-2">
               {canPrint('transactions.kontra_bon') && (
                 <>

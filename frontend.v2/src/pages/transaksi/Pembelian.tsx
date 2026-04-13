@@ -8,13 +8,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Plus, Trash2, ShoppingCart, Calculator, Eye, Search } from 'lucide-react';
+import { Plus, Trash2, ShoppingCart, Calculator, Eye } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useProducts } from '@/hooks/api/useProducts';
 import { useSuppliers } from '@/hooks/api/useSuppliers';
 import { useWarehouses } from '@/hooks/api/useWarehouses';
 import { useCreateTransaction } from '@/hooks/api/useTransactions';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { SearchInput } from '@/components/common';
 import { DraftPreviewDialog } from '@/components/dialogs/DraftPreviewDialog';
 import { PrintPreviewDialog } from '@/components/dialogs/PrintPreviewDialog';
 import { SuccessScreen } from '@/components/layout/SuccessScreen';
@@ -68,23 +70,25 @@ const Pembelian = () => {
    const [priceConflict, setPriceConflict] = useState<PriceConflict>({ show: false, existingPrice: 0, newPrice: 0, productName: '' });
    const [pendingAddToCart, setPendingAddToCart] = useState<{ product: Product; qty: number; harga: number } | null>(null);
 
-  const { data: productsData } = useProducts({ per_page: 500 });
-  const { data: suppliersData } = useSuppliers({ perPage: 200 });
-  const { data: warehousesData } = useWarehouses({ per_page: 100 });
+   const { data: productsData } = useProducts({ per_page: 500 });
+   const { data: suppliersData } = useSuppliers({ perPage: 200 });
+   const { data: warehousesData } = useWarehouses({ per_page: 100 });
 
-  // Wrap data arrays in useMemo to stabilize references
-  const products = useMemo(() => productsData?.data ?? [], [productsData?.data]);
-  const suppliers = useMemo(() => suppliersData?.data ?? [], [suppliersData?.data]);
-  const warehouses = useMemo(() => warehousesData?.data ?? [], [warehousesData?.data]);
+   // Wrap data arrays in useMemo to stabilize references
+   const products = useMemo(() => productsData?.data ?? [], [productsData?.data]);
+   const suppliers = useMemo(() => suppliersData?.data ?? [], [suppliersData?.data]);
+   const warehouses = useMemo(() => warehousesData?.data ?? [], [warehousesData?.data]);
 
-  const set = useCallback(<K extends keyof ReturnType<typeof BLANK_STATE>>(key: K, val: ReturnType<typeof BLANK_STATE>[K]) =>
-    setState(p => ({ ...p, [key]: val })), []);
+   const debouncedSearch = useDebouncedValue(state.searchProduct, 300);
 
-  const filteredProducts = useMemo(() =>
-    products.filter(p =>
-      p.name.toLowerCase().includes(state.searchProduct.toLowerCase()) ||
-      (p.code ?? '').toLowerCase().includes(state.searchProduct.toLowerCase())
-    ), [products, state.searchProduct]);
+   const set = useCallback(<K extends keyof ReturnType<typeof BLANK_STATE>>(key: K, val: ReturnType<typeof BLANK_STATE>[K]) =>
+     setState(p => ({ ...p, [key]: val })), []);
+
+   const filteredProducts = useMemo(() =>
+     products.filter(p =>
+       p.name.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+       (p.code ?? '').toLowerCase().includes(debouncedSearch.toLowerCase())
+     ), [products, debouncedSearch]);
 
   const supplier = suppliers.find(s => s.id === state.selectedSupplier);
 
@@ -268,31 +272,32 @@ const Pembelian = () => {
                 </Select>
               </div>
 
-              {/* Add product */}
-              {canCreate('transactions.purchase') && (
-                <div className="rounded-lg border bg-muted/30 p-3.5">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Tambah Produk</p>
-                  <div className="grid gap-2 md:grid-cols-6">
-                    <div className="md:col-span-3 space-y-1">
-                      <div className="relative">
-                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                        <Input placeholder="Cari produk..." value={state.searchProduct} onChange={e => set('searchProduct', e.target.value)} className="pl-8 text-xs h-8" />
-                      </div>
-                      <Select value={state.selectedProduct} onValueChange={v => {
-                        const p = products.find(p => p.id === v);
-                        setState(prev => ({ ...prev, selectedProduct: v, harga: String(p?.buyPrice ?? '') }));
-                      }}>
-                        <SelectTrigger className="text-xs h-8"><SelectValue placeholder="Pilih produk" /></SelectTrigger>
-                        <SelectContent>
-                          {filteredProducts.map(p => (
-                            <SelectItem key={p.id} value={p.id}>
-                              {p.code && `${p.code} - `}{p.name}
-                              <Badge variant="secondary" className="ml-2 text-[9px] h-3.5 px-1">Stok: {p.stock ?? 0}</Badge>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+               {/* Add product */}
+               {canCreate('transactions.purchase') && (
+                 <div className="rounded-lg border bg-muted/30 p-3.5">
+                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Tambah Produk</p>
+                   <div className="grid gap-2 md:grid-cols-6">
+                     <div className="md:col-span-3 space-y-1">
+                       <SearchInput 
+                         placeholder="Cari produk..." 
+                         value={state.searchProduct}
+                         onChange={(value) => set('searchProduct', value)}
+                       />
+                       <Select value={state.selectedProduct} onValueChange={v => {
+                         const p = products.find(p => p.id === v);
+                         setState(prev => ({ ...prev, selectedProduct: v, harga: String(p?.buyPrice ?? '') }));
+                       }}>
+                         <SelectTrigger className="text-xs h-8"><SelectValue placeholder="Pilih produk" /></SelectTrigger>
+                         <SelectContent>
+                           {filteredProducts.map(p => (
+                             <SelectItem key={p.id} value={p.id}>
+                               {p.code && `${p.code} - `}{p.name}
+                               <Badge variant="secondary" className="ml-2 text-[9px] h-3.5 px-1">Stok: {p.stock ?? 0}</Badge>
+                             </SelectItem>
+                           ))}
+                         </SelectContent>
+                       </Select>
+                     </div>
                     <div className="space-y-1">
                       <Label className="text-xs">Qty</Label>
                       <Input type="number" value={state.qty} onChange={e => set('qty', e.target.value)} className="text-xs h-8" min="1" />

@@ -1,17 +1,15 @@
 import { useState, useCallback } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { useTableSort } from '@/hooks/useTableSort';
 import { useRetryableAction } from '@/hooks/useRetryableAction';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
-} from '@/components/ui/dialog';
 import { DeleteConfirmDialog } from '@/components/dialogs/DeleteConfirmDialog';
+import { DataTable, FormDialog, type DataTableColumn, type FormField, PaginationControl } from '@/components/common';
 
-import { Plus, Search, Pencil, Trash2, Phone, MapPin, AlertCircle, Download, Users, ArrowUp, ArrowDown } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2, Phone, MapPin, AlertCircle, Download, Users } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { StatCard } from '@/components/ui/StatCard';
 import { useToast } from '@/hooks/use-toast';
@@ -27,14 +25,13 @@ const CustomerPage = () => {
   const { canCreate, canEdit, canDelete } = usePermissions();
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [sortBy, setSortBy] = useState<'nama' | 'kota' | 'total_piutang'>('nama');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const { sortBy, sortDirection, toggleSort, getSortIcon } = useTableSort<'nama' | 'kota' | 'total_piutang'>('nama');
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editItem, setEditItem] = useState<Customer | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
   const [form, setForm] = useState({ name: '', phone: '', email: '', address: '', credit_limit: '10000000' });
-   const { toast } = useToast();
-   const { execute: executeRetryable } = useRetryableAction({ maxRetries: 3, delayMs: 1000 });
+  const { toast } = useToast();
+  const { execute: executeRetryable } = useRetryableAction({ maxRetries: 3, delayMs: 1000 });
 
   const debouncedSearch = useDebouncedValue(searchTerm, 300);
   const { data, isLoading } = useCustomers({ page: currentPage, per_page: 20, search: debouncedSearch || undefined, sort_by: sortBy, sort_direction: sortDirection });
@@ -42,26 +39,11 @@ const CustomerPage = () => {
   const updateMutation = useUpdateCustomer();
   const deleteMutation = useDeleteCustomer();
 
-   const customers = (data?.data ?? []) as Customer[];
-   const pagination = data?.meta;
+  const customers = (data?.data ?? []) as Customer[];
+  const pagination = data?.meta;
 
-   const totalPiutang = formatCurrency(customers.reduce((sum, c) => sum + Number(c.balance ?? 0), 0));
-   const overLimit = customers.filter(c => Number(c.balance ?? 0) > Number(c.creditLimit ?? 0)).length;
-
-  const toggleSort = (field: 'nama' | 'kota' | 'total_piutang') => {
-    if (sortBy === field) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortBy(field);
-      setSortDirection('asc');
-    }
-    setCurrentPage(1);
-  };
-
-  const SortIcon = ({ field }: { field: 'nama' | 'kota' | 'total_piutang' }) => {
-    if (sortBy !== field) return null;
-    return sortDirection === 'asc' ? <ArrowUp className="h-3 w-3 ml-1" /> : <ArrowDown className="h-3 w-3 ml-1" />;
-  };
+  const totalPiutang = formatCurrency(customers.reduce((sum, c) => sum + Number(c.balance ?? 0), 0));
+  const overLimit = customers.filter(c => Number(c.balance ?? 0) > Number(c.creditLimit ?? 0)).length;
 
   const openEdit = (c: Customer) => {
     setEditItem(c);
@@ -160,217 +142,183 @@ const CustomerPage = () => {
        }
      }, [customers, toast]);
 
-  return (
-    <MainLayout title="Customer" subtitle="Kelola data customer toko Anda">
-      <div className="mb-5 grid gap-4 sm:grid-cols-3">
-        <StatCard title="Total Customer" value={`${customers.length} Customer`} icon={<Users className="h-5 w-5" />} color="primary" />
-        <StatCard title="Total Piutang" value={totalPiutang} icon={<AlertCircle className="h-5 w-5" />} color="warning" />
-        <StatCard title="Melebihi Limit" value={`${overLimit} Customer`} icon={<AlertCircle className="h-5 w-5" />} color="destructive" />
-      </div>
+  const columns: DataTableColumn<Customer>[] = [
+    { key: 'id', header: 'ID', width: '100px', render: (id) => `CUS-${id}` },
+    { key: 'name', header: 'Nama', width: '150px', sortable: true },
+    {
+      key: 'phone',
+      header: 'Telepon',
+      render: (phone) => (
+        <div className="flex items-center gap-1.5 text-muted-foreground">
+          <Phone className="h-3.5 w-3.5 shrink-0" />
+          {phone || '-'}
+        </div>
+      ),
+    },
+    { key: 'email', header: 'Email', render: (email) => email || '-' },
+    {
+      key: 'address',
+      header: 'Alamat',
+      width: '200px',
+      render: (address) => (
+        <div className="flex items-start gap-1.5 text-muted-foreground max-w-48">
+          <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span className="line-clamp-2">{address || '-'}</span>
+        </div>
+      ),
+    },
+    {
+      key: 'balance',
+      header: 'Total Piutang',
+      align: 'right',
+      sortable: true,
+      render: (balance) => (
+        <span className={`font-semibold tabular-nums ${balance > 0 ? 'text-warning' : 'text-muted-foreground'}`}>
+          {formatCurrency(balance)}
+        </span>
+      ),
+    },
+    { key: 'creditLimit', header: 'Limit Kredit', align: 'right', render: (limit) => formatCurrency(limit || 0) },
+    { key: 'totalTransactions', header: 'Transaksi', align: 'right', render: (count) => count || 0 },
+  ];
 
-       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-         <div className="relative w-64">
-           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-           <Input placeholder="Cari customer..." className="pl-9 h-9" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }} />
-         </div>
-          <div className="flex gap-2 shrink-0">
-            <Button variant="outline" size="sm" onClick={handleExport} title="Download data customer dalam format Excel"><Download className="mr-1.5 h-4 w-4" />Export XLSX</Button>
-            {canCreate('customers') && (
-              <Button size="sm" onClick={() => { setForm({ name: '', phone: '', email: '', address: '', credit_limit: '10000000' }); setIsAddOpen(true); }}>
-                <Plus className="mr-1.5 h-4 w-4" />Tambah Customer
-              </Button>
-            )}
-          </div>
+  const actions = [
+    {
+      label: 'Edit',
+      icon: <Pencil className="h-3.5 w-3.5" />,
+      onClick: (c: Customer) => openEdit(c),
+      show: () => canEdit('customers'),
+    },
+    {
+      label: 'Delete',
+      icon: <Trash2 className="h-3.5 w-3.5" />,
+      onClick: (c: Customer) => setDeleteConfirm({ id: c.id, name: c.name }),
+      variant: 'destructive' as const,
+      show: () => canDelete('customers'),
+    },
+  ];
+
+  const fields: FormField[] = [
+    {
+      name: 'name',
+      label: 'Nama Customer *',
+      type: 'text',
+      placeholder: 'Nama lengkap',
+      value: form.name,
+      onChange: (v) => setForm(p => ({ ...p, name: v })),
+      required: true,
+      width: 'full',
+      validation: (v) => !v?.trim() ? 'Nama harus diisi' : null,
+    },
+    {
+      name: 'phone',
+      label: 'No. Telepon',
+      type: 'text',
+      placeholder: '08...',
+      value: form.phone,
+      onChange: (v) => setForm(p => ({ ...p, phone: v })),
+      width: 'half',
+    },
+    {
+      name: 'email',
+      label: 'Email',
+      type: 'email',
+      placeholder: 'email@...',
+      value: form.email,
+      onChange: (v) => setForm(p => ({ ...p, email: v })),
+      width: 'half',
+    },
+    {
+      name: 'address',
+      label: 'Alamat',
+      type: 'text',
+      placeholder: 'Alamat lengkap',
+      value: form.address,
+      onChange: (v) => setForm(p => ({ ...p, address: v })),
+      width: 'full',
+    },
+    {
+      name: 'credit_limit',
+      label: 'Limit Kredit (Rp)',
+      type: 'number',
+      placeholder: '10000000',
+      value: form.credit_limit,
+      onChange: (v) => setForm(p => ({ ...p, credit_limit: v })),
+      width: 'full',
+    },
+  ];
+
+   return (
+     <MainLayout title="Customer" subtitle="Kelola data customer toko Anda">
+       <div className="mb-5 grid gap-4 sm:grid-cols-3">
+         <StatCard title="Total Customer" value={`${customers.length} Customer`} icon={<Users className="h-5 w-5" />} color="primary" />
+         <StatCard title="Total Piutang" value={totalPiutang} icon={<AlertCircle className="h-5 w-5" />} color="warning" />
+         <StatCard title="Melebihi Limit" value={`${overLimit} Customer`} icon={<AlertCircle className="h-5 w-5" />} color="destructive" />
        </div>
 
-      {isLoading ? (
-        <div className="py-12 text-center text-muted-foreground">Loading...</div>
-      ) : (
-        <Card>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                 <thead>
-                   <tr className="border-b bg-muted/40 text-xs text-muted-foreground">
-                     <th className="px-4 py-3 text-left font-semibold">ID</th>
-                     <th className="px-4 py-3 text-left font-semibold cursor-pointer hover:bg-muted/50" onClick={() => toggleSort('nama')}>
-                       <div className="flex items-center">Nama <SortIcon field="nama" /></div>
-                     </th>
-                     <th className="px-4 py-3 text-left font-semibold">Telepon</th>
-                     <th className="px-4 py-3 text-left font-semibold">Email</th>
-                     <th className="px-4 py-3 text-left font-semibold cursor-pointer hover:bg-muted/50" onClick={() => toggleSort('kota')}>
-                       <div className="flex items-center">Alamat <SortIcon field="kota" /></div>
-                     </th>
-                     <th className="px-4 py-3 text-right font-semibold cursor-pointer hover:bg-muted/50" onClick={() => toggleSort('total_piutang')}>
-                       <div className="flex items-center justify-end">Total Piutang <SortIcon field="total_piutang" /></div>
-                     </th>
-                     <th className="px-4 py-3 text-right font-semibold">Limit Kredit</th>
-                     <th className="px-4 py-3 text-right font-semibold">Transaksi</th>
-                     <th className="px-4 py-3 text-center font-semibold">Aksi</th>
-                   </tr>
-                 </thead>
-                 <tbody>
-                   {customers.length === 0 ? (
-                     <tr><td colSpan={9} className="px-4 py-10 text-center text-muted-foreground">Tidak ada customer yang sesuai.</td></tr>
-                   ) : (
-                     customers.map(c => {
-                       const isOverLimit = (c.creditLimit || 0) > 0 && c.balance > (c.creditLimit || 0);
-                       return (
-                         <tr key={c.id} className={`border-b transition-colors hover:bg-muted/20 ${isOverLimit ? 'bg-destructive/5' : ''}`}>
-                          <td className="px-4 py-3 font-mono text-xs text-primary">CUS-{c.id}</td>
-                          <td className="px-4 py-3 font-medium">{c.name}</td>
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-1.5 text-muted-foreground">
-                              <Phone className="h-3.5 w-3.5 shrink-0" />{c.phone || '-'}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-muted-foreground">{c.email || '-'}</td>
-                          <td className="px-4 py-3">
-                            <div className="flex items-start gap-1.5 text-muted-foreground max-w-48">
-                              <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                              <span className="line-clamp-2">{c.address || '-'}</span>
-                            </div>
-                          </td>
-                          <td className={`px-4 py-3 text-right font-semibold tabular-nums ${c.balance > 0 ? 'text-warning' : 'text-muted-foreground'}`}>
-                            {formatCurrency(c.balance)}
-                          </td>
-                          <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
-                            {formatCurrency(c.creditLimit || 0)}
-                          </td>
-                          <td className="px-4 py-3 text-right tabular-nums">
-                            {c.totalTransactions || 0}
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex justify-center gap-1">
-                              {canEdit('customers') && (
-                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(c)}><Pencil className="h-3.5 w-3.5" /></Button>
-                              )}
-                               {canDelete('customers') && (
-                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setDeleteConfirm({ id: c.id, name: c.name })}><Trash2 className="h-3.5 w-3.5" /></Button>
-                               )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-             </div>
-           </CardContent>
-         </Card>
-       )}
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative w-64">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input placeholder="Cari customer..." className="pl-9 h-9" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }} />
+          </div>
+           <div className="flex gap-2 shrink-0">
+             <Button variant="outline" size="sm" onClick={handleExport} title="Download data customer dalam format Excel"><Download className="mr-1.5 h-4 w-4" />Export XLSX</Button>
+             {canCreate('customers') && (
+               <Button size="sm" onClick={() => { setForm({ name: '', phone: '', email: '', address: '', credit_limit: '10000000' }); setIsAddOpen(true); }}>
+                 <Plus className="mr-1.5 h-4 w-4" />Tambah Customer
+               </Button>
+             )}
+           </div>
+        </div>
+
+       <Card>
+         <CardContent className="p-0">
+           <DataTable<Customer>
+             data={customers}
+             columns={columns}
+             isLoading={isLoading}
+             sortBy={sortBy}
+             sortDirection={sortDirection}
+             onSort={toggleSort}
+             actions={actions}
+             emptyMessage="Tidak ada customer yang sesuai."
+           />
+         </CardContent>
+       </Card>
 
        {/* Pagination UI */}
-       {pagination && (
-         <div className="mt-4 flex items-center justify-between rounded-lg border border-border p-4 bg-card">
-           <div className="text-sm text-muted-foreground">
-             Menampilkan {((pagination.current_page - 1) * pagination.per_page) + 1} - {Math.min(pagination.current_page * pagination.per_page, pagination.total)} dari {pagination.total} total
-           </div>
-           <div className="flex items-center gap-2">
-             <Button 
-               variant="outline" 
-               size="sm"
-               disabled={pagination.current_page === 1}
-               onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-             >
-               Sebelumnya
-             </Button>
-             <span className="text-sm text-muted-foreground px-2">
-               Halaman {pagination.current_page} dari {pagination.last_page}
-             </span>
-             <Button 
-               variant="outline" 
-               size="sm"
-               disabled={pagination.current_page === pagination.last_page}
-               onClick={() => setCurrentPage(prev => prev + 1)}
-             >
-               Selanjutnya
-             </Button>
-           </div>
-         </div>
-       )}
+         {pagination && (
+           <PaginationControl
+             currentPage={pagination.current_page}
+             onPageChange={setCurrentPage}
+             totalPages={pagination.last_page}
+             totalItems={pagination.total}
+             itemsPerPage={pagination.per_page}
+             type="simple"
+             label="customer"
+           />
+         )}
 
-      {/* ✅ BEST PRACTICE: Dialog inline JSX (not nested function) */}
-      <Dialog open={isAddOpen || !!editItem} onOpenChange={v => {
-        if (!v) {
-          setIsAddOpen(false);
-          setEditItem(null);
-          setForm({ name: '', phone: '', email: '', address: '', credit_limit: '10000000' });
-        }
-      }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {editItem ? 'Edit Customer' : 'Tambah Customer Baru'}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 pt-1">
-            <div className="space-y-1.5">
-              <Label>Nama Customer *</Label>
-              <Input 
-                placeholder="Nama customer" 
-                value={form.name} 
-                onChange={e => setForm(p => ({ ...p, name: e.target.value }))} 
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label>No. Telepon</Label>
-                <Input 
-                  placeholder="08..." 
-                  value={form.phone} 
-                  onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} 
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Email</Label>
-                <Input 
-                  type="email" 
-                  placeholder="email@..." 
-                  value={form.email} 
-                  onChange={e => setForm(p => ({ ...p, email: e.target.value }))} 
-                />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Alamat</Label>
-              <Input 
-                placeholder="Alamat lengkap" 
-                value={form.address} 
-                onChange={e => setForm(p => ({ ...p, address: e.target.value }))} 
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Limit Kredit (Rp)</Label>
-              <Input 
-                type="number" 
-                placeholder="10000000" 
-                value={form.credit_limit} 
-                onChange={e => setForm(p => ({ ...p, credit_limit: e.target.value }))} 
-              />
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <Button 
-                variant="outline" 
-                onClick={() => {
-                  setIsAddOpen(false);
-                  setEditItem(null);
-                  setForm({ name: '', phone: '', email: '', address: '', credit_limit: '10000000' });
-                }}
-              >
-                Batal
-              </Button>
-              <Button 
-                onClick={handleSave} 
-                disabled={createMutation.isPending || updateMutation.isPending}
-              >
-                {createMutation.isPending || updateMutation.isPending ? 'Menyimpan...' : 'Simpan'}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-       </Dialog>
+       <FormDialog
+         open={isAddOpen || !!editItem}
+         onOpenChange={(open) => {
+           if (!open) {
+             setIsAddOpen(false);
+             setEditItem(null);
+             setForm({ name: '', phone: '', email: '', address: '', credit_limit: '10000000' });
+           }
+         }}
+         title={editItem ? 'Edit Customer' : 'Tambah Customer Baru'}
+         fields={fields}
+         onSubmit={handleSave}
+         onCancel={() => {
+           setIsAddOpen(false);
+           setEditItem(null);
+           setForm({ name: '', phone: '', email: '', address: '', credit_limit: '10000000' });
+         }}
+         isSubmitting={createMutation.isPending || updateMutation.isPending}
+         submitLabel="Simpan"
+       />
 
        {deleteConfirm && (
          <DeleteConfirmDialog

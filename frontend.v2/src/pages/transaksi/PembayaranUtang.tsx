@@ -7,12 +7,14 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Search, Receipt, Check, Eye, AlertCircle } from 'lucide-react';
+import { Receipt, Check, Eye, AlertCircle } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useSuppliers } from '@/hooks/api/useSuppliers';
 import { useTransactions, useCreateTransaction } from '@/hooks/api/useTransactions';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { SearchInput } from '@/components/common';
 import { DraftPreviewDialog } from '@/components/dialogs/DraftPreviewDialog';
 import { PrintPreviewDialog } from '@/components/dialogs/PrintPreviewDialog';
 import { PembayaranUtangPrint } from '@/components/print/PembayaranUtangPrint';
@@ -46,17 +48,19 @@ const PembayaranUtang = () => {
     ...(filterSupplier !== 'all' ? { supplier_id: filterSupplier } : {}),
   });
 
-  const suppliers = suppliersData?.data ?? [];
-  // Filter to only ones with remaining > 0 (outstanding utang)
-  const utangList: Transaction[] = (txData?.data ?? []).filter(t => (t.remaining ?? 0) > 0);
+   const suppliers = suppliersData?.data ?? [];
+   // Filter to only ones with remaining > 0 (outstanding utang)
+   const utangList: Transaction[] = (txData?.data ?? []).filter(t => (t.remaining ?? 0) > 0);
 
-  const filtered = utangList.filter(u => {
-    const supplierName = u.supplier ?? '';
-    const matchSearch = u.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      supplierName.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchSupplier = filterSupplier === 'all' || u.supplierId === filterSupplier;
-    return matchSearch && matchSupplier;
-  });
+   const debouncedSearch = useDebouncedValue(searchTerm, 300);
+
+   const filtered = utangList.filter(u => {
+     const supplierName = u.supplier ?? '';
+     const matchSearch = u.invoiceNumber.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+       supplierName.toLowerCase().includes(debouncedSearch.toLowerCase());
+     const matchSupplier = filterSupplier === 'all' || u.supplierId === filterSupplier;
+     return matchSearch && matchSupplier;
+   });
 
   const totalSelected = utangList.filter(u => selectedItems.includes(u.id)).reduce((s, u) => s + (u.remaining ?? 0), 0);
   const jumlahBayarNum = parseFloat(jumlahBayar) || 0;
@@ -132,19 +136,22 @@ const PembayaranUtang = () => {
                 <CardTitle className="flex items-center gap-2 text-base">
                   <Receipt className="h-4 w-4" />Daftar Utang ke Supplier
                 </CardTitle>
-                <div className="flex gap-2">
-                  <div className="relative w-48">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                    <Input placeholder="Cari..." className="pl-8 text-xs h-8" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-                  </div>
-                  <Select value={filterSupplier} onValueChange={setFilterSupplier}>
-                    <SelectTrigger className="w-40 text-xs h-8"><SelectValue placeholder="Semua" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Semua Supplier</SelectItem>
-                      {suppliers.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
+                 <div className="flex gap-2">
+                   <div className="w-48">
+                     <SearchInput 
+                       placeholder="Cari..." 
+                       value={searchTerm}
+                       onChange={setSearchTerm}
+                     />
+                   </div>
+                   <Select value={filterSupplier} onValueChange={setFilterSupplier}>
+                     <SelectTrigger className="w-40 text-xs h-8"><SelectValue placeholder="Semua" /></SelectTrigger>
+                     <SelectContent>
+                       <SelectItem value="all">Semua Supplier</SelectItem>
+                       {suppliers.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                     </SelectContent>
+                   </Select>
+                 </div>
               </div>
             </CardHeader>
             <CardContent>

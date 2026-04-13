@@ -25,6 +25,19 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { formatCurrency } from '@/lib/utils';
 import type { Transaction } from '@/types';
 
+/**
+ * ReturPembelian Page
+ *
+ * Note: This page was NOT refactored to use SearchInput in Phase 3 because:
+ * 1. It doesn't use product search - instead requires manual faktur (pembelian) selection
+ * 2. The workflow is supplier-driven: select supplier first, then browse their pembelian fakt urs
+ * 3. It has custom dialogs for "Alasan Retur" (5 predefined reasons)
+ * 4. Item selection is filtered by source transaction, making generic search less applicable
+ *
+ * The page structure is fundamentally different from cart/payment pages - it's lookup-based
+ * rather than search-based, so SearchInput wouldn't provide value here.
+ */
+
 interface ReturItem {
   productId: string;
   nama: string;

@@ -8,10 +8,11 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Search, Eye, EyeOff, FileDown, ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react';
+import { Eye, EyeOff, FileDown, ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useTransactions, useToggleHideTransaction } from '@/hooks/api/useTransactions';
+import { DateRangeFilter } from '@/components/common';
 import { formatCurrency } from '@/lib/utils';
 import { exportTransactionsToXlsx, getFilenameWithDate } from '@/lib/xlsx-export';
 import type { Transaction } from '@/types';
@@ -103,15 +104,19 @@ const HistoriReturPembelian = () => {
         <Card><CardContent className="p-3"><p className="text-xs text-muted-foreground">Nilai Total Retur</p><p className="text-lg font-bold text-warning tabular-nums">{formatCurrency(totalNilai)}</p></CardContent></Card>
       </div>
 
-       <div className="mb-4 flex flex-col sm:flex-row gap-2 items-start sm:items-center justify-between">
-         <div className="flex gap-2 flex-wrap">
-           <div className="relative w-56">
-             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-             <Input placeholder="Cari no. retur..." className="pl-8 text-xs h-8" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setPage(1); }} />
-           </div>
-           <Input type="date" className="text-xs h-8 w-36" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setPage(1); }} />
-           <Input type="date" className="text-xs h-8 w-36" value={dateTo} onChange={e => { setDateTo(e.target.value); setPage(1); }} />
-         </div>
+        <div className="mb-4 flex flex-col sm:flex-row gap-2 items-start sm:items-center justify-between">
+          <div className="flex gap-2 flex-wrap">
+            <Input placeholder="Cari no. retur..." className="text-xs h-8 w-56" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setPage(1); }} />
+            <DateRangeFilter
+              dateFrom={dateFrom}
+              dateTo={dateTo}
+              onDateFromChange={(d) => { setDateFrom(d); setPage(1); }}
+              onDateToChange={(d) => { setDateTo(d); setPage(1); }}
+              onReset={() => { setDateFrom(''); setDateTo(''); setPage(1); }}
+              label="Periode"
+              hideReset={false}
+            />
+          </div>
          <div className="flex gap-2">
            <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={handleExport}><FileDown className="h-3.5 w-3.5" />Export PDF</Button>
            <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={handleExportXlsx} disabled={isExportingXlsx}><FileDown className="h-3.5 w-3.5" />{isExportingXlsx ? 'Exporting...' : 'Export XLSX'}</Button>

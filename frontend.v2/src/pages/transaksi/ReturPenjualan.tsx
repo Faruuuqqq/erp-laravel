@@ -26,6 +26,19 @@ import { ReturPenjualanPrint } from '@/components/print/ReturPenjualanPrint';
 import { MainLayout } from '@/components/layout/MainLayout';
 import type { Transaction } from '@/types';
 
+/**
+ * ReturPenjualan Page
+ *
+ * Note: This page was NOT refactored to use SearchInput in Phase 3 because:
+ * 1. It doesn't use product search - instead requires manual faktur lookup
+ * 2. The workflow is unique: requires selecting a customer, then a source faktur (penjualan_kredit)
+ * 3. It has custom dialogs for "Alasan Retur" (5 reasons) and "Metode Retur" (4 methods)
+ * 4. The return item selection is tightly coupled to the source transaction validation
+ *
+ * Future improvements could extract the reason/method selection into reusable dialogs,
+ * but the overall page logic is too unique to benefit from generic search/filter components.
+ */
+
 interface ReturItem { productId: string; nama: string; qty: number; harga: number; satuan: string; subtotal: number; }
 
 const ReturPenjualan = () => {

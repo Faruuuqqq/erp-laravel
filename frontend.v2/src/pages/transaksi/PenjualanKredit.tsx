@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
-import { Plus, Trash2, CreditCard, Calculator, Eye, AlertCircle, Search } from 'lucide-react';
+import { Plus, Trash2, CreditCard, Calculator, Eye, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useProducts } from '@/hooks/api/useProducts';
@@ -16,6 +16,8 @@ import { useCustomers } from '@/hooks/api/useCustomers';
 import { useSalesReps } from '@/hooks/api/useSalesReps';
 import { useWarehouses } from '@/hooks/api/useWarehouses';
 import { useCreateTransaction } from '@/hooks/api/useTransactions';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { SearchInput } from '@/components/common';
 import { DraftPreviewDialog } from '@/components/dialogs/DraftPreviewDialog';
 import { PrintPreviewDialog } from '@/components/dialogs/PrintPreviewDialog';
 import { SuccessScreen } from '@/components/layout/SuccessScreen';
@@ -67,22 +69,25 @@ const PenjualanKredit = () => {
   const { data: salesData } = useSalesReps({ perPage: 100 });
   const { data: warehousesData } = useWarehouses({ perPage: 100 });
 
-  // Memoized data
-  const products = useMemo(() => productsData?.data ?? [], [productsData?.data]);
-  const customers = useMemo(() => customersData?.data ?? [], [customersData?.data]);
-  const salesReps = useMemo(() => salesData?.data ?? [], [salesData?.data]);
-  const warehouses = useMemo(() => warehousesData?.data ?? [], [warehousesData?.data]);
+   // Memoized data
+   const products = useMemo(() => productsData?.data ?? [], [productsData?.data]);
+   const customers = useMemo(() => customersData?.data ?? [], [customersData?.data]);
+   const salesReps = useMemo(() => salesData?.data ?? [], [salesData?.data]);
+   const warehouses = useMemo(() => warehousesData?.data ?? [], [warehousesData?.data]);
 
-  // Helper set callback
-  const set = useCallback(<K extends keyof ReturnType<typeof BLANK>>(key: K, val: ReturnType<typeof BLANK>[K]) =>
-    setState(p => ({ ...p, [key]: val })), []);
+   // Helper set callback
+   const set = useCallback(<K extends keyof ReturnType<typeof BLANK>>(key: K, val: ReturnType<typeof BLANK>[K]) =>
+     setState(p => ({ ...p, [key]: val })), []);
 
-  // Filtered products
-  const filteredProducts = useMemo(() =>
-    products.filter(p =>
-      p.name.toLowerCase().includes(state.searchProduct.toLowerCase()) ||
-      (p.code ?? '').toLowerCase().includes(state.searchProduct.toLowerCase())
-    ), [products, state.searchProduct]);
+   // Debounce product search
+   const debouncedSearch = useDebouncedValue(state.searchProduct, 300);
+
+   // Filtered products
+   const filteredProducts = useMemo(() =>
+     products.filter(p =>
+       p.name.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+       (p.code ?? '').toLowerCase().includes(debouncedSearch.toLowerCase())
+     ), [products, debouncedSearch]);
 
   // Memoized customer
   const customer = useMemo(() => customers.find(c => c.id === state.selectedCustomer), [customers, state.selectedCustomer]);
@@ -313,22 +318,23 @@ const PenjualanKredit = () => {
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Tambah Produk</p>
                   <div className="grid gap-2 md:grid-cols-6">
                     <div className="md:col-span-3 space-y-1">
-                      <div className="relative">
-                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                        <Input placeholder="Cari produk..." value={state.searchProduct} onChange={e => set('searchProduct', e.target.value)} className="pl-8 text-xs h-8" />
-                      </div>
+                      <SearchInput 
+                        placeholder="Cari produk..." 
+                        value={state.searchProduct}
+                        onChange={(value) => set('searchProduct', value)}
+                      />
                       <Select value={state.selectedProduct} onValueChange={v => set('selectedProduct', v)}>
-                        <SelectTrigger className="text-xs h-8"><SelectValue placeholder="Pilih produk" /></SelectTrigger>
-                        <SelectContent>
-                          {filteredProducts.map(p => (
-                            <SelectItem key={p.id} value={p.id}>
-                              {p.name} - {formatCurrency(p.sellPrice)}
-                              <Badge variant={(p.stock ?? 0) <= (p.minimumStock ?? 0) ? 'destructive' : 'secondary'} className="ml-2 text-[9px] h-3.5 px-1">Stok: {p.stock ?? 0}</Badge>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                         <SelectTrigger className="text-xs h-8"><SelectValue placeholder="Pilih produk" /></SelectTrigger>
+                         <SelectContent>
+                           {filteredProducts.map(p => (
+                             <SelectItem key={p.id} value={p.id}>
+                               {p.name} - {formatCurrency(p.sellPrice)}
+                               <Badge variant={(p.stock ?? 0) <= (p.minimumStock ?? 0) ? 'destructive' : 'secondary'} className="ml-2 text-[9px] h-3.5 px-1">Stok: {p.stock ?? 0}</Badge>
+                             </SelectItem>
+                           ))}
+                         </SelectContent>
+                       </Select>
+                     </div>
                     <div className="space-y-1"><Label className="text-xs">Qty</Label><Input type="number" value={state.qty} onChange={e => set('qty', e.target.value)} className="text-xs h-8" min="1" /></div>
                     <div className="space-y-1"><Label className="text-xs">Disc%</Label><Input type="number" value={state.diskonItem} onChange={e => set('diskonItem', e.target.value)} className="text-xs h-8" min="0" max="100" /></div>
                     <div className="flex items-end"><Button onClick={addToCart} size="sm" className="w-full h-8 text-xs"><Plus className="mr-1.5 h-3.5 w-3.5" />Tambah</Button></div>

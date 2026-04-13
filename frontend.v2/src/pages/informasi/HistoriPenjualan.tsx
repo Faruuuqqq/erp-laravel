@@ -11,12 +11,13 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Search, History, Eye, EyeOff, FileDown, ChevronLeft, ChevronRight, ArrowUp, ArrowDown } from 'lucide-react';
+import { History, Eye, EyeOff, FileDown, ChevronLeft, ChevronRight, ArrowUp, ArrowDown } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useTransactions, useToggleHideTransaction } from '@/hooks/api/useTransactions';
 import { useCustomers } from '@/hooks/api/useCustomers';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useLazyPdfExport } from '@/hooks/useLazyPdfExport';
+import { DateRangeFilter } from '@/components/common';
 import { exportTransactionsToXlsx, getFilenameWithDate } from '@/lib/xlsx-export';
 import { formatCurrency } from '@/lib/utils';
 import type { Transaction } from '@/types';
@@ -237,41 +238,47 @@ const HistoriPenjualan = () => {
         ))}
       </div>
 
-      <div className="mb-4 flex flex-col sm:flex-row gap-2 items-start sm:items-center justify-between">
-        <div className="flex gap-2 flex-wrap">
-          <div className="relative w-56">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-            <Input placeholder="Cari faktur..." className="pl-8 text-xs h-8" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setPage(1); }} />
-          </div>
-          <Input type="date" className="text-xs h-8 w-36" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setPage(1); }} />
-          <Input type="date" className="text-xs h-8 w-36" value={dateTo} onChange={e => { setDateTo(e.target.value); setPage(1); }} />
-          <Select value={filterType} onValueChange={v => { setFilterType(v); setPage(1); }}>
-            <SelectTrigger className="w-36 text-xs h-8"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Tunai + Kredit</SelectItem>
-              <SelectItem value="tunai">Tunai</SelectItem>
-              <SelectItem value="kredit">Kredit</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={filterCustomer} onValueChange={v => { setFilterCustomer(v); setPage(1); }}>
-            <SelectTrigger className="w-44 text-xs h-8"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Semua Customer</SelectItem>
-              {customers.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5">
-            <Switch id="show-lunas" checked={showLunasOnly} onCheckedChange={setShowLunasOnly} />
-            <Label htmlFor="show-lunas" className="text-xs text-muted-foreground cursor-pointer">Lunas saja</Label>
-          </div>
-          <div className="flex gap-1.5">
-            <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={handleExportXlsx} disabled={isExportingXlsx}><FileDown className="h-3.5 w-3.5" />{isExportingXlsx ? 'Generating...' : 'Export XLSX'}</Button>
-            <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={handleExport} disabled={isExporting}><FileDown className="h-3.5 w-3.5" />{isExporting ? 'Generating...' : 'Export PDF'}</Button>
-          </div>
-        </div>
-      </div>
+       <div className="mb-4 flex flex-col sm:flex-row gap-2 items-start sm:items-center justify-between">
+         <div className="flex gap-2 flex-wrap">
+           <div className="relative w-56">
+             <Input placeholder="Cari faktur..." className="pl-2 text-xs h-8 w-56" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setPage(1); }} />
+           </div>
+           <DateRangeFilter
+             dateFrom={dateFrom}
+             dateTo={dateTo}
+             onDateFromChange={(d) => { setDateFrom(d); setPage(1); }}
+             onDateToChange={(d) => { setDateTo(d); setPage(1); }}
+             onReset={() => { setDateFrom(''); setDateTo(''); setPage(1); }}
+             label="Periode"
+             hideReset={false}
+           />
+           <Select value={filterType} onValueChange={v => { setFilterType(v); setPage(1); }}>
+             <SelectTrigger className="w-36 text-xs h-8"><SelectValue /></SelectTrigger>
+             <SelectContent>
+               <SelectItem value="all">Tunai + Kredit</SelectItem>
+               <SelectItem value="tunai">Tunai</SelectItem>
+               <SelectItem value="kredit">Kredit</SelectItem>
+             </SelectContent>
+           </Select>
+           <Select value={filterCustomer} onValueChange={v => { setFilterCustomer(v); setPage(1); }}>
+             <SelectTrigger className="w-44 text-xs h-8"><SelectValue /></SelectTrigger>
+             <SelectContent>
+               <SelectItem value="all">Semua Customer</SelectItem>
+               {customers.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+             </SelectContent>
+           </Select>
+         </div>
+         <div className="flex items-center gap-3">
+           <div className="flex items-center gap-1.5">
+             <Switch id="show-lunas" checked={showLunasOnly} onCheckedChange={setShowLunasOnly} />
+             <Label htmlFor="show-lunas" className="text-xs text-muted-foreground cursor-pointer">Lunas saja</Label>
+           </div>
+           <div className="flex gap-1.5">
+             <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={handleExportXlsx} disabled={isExportingXlsx}><FileDown className="h-3.5 w-3.5" />{isExportingXlsx ? 'Generating...' : 'Export XLSX'}</Button>
+             <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={handleExport} disabled={isExporting}><FileDown className="h-3.5 w-3.5" />{isExporting ? 'Generating...' : 'Export PDF'}</Button>
+           </div>
+         </div>
+       </div>
 
       <Card>
         <CardContent className="p-0">

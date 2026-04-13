@@ -20,6 +20,23 @@ import { PrintPreviewDialog } from '@/components/dialogs/PrintPreviewDialog';
 import { SuratJalanPrint } from '@/components/print/SuratJalanPrint';
 import type { Transaction } from '@/types';
 
+/**
+ * SuratJalan (Delivery Note) Page
+ *
+ * Note: This page was NOT refactored to use SearchInput in Phase 3 because:
+ * 1. Delivery documents are fundamentally different from sales/purchase transactions
+ * 2. No product search needed - items are manually entered with descriptions
+ * 3. Key unique features:
+ *    - Auto-generated SJ number (not user-provided)
+ *    - Driver and warehouse assignment (delivery-specific)
+ *    - No pricing information shown (delivery-focused, not financial)
+ *    - Generic item entry with "keterangan" (description) rather than product lookup
+ * 4. The workflow is form-based, not lookup-based
+ *
+ * This page serves a different business purpose (operations/logistics) vs the
+ * sales/purchase pages, making it a poor candidate for generic search components.
+ */
+
 interface SJItem {
   productId: string;
   nama: string;

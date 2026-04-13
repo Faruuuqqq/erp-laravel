@@ -1,25 +1,19 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { useRetryableAction } from '@/hooks/useRetryableAction';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useExportData } from '@/hooks/useExportData';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
-} from '@/components/ui/dialog';
-import { Plus, Search, Pencil, Trash2, Warehouse, Download } from 'lucide-react';
+import { DeleteConfirmDialog } from '@/components/dialogs/DeleteConfirmDialog';
+import { DataTable, FormDialog, type DataTableColumn, type FormField, SearchInput, PaginationControl } from '@/components/common';
+import { Plus, Pencil, Trash2, Warehouse, Download } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { StatCard } from '@/components/ui/StatCard';
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table';
-import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
-import { DeleteConfirmDialog } from '@/components/dialogs/DeleteConfirmDialog';
 import { useWarehouses, useCreateWarehouse, useUpdateWarehouse, useDeleteWarehouse } from '@/hooks/api/useWarehouses';
-import { exportToXlsx, type ColumnConfig } from '@/lib/xlsx-export';
+import { type ColumnConfig } from '@/lib/xlsx-export';
 
 interface WarehouseForm {
   name: string;
@@ -34,6 +28,7 @@ const Gudang = () => {
    const { toast } = useToast();
    const { canCreate, canEdit, canDelete } = usePermissions();
    const { execute: executeRetryable } = useRetryableAction({ maxRetries: 3, delayMs: 1000 });
+   const { exportXlsx } = useExportData();
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
    const [statusFilter, setStatusFilter] = useState<'aktif' | 'nonaktif' | 'semua'>('semua');
@@ -78,70 +73,131 @@ const Gudang = () => {
      );
    }, [form, editId, createWh, updateWh, toast, executeRetryable]);
 
-    const handleDelete = useCallback(async (id: string, name: string) => {
-      await executeRetryable(
-        () => deleteWh.mutateAsync(id),
-        {
-          title: 'Gudang dihapus',
-          description: `${name} telah dihapus.`,
-          errorTitle: 'Gagal menghapus gudang',
-        }
-      );
-    }, [deleteWh, executeRetryable]);
+     const handleDelete = useCallback(async (id: string, name: string) => {
+       await executeRetryable(
+         () => deleteWh.mutateAsync(id),
+         {
+           title: 'Gudang dihapus',
+           description: `${name} telah dihapus.`,
+           errorTitle: 'Gagal menghapus gudang',
+         }
+       );
+     }, [deleteWh, executeRetryable]);
 
-    const handleExport = useCallback(() => {
-      try {
-        interface WarehouseData {
-          code?: string;
-          id: string;
-          name: string;
-          address?: string;
-          manager?: string;
-          status?: string;
-        }
+     const handleExport = useCallback(() => {
+       interface WarehouseData {
+         code?: string;
+         id: string;
+         name: string;
+         address?: string;
+         manager?: string;
+         status?: string;
+       }
 
-        const columns: ColumnConfig<WarehouseData>[] = [
-          { header: 'Kode', key: 'code', width: 12 },
-          { header: 'Nama Gudang', key: 'name', width: 30 },
-          { header: 'Alamat', key: 'address', width: 35 },
-          { header: 'Pengelola', key: 'manager', width: 20 },
-          { header: 'Status', key: 'status', width: 12 },
-        ];
+       const columns: ColumnConfig<WarehouseData>[] = [
+         { header: 'Kode', key: 'code', width: 12 },
+         { header: 'Nama Gudang', key: 'name', width: 30 },
+         { header: 'Alamat', key: 'address', width: 35 },
+         { header: 'Pengelola', key: 'manager', width: 20 },
+         { header: 'Status', key: 'status', width: 12 },
+       ];
 
-        const warehouses = list.map(w => ({
-          code: w.code ?? `W-${w.id.slice(0, 4)}`,
-          id: w.id,
-          name: w.name,
-          address: w.address ?? '',
-          manager: w.manager ?? '',
-          status: w.status === 'aktif' || w.status === 'active' ? 'Aktif' : 'Nonaktif',
-        }));
+       const warehouses = list.map(w => ({
+         code: w.code ?? `W-${w.id.slice(0, 4)}`,
+         id: w.id,
+         name: w.name,
+         address: w.address ?? '',
+         manager: w.manager ?? '',
+         status: w.status === 'aktif' || w.status === 'active' ? 'Aktif' : 'Nonaktif',
+       }));
 
-        exportToXlsx(
-          warehouses,
-          'gudang.xlsx',
-          columns,
-          { sheetName: 'Gudang', autoWidth: true }
-        );
+       exportXlsx({
+         filename: 'gudang.xlsx',
+         data: warehouses,
+         columns,
+       });
+      }, [list, exportXlsx]);
 
-        toast({
-          title: 'Berhasil',
-          description: `${warehouses.length} data gudang diunduh dalam format XLSX.`,
-        });
-      } catch (error) {
-        console.error('Export error:', error);
-        toast({
-          title: 'Gagal',
-          description: 'Gagal mengunduh data gudang.',
-          variant: 'destructive',
-        });
-      }
-    }, [list, toast]);
+     const setField = useCallback(<K extends keyof WarehouseForm>(key: K, val: WarehouseForm[K]) =>
+       setForm(p => ({ ...p, [key]: val })), []);
 
-    const setField = useCallback(<K extends keyof WarehouseForm>(key: K, val: WarehouseForm[K]) =>
-      setForm(p => ({ ...p, [key]: val })), []);
+    const columns: DataTableColumn<typeof list[0]>[] = [
+      { key: 'code', header: 'Kode', width: '80px', render: (code, warehouse) => code ?? 'W-' + warehouse.id.slice(0, 4) },
+      { key: 'name', header: 'Nama Gudang', sortable: true },
+      { key: 'address', header: 'Alamat', render: (addr) => <span className="max-w-48 line-clamp-2">{addr || '—'}</span> },
+      { key: 'manager', header: 'Pengelola', render: (manager) => manager || '—' },
+      {
+        key: 'status',
+        header: 'Status',
+        render: (status) => (
+          <Badge variant={status === 'aktif' ? 'default' : 'secondary'} className="text-xs">
+            {status === 'aktif' ? 'Aktif' : 'Nonaktif'}
+          </Badge>
+        ),
+      },
+    ];
 
-   return (
+    const actions = [
+      {
+        label: 'Edit',
+        icon: <Pencil className="h-3.5 w-3.5" />,
+        onClick: (g: typeof list[0]) => openEdit(g),
+        show: () => canEdit('master.warehouses'),
+      },
+      {
+        label: 'Delete',
+        icon: <Trash2 className="h-3.5 w-3.5" />,
+        onClick: (g: typeof list[0]) => setDeleteConfirm({ id: g.id, name: g.name }),
+        variant: 'destructive' as const,
+        show: () => canDelete('master.warehouses'),
+      },
+    ];
+
+    const fields: FormField[] = [
+      {
+        name: 'name',
+        label: 'Nama Gudang *',
+        type: 'text',
+        placeholder: 'Nama gudang',
+        value: form.name,
+        onChange: (v) => setField('name', v),
+        required: true,
+        width: 'full',
+        validation: (v) => !v?.trim() ? 'Nama gudang harus diisi' : null,
+      },
+      {
+        name: 'address',
+        label: 'Alamat',
+        type: 'text',
+        placeholder: 'Alamat gudang',
+        value: form.address,
+        onChange: (v) => setField('address', v),
+        width: 'full',
+      },
+      {
+        name: 'manager',
+        label: 'Pengelola',
+        type: 'text',
+        placeholder: 'Nama pengelola',
+        value: form.manager,
+        onChange: (v) => setField('manager', v),
+        width: 'half',
+      },
+      {
+        name: 'status',
+        label: 'Status',
+        type: 'select',
+        value: form.status,
+        onChange: (v) => setField('status', v),
+        options: [
+          { value: 'aktif', label: 'Aktif' },
+          { value: 'nonaktif', label: 'Nonaktif' },
+        ],
+        width: 'half',
+      },
+    ];
+
+    return (
      <MainLayout title="Gudang" subtitle="Kelola daftar gudang penyimpanan">
       <div className="mb-5 grid gap-4 sm:grid-cols-3">
         <StatCard title="Total Gudang" value={`${list.length} Gudang`} icon={<Warehouse className="h-5 w-5" />} color="primary" />
@@ -150,167 +206,83 @@ const Gudang = () => {
       </div>
 
        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-         <div className="flex gap-3">
-           <div className="relative w-72">
-             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-             <Input placeholder="Cari gudang..." className="pl-9 h-9" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }} />
+          <div className="flex gap-3">
+            <SearchInput
+              value={searchTerm}
+              onChange={setSearchTerm}
+              onSearch={(term) => {
+                setSearchTerm(term);
+                setCurrentPage(1);
+              }}
+              placeholder="Cari gudang..."
+            />
+             <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v as 'aktif' | 'nonaktif' | 'semua'); setCurrentPage(1); }}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="Filter Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="semua">Semua Status</SelectItem>
+                <SelectItem value="aktif">Aktif</SelectItem>
+                <SelectItem value="nonaktif">Nonaktif</SelectItem>
+              </SelectContent>
+            </Select>
            </div>
-            <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v as 'aktif' | 'nonaktif' | 'semua'); setCurrentPage(1); }}>
-             <SelectTrigger className="w-48">
-               <SelectValue placeholder="Filter Status" />
-             </SelectTrigger>
-             <SelectContent>
-               <SelectItem value="semua">Semua Status</SelectItem>
-               <SelectItem value="aktif">Aktif</SelectItem>
-               <SelectItem value="nonaktif">Nonaktif</SelectItem>
-             </SelectContent>
-           </Select>
-          </div>
-         <div className="flex gap-2">
-           <Button variant="outline" size="sm" onClick={handleExport} title="Download data gudang dalam format Excel">
-             <Download className="mr-1.5 h-4 w-4" />Export XLSX
-           </Button>
-           {canCreate('master.warehouses') && (
-             <Button size="sm" onClick={() => { setForm(BLANK_FORM()); setIsAddOpen(true); }}>
-               <Plus className="mr-1.5 h-4 w-4" />Tambah Gudang
-             </Button>
-           )}
-         </div>
-      </div>
-
-       {isLoading ? (
-         <div className="py-12 text-center text-muted-foreground">Memuat data...</div>
-       ) : (
-         <Card>
-           <CardContent className="p-0">
-             <div className="overflow-x-auto">
-               <Table>
-                 <TableHeader>
-                   <TableRow>
-                     <TableHead>Kode</TableHead>
-                     <TableHead>Nama Gudang</TableHead>
-                     <TableHead>Alamat</TableHead>
-                     <TableHead>Pengelola</TableHead>
-                     <TableHead>Status</TableHead>
-                     {(canEdit('master.warehouses') || canDelete('master.warehouses')) && <TableHead className="text-center">Aksi</TableHead>}
-                   </TableRow>
-                 </TableHeader>
-                  <TableBody>
-                    {list.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={(canEdit('master.warehouses') || canDelete('master.warehouses')) ? 6 : 5} className="py-10 text-center text-muted-foreground">Tidak ada gudang yang sesuai.</TableCell>
-                      </TableRow>
-                    ) : list.map(g => (
-                     <TableRow key={g.id}>
-                        <TableCell className="font-mono text-xs text-primary">{g.code ?? 'W-' + g.id.slice(0, 4)}</TableCell>
-                       <TableCell className="font-medium">{g.name}</TableCell>
-                       <TableCell className="text-muted-foreground text-sm max-w-48 line-clamp-2">{g.address || '—'}</TableCell>
-                       <TableCell className="text-muted-foreground">{g.manager || '—'}</TableCell>
-                       <TableCell>
-                         <Badge variant={g.status === 'aktif' ? 'default' : 'secondary'} className="text-xs">
-                           {g.status === 'aktif' ? 'Aktif' : 'Nonaktif'}
-                         </Badge>
-                       </TableCell>
-                       {(canEdit('master.warehouses') || canDelete('master.warehouses')) && (
-                         <TableCell>
-                           <div className="flex justify-center gap-1">
-                             {canEdit('master.warehouses') && (
-                               <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(g)}>
-                                 <Pencil className="h-3.5 w-3.5" />
-                               </Button>
-                             )}
-                              {canDelete('master.warehouses') && (
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setDeleteConfirm({ id: g.id, name: g.name })}>
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </Button>
-                              )}
-                           </div>
-                         </TableCell>
-                       )}
-                     </TableRow>
-                   ))}
-                 </TableBody>
-               </Table>
-             </div>
-           </CardContent>
-          </Card>
-        )}
-
-        {/* Pagination UI */}
-        {pagination && (
-          <div className="mt-4 flex items-center justify-between rounded-lg border border-border p-4 bg-card">
-            <div className="text-sm text-muted-foreground">
-              Menampilkan {((pagination.current_page - 1) * pagination.per_page) + 1} - {Math.min(pagination.current_page * pagination.per_page, pagination.total)} dari {pagination.total} total
-            </div>
-            <div className="flex items-center gap-2">
-              <Button 
-                variant="outline" 
-                size="sm"
-                disabled={pagination.current_page === 1}
-                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-              >
-                Sebelumnya
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={handleExport} title="Download data gudang dalam format Excel">
+              <Download className="mr-1.5 h-4 w-4" />Export XLSX
+            </Button>
+            {canCreate('master.warehouses') && (
+              <Button size="sm" onClick={() => { setForm(BLANK_FORM()); setIsAddOpen(true); }}>
+                <Plus className="mr-1.5 h-4 w-4" />Tambah Gudang
               </Button>
-              <span className="text-sm text-muted-foreground px-2">
-                Halaman {pagination.current_page} dari {pagination.last_page}
-              </span>
-              <Button 
-                variant="outline" 
-                size="sm"
-                disabled={pagination.current_page === pagination.last_page}
-                onClick={() => setCurrentPage(prev => prev + 1)}
-              >
-                Selanjutnya
-              </Button>
-            </div>
+            )}
           </div>
-        )}
+       </div>
 
-        <Dialog open={isAddOpen || !!editId} onOpenChange={v => {
-          if (!v) { setIsAddOpen(false); setEditId(null); setForm(BLANK_FORM()); }
-        }}>
-         <DialogContent>
-           <DialogHeader>
-             <DialogTitle>{editId ? 'Edit Gudang' : 'Tambah Gudang Baru'}</DialogTitle>
-           </DialogHeader>
-           <div className="space-y-4 pt-1">
-             <div className="space-y-1.5">
-               <Label>Nama Gudang *</Label>
-               <Input placeholder="Nama gudang" value={form.name} onChange={e => setField('name', e.target.value)} />
-             </div>
-             <div className="space-y-1.5">
-               <Label>Alamat</Label>
-               <Input placeholder="Alamat gudang" value={form.address} onChange={e => setField('address', e.target.value)} />
-             </div>
-             <div className="grid grid-cols-2 gap-4">
-               <div className="space-y-1.5">
-                 <Label>Pengelola</Label>
-                 <Input placeholder="Nama pengelola" value={form.manager} onChange={e => setField('manager', e.target.value)} />
-               </div>
-               <div className="space-y-1.5">
-                 <Label>Status</Label>
-                  <Select value={form.status} onValueChange={(v: 'aktif' | 'nonaktif') => setField('status', v)}>
-                    <SelectTrigger><SelectValue placeholder="Pilih status" /></SelectTrigger>
-                   <SelectContent>
-                     <SelectItem value="aktif">Aktif</SelectItem>
-                     <SelectItem value="nonaktif">Nonaktif</SelectItem>
-                   </SelectContent>
-                 </Select>
-               </div>
-             </div>
-             <div className="flex justify-end gap-2 pt-2">
-               <Button variant="outline" onClick={() => {
-                 setIsAddOpen(false);
-                 setEditId(null);
-                 setForm(BLANK_FORM());
-               }}>Batal</Button>
-               <Button onClick={handleSave} disabled={createWh.isPending || updateWh.isPending}>
-                 {(createWh.isPending || updateWh.isPending) ? 'Menyimpan...' : 'Simpan'}
-               </Button>
-             </div>
-           </div>
-         </DialogContent>
-        </Dialog>
+        {isLoading ? (
+          <div className="py-12 text-center text-muted-foreground">Memuat data...</div>
+        ) : (
+          <Card>
+            <CardContent className="p-0">
+              <DataTable
+                data={list}
+                columns={columns}
+                isLoading={isLoading}
+                actions={actions}
+                emptyMessage="Tidak ada gudang yang sesuai."
+              />
+            </CardContent>
+           </Card>
+          )}
+
+          {/* Pagination Control */}
+          {pagination && (
+            <PaginationControl
+              currentPage={pagination.current_page}
+              lastPage={pagination.last_page}
+              total={pagination.total}
+              perPage={pagination.per_page}
+              onPageChange={setCurrentPage}
+              mode="full"
+            />
+          )}
+
+          <FormDialog
+            open={isAddOpen || !!editId}
+            onOpenChange={v => {
+              if (!v) { setIsAddOpen(false); setEditId(null); setForm(BLANK_FORM()); }
+            }}
+            title={editId ? 'Edit Gudang' : 'Tambah Gudang Baru'}
+            fields={fields}
+            onSubmit={handleSave}
+            onCancel={() => {
+              setIsAddOpen(false);
+              setEditId(null);
+              setForm(BLANK_FORM());
+            }}
+            isSubmitting={createWh.isPending || updateWh.isPending}
+            submitLabel="Simpan"
+          />
 
         {deleteConfirm && (
           <DeleteConfirmDialog

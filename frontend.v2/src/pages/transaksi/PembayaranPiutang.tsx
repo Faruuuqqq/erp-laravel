@@ -7,12 +7,14 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Search, Wallet, Check, Eye } from 'lucide-react';
+import { Wallet, Check, Eye } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useCustomers } from '@/hooks/api/useCustomers';
 import { useTransactions, useCreateTransaction } from '@/hooks/api/useTransactions';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { SearchInput } from '@/components/common';
 import { DraftPreviewDialog } from '@/components/dialogs/DraftPreviewDialog';
 import { PrintPreviewDialog } from '@/components/dialogs/PrintPreviewDialog';
 import { PembayaranPiutangPrint } from '@/components/print/PembayaranPiutangPrint';
@@ -40,16 +42,18 @@ const PembayaranPiutang = () => {
   // Load outstanding penjualan_kredit with remaining > 0
   const { data: txData } = useTransactions({ type: 'penjualan_kredit', status: 'completed', perPage: 200 });
 
-  const customers = customersData?.data ?? [];
-  const piutangList: Transaction[] = (txData?.data ?? []).filter(t => (t.remaining ?? 0) > 0);
+   const customers = customersData?.data ?? [];
+   const piutangList: Transaction[] = (txData?.data ?? []).filter(t => (t.remaining ?? 0) > 0);
 
-  const filtered = piutangList.filter(p => {
-    const customerName = p.customer ?? '';
-    const matchSearch = p.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      customerName.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchCustomer = filterCustomer === 'all' || p.customerId === filterCustomer;
-    return matchSearch && matchCustomer;
-  });
+   const debouncedSearch = useDebouncedValue(searchTerm, 300);
+
+   const filtered = piutangList.filter(p => {
+     const customerName = p.customer ?? '';
+     const matchSearch = p.invoiceNumber.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+       customerName.toLowerCase().includes(debouncedSearch.toLowerCase());
+     const matchCustomer = filterCustomer === 'all' || p.customerId === filterCustomer;
+     return matchSearch && matchCustomer;
+   });
 
   const totalSelected = piutangList.filter(p => selectedItems.includes(p.id)).reduce((s, p) => s + (p.remaining ?? 0), 0);
   const jumlahDiterimaNum = parseFloat(jumlahDiterima) || 0;
@@ -128,13 +132,16 @@ const PembayaranPiutang = () => {
                 <CardTitle className="flex items-center gap-2 text-base">
                   <Wallet className="h-4 w-4" />Daftar Piutang Customer
                 </CardTitle>
-                <div className="flex gap-2">
-                  <div className="relative w-52">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                    <Input placeholder="Cari faktur/customer..." className="pl-8 text-xs h-8" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-                  </div>
-                  <Select value={filterCustomer} onValueChange={setFilterCustomer}>
-                    <SelectTrigger className="w-40 text-xs h-8"><SelectValue placeholder="Semua" /></SelectTrigger>
+                 <div className="flex gap-2">
+                   <div className="w-52">
+                     <SearchInput 
+                       placeholder="Cari faktur/customer..." 
+                       value={searchTerm}
+                       onChange={setSearchTerm}
+                     />
+                   </div>
+                   <Select value={filterCustomer} onValueChange={setFilterCustomer}>
+                     <SelectTrigger className="w-40 text-xs h-8"><SelectValue placeholder="Semua" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Semua Customer</SelectItem>
                       {customers.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}

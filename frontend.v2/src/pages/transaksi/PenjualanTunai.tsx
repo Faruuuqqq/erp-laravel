@@ -8,13 +8,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Plus, Trash2, Banknote, Calculator, Eye, Search } from 'lucide-react';
+import { Plus, Trash2, Banknote, Calculator, Eye } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useProducts } from '@/hooks/api/useProducts';
 import { useCustomers } from '@/hooks/api/useCustomers';
 import { useSalesReps } from '@/hooks/api/useSalesReps';
 import { useCreateTransaction } from '@/hooks/api/useTransactions';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { SearchInput } from '@/components/common';
 import { formatCurrency } from '@/lib/utils';
 import { DraftPreviewDialog } from '@/components/dialogs/DraftPreviewDialog';
 import { PrintPreviewDialog } from '@/components/dialogs/PrintPreviewDialog';
@@ -67,14 +69,16 @@ const PenjualanTunai = () => {
    const customers = useMemo(() => customersData?.data ?? [], [customersData?.data]);
    const salesReps = useMemo(() => salesData?.data ?? [], [salesData?.data]);
 
-  const set = useCallback(<K extends keyof ReturnType<typeof BLANK>>(key: K, val: ReturnType<typeof BLANK>[K]) =>
-    setState(p => ({ ...p, [key]: val })), []);
+   const set = useCallback(<K extends keyof ReturnType<typeof BLANK>>(key: K, val: ReturnType<typeof BLANK>[K]) =>
+     setState(p => ({ ...p, [key]: val })), []);
 
-  const filteredProducts = useMemo(() =>
-    products.filter(p =>
-      p.name.toLowerCase().includes(state.searchProduct.toLowerCase()) ||
-      (p.code ?? '').toLowerCase().includes(state.searchProduct.toLowerCase())
-    ), [products, state.searchProduct]);
+   const debouncedSearch = useDebouncedValue(state.searchProduct, 300);
+
+   const filteredProducts = useMemo(() =>
+     products.filter(p =>
+       p.name.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+       (p.code ?? '').toLowerCase().includes(debouncedSearch.toLowerCase())
+     ), [products, debouncedSearch]);
 
   const addToCart = useCallback(() => {
     const product = products.find(p => p.id === state.selectedProduct);
@@ -180,21 +184,22 @@ const PenjualanTunai = () => {
 
               {canCreate('transactions.cash_sale') && (
                 <div className="rounded-lg border bg-muted/30 p-3.5">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Tambah Produk</p>
-                  <div className="grid gap-2 md:grid-cols-6">
-                    <div className="md:col-span-3 space-y-1">
-                      <div className="relative">
-                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                        <Input placeholder="Cari produk..." value={state.searchProduct} onChange={e => set('searchProduct', e.target.value)} className="pl-8 text-xs h-8" />
-                      </div>
-                      <Select value={state.selectedProduct} onValueChange={v => set('selectedProduct', v)}>
-                        <SelectTrigger className="text-xs h-8"><SelectValue placeholder="Pilih produk" /></SelectTrigger>
-                        <SelectContent>
-                          {filteredProducts.map(p => (
-                            <SelectItem key={p.id} value={p.id}>
-                              <span>{p.name}</span>
-                              <span className="ml-2 text-muted-foreground">{formatCurrency(p.sellPrice)}</span>
-                              <Badge variant={(p.stock ?? 0) <= (p.minimumStock ?? 0) ? 'destructive' : 'secondary'} className="ml-2 text-[9px] h-3.5 px-1">Stok: {p.stock ?? 0}</Badge>
+                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Tambah Produk</p>
+                   <div className="grid gap-2 md:grid-cols-6">
+                     <div className="md:col-span-3 space-y-1">
+                       <SearchInput 
+                         placeholder="Cari produk..." 
+                         value={state.searchProduct}
+                         onChange={(value) => set('searchProduct', value)}
+                       />
+                       <Select value={state.selectedProduct} onValueChange={v => set('selectedProduct', v)}>
+                         <SelectTrigger className="text-xs h-8"><SelectValue placeholder="Pilih produk" /></SelectTrigger>
+                         <SelectContent>
+                           {filteredProducts.map(p => (
+                             <SelectItem key={p.id} value={p.id}>
+                               <span>{p.name}</span>
+                               <span className="ml-2 text-muted-foreground">{formatCurrency(p.sellPrice)}</span>
+                               <Badge variant={(p.stock ?? 0) <= (p.minimumStock ?? 0) ? 'destructive' : 'secondary'} className="ml-2 text-[9px] h-3.5 px-1">Stok: {p.stock ?? 0}</Badge>
                             </SelectItem>
                           ))}
                         </SelectContent>

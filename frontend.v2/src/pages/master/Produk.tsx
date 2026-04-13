@@ -1,57 +1,50 @@
 import { useState, useCallback, useMemo } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
-import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useRetryableAction } from '@/hooks/useRetryableAction';
+import { useTableSort } from '@/hooks/useTableSort';
+import { useExportData } from '@/hooks/useExportData';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
-} from '@/components/ui/dialog';
+import { DeleteConfirmDialog } from '@/components/dialogs/DeleteConfirmDialog';
+import { DataTable, FormDialog, type DataTableColumn, type FormField, SearchInput, PaginationControl } from '@/components/common';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table';
-import { Plus, Search, Pencil, Trash2, Package, AlertTriangle, Download, ArrowUp, ArrowDown } from 'lucide-react';
+import { Plus, Pencil, Trash2, Package, AlertTriangle, Download } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { StatCard } from '@/components/ui/StatCard';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
-import { DeleteConfirmDialog } from '@/components/dialogs/DeleteConfirmDialog';
 import { formatCurrency } from '@/lib/utils';
 import { useProducts, useCreateProduct, useUpdateProduct, useDeleteProduct } from '@/hooks/api/useProducts';
 import { useCategories } from '@/hooks/api/useCategories';
 import { useWarehouses } from '@/hooks/api/useWarehouses';
 import type { Product } from '@/types';
-import { exportToXlsx, type ColumnConfig } from '@/lib/xlsx-export';
+import { type ColumnConfig } from '@/lib/xlsx-export';
 
 const BLANK_FORM = { name: '', categoryId: '', buyPrice: '', sellPrice: '', stock: '', minimumStock: '', unit: '', warehouseId: '' };
 
 const Produk = () => {
-     const { canCreate, canEdit, canDelete } = usePermissions();
-     const { toast } = useToast();
-     const { execute: executeRetryable } = useRetryableAction({ maxRetries: 3, delayMs: 1000 });
-    const [searchTerm, setSearchTerm] = useState('');
-    const [currentPage, setCurrentPage] = useState(1);
-    const [sortBy, setSortBy] = useState<'nama' | 'kategori' | 'harga_jual' | 'stok_minimum'>('nama');
-    const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
-    const [categoryFilter, setCategoryFilter] = useState<number | undefined>();
-    const [warehouseFilter, setWarehouseFilter] = useState<number | undefined>();
-    const [isAddOpen, setIsAddOpen] = useState(false);
-    const [editItem, setEditItem] = useState<Product | null>(null);
-    const [form, setForm] = useState(BLANK_FORM);
-    const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
+  const { canCreate, canEdit, canDelete } = usePermissions();
+  const { toast } = useToast();
+  const { execute: executeRetryable } = useRetryableAction({ maxRetries: 3, delayMs: 1000 });
+  const { exportXlsx } = useExportData();
+  const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const { sortBy, sortDirection, toggleSort, getSortIcon } = useTableSort<'nama' | 'kategori' | 'harga_jual' | 'stok_minimum'>('nama');
+  const [categoryFilter, setCategoryFilter] = useState<number | undefined>();
+  const [warehouseFilter, setWarehouseFilter] = useState<number | undefined>();
+  const [isAddOpen, setIsAddOpen] = useState(false);
+  const [editItem, setEditItem] = useState<Product | null>(null);
+  const [form, setForm] = useState(BLANK_FORM);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
 
-  const debouncedSearch = useDebouncedValue(searchTerm, 300);
-  const { data: productsData, isLoading } = useProducts({ 
-    page: currentPage, 
-    search: debouncedSearch || undefined, 
-    per_page: 20, 
-    category_id: categoryFilter, 
+  const { data: productsData, isLoading } = useProducts({
+    page: currentPage,
+    search: searchTerm || undefined,
+    per_page: 20,
+    category_id: categoryFilter,
     warehouse_id: warehouseFilter,
     sort_by: sortBy,
     sort_direction: sortDirection,
@@ -74,33 +67,30 @@ const Produk = () => {
    const categoryMap = useMemo(() => new Map(categories.map(c => [c.id, c.name])), [categories]);
    const warehouseMap = useMemo(() => new Map(warehouses.map(w => [w.id, w.name])), [warehouses]);
 
-  const totalNilai = products.reduce((s, p) => s + Number(p.buyPrice ?? 0) * Number(p.stock ?? 0), 0);
-  const lowStock = products.filter(p => Number(p.stock) <= Number(p.minimumStock ?? 0)).length;
+   const totalNilai = products.reduce((s, p) => s + Number(p.buyPrice ?? 0) * Number(p.stock ?? 0), 0);
+   const lowStock = products.filter(p => Number(p.stock) <= Number(p.minimumStock ?? 0)).length;
 
-  const toggleSort = (field: 'nama' | 'kategori' | 'harga_jual' | 'stok_minimum') => {
-    if (sortBy === field) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortBy(field);
-      setSortDirection('asc');
-    }
-    setCurrentPage(1);
-  };
+   // Handle sort with page reset
+    const handleToggleSort = useCallback((field: 'nama' | 'kategori' | 'harga_jual' | 'stok_minimum') => {
+      toggleSort(field);
+      setCurrentPage(1);
+    }, [toggleSort]);
 
-  const SortIcon = ({ field }: { field: 'nama' | 'kategori' | 'harga_jual' | 'stok_minimum' }) => {
-    if (sortBy !== field) return null;
-    return sortDirection === 'asc' ? <ArrowUp className="h-3 w-3 ml-1" /> : <ArrowDown className="h-3 w-3 ml-1" />;
-  };
+    const getSortIconElement = (field: 'nama' | 'kategori' | 'harga_jual' | 'stok_minimum') => {
+      const direction = getSortIcon(field);
+      if (!direction) return null;
+      return direction === 'asc' ? null : null;
+    };
 
-  const openEdit = useCallback((p: Product) => {
-    setEditItem(p);
-    setForm({
-      name: p.name, categoryId: p.categoryId ?? '',
-      buyPrice: String(p.buyPrice ?? ''), sellPrice: String(p.sellPrice ?? ''),
-      stock: String(p.stock ?? ''), minimumStock: String(p.minimumStock ?? ''),
-      unit: p.unit ?? '', warehouseId: p.warehouseId ?? '',
-    });
-  }, []);
+   const openEdit = useCallback((p: Product) => {
+     setEditItem(p);
+     setForm({
+       name: p.name, categoryId: p.categoryId ?? '',
+       buyPrice: String(p.buyPrice ?? ''), sellPrice: String(p.sellPrice ?? ''),
+       stock: String(p.stock ?? ''), minimumStock: String(p.minimumStock ?? ''),
+       unit: p.unit ?? '', warehouseId: p.warehouseId ?? '',
+     });
+   }, []);
 
    const handleSave = async () => {
      if (!form.name.trim()) return;
@@ -144,56 +134,205 @@ const Produk = () => {
      );
    };
 
-    const handleExport = useCallback(() => {
-      try {
-        const columns: ColumnConfig<Product>[] = [
-          { header: 'Kode', key: 'code', width: 12 },
-          { header: 'Nama', key: 'name', width: 30 },
-          {
-            header: 'Kategori',
-            key: 'categoryId',
-            format: (v) => categoryMap.get(v as string) ?? 'Uncategorized',
-            width: 15,
-          },
-          {
-            header: 'Harga Beli',
-            key: 'buyPrice',
-            format: (value) => typeof value === 'number' ? value : Number(value) || 0,
-            width: 12,
-          },
-          {
-            header: 'Harga Jual',
-            key: 'sellPrice',
-            format: (value) => typeof value === 'number' ? value : Number(value) || 0,
-            width: 12,
-          },
-          { header: 'Stok', key: 'stock', width: 10 },
-          { header: 'Satuan', key: 'unit', width: 10 },
-          { header: 'Min Stok', key: 'minimumStock', width: 10 },
-        ];
+  const handleExport = useCallback(() => {
+    const columns: ColumnConfig<Product>[] = [
+      { header: 'Kode', key: 'code', width: 12 },
+      { header: 'Nama', key: 'name', width: 30 },
+      {
+        header: 'Kategori',
+        key: 'categoryId',
+        format: (v) => categoryMap.get(v as string) ?? 'Uncategorized',
+        width: 15,
+      },
+      {
+        header: 'Harga Beli',
+        key: 'buyPrice',
+        format: (value) => typeof value === 'number' ? value : Number(value) || 0,
+        width: 12,
+      },
+      {
+        header: 'Harga Jual',
+        key: 'sellPrice',
+        format: (value) => typeof value === 'number' ? value : Number(value) || 0,
+        width: 12,
+      },
+      { header: 'Stok', key: 'stock', width: 10 },
+      { header: 'Satuan', key: 'unit', width: 10 },
+      { header: 'Min Stok', key: 'minimumStock', width: 10 },
+    ];
 
-        exportToXlsx(
-          products,
-          'produk.xlsx',
-          columns,
-          { sheetName: 'Produk', autoWidth: true }
-        );
+    exportXlsx({
+      filename: 'produk.xlsx',
+      data: products,
+      columns,
+      exportOptions: { sheetName: 'Produk', autoWidth: true },
+      successMessage: `${products.length} data produk diunduh dalam format XLSX.`,
+     });
+   }, [products, categoryMap, exportXlsx]);
 
-        toast({
-          title: 'Berhasil',
-          description: `${products.length} data produk diunduh dalam format XLSX.`,
-        });
-      } catch (error) {
-        console.error('Export error:', error);
-        toast({
-          title: 'Gagal',
-          description: 'Gagal mengunduh data produk.',
-          variant: 'destructive',
-        });
-      }
-    }, [products, categoryMap, toast]);
+    const columns: DataTableColumn<Product>[] = [
+      { key: 'code', header: 'Kode', width: '80px', render: (code, prod) => code ?? 'P-' + prod.id.slice(0, 4) },
+      {
+        key: 'name',
+        header: 'Nama Produk',
+        sortable: true,
+        render: (name, prod) => (
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded bg-muted shrink-0">
+              <Package className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <div>
+              <div className="font-medium text-sm">{name}</div>
+              <div className="text-xs text-muted-foreground">{prod.unit}</div>
+            </div>
+          </div>
+        ),
+      },
+      {
+        key: 'categoryId',
+        header: 'Kategori',
+        sortable: true,
+        render: (catId, prod) => {
+          const categoryName = prod.categoryName ?? categoryMap.get(catId ?? '') ?? '—';
+          return <Badge variant="secondary" className="text-xs">{categoryName}</Badge>;
+        },
+      },
+      {
+        key: 'sellPrice',
+        header: 'Harga Jual',
+        align: 'right',
+        sortable: true,
+        render: (price) => <span className="font-medium text-sm">{formatCurrency(Number(price))}</span>,
+      },
+      {
+        key: 'buyPrice',
+        header: 'Harga Beli',
+        align: 'right',
+        render: (price) => <span className="text-sm">{formatCurrency(Number(price))}</span>,
+      },
+      {
+        key: 'stock',
+        header: 'Stok / Level',
+        sortable: true,
+        render: (stock, prod) => {
+          const isLow = Number(stock) <= Number(prod.minimumStock ?? 0);
+          const pct = Math.min(100, Math.round((Number(stock) / (Number(prod.minimumStock ?? 1) * 3)) * 100));
+          return (
+            <div className="min-w-28">
+              <div className="flex items-center gap-1.5 mb-1">
+                <span className={`font-bold text-sm tabular-nums ${isLow ? 'text-destructive' : ''}`}>{stock}</span>
+                <span className="text-xs text-muted-foreground">/ min {prod.minimumStock ?? 0}</span>
+              </div>
+              <Progress value={pct} className={`h-1 ${isLow ? '[&>div]:bg-destructive' : '[&>div]:bg-success'}`} />
+            </div>
+          );
+        },
+      },
+      {
+        key: 'warehouseId',
+        header: 'Gudang',
+        render: (warehouseId, prod) => {
+          const warehouseName = prod.warehouseName ?? warehouseMap.get(warehouseId ?? '') ?? '—';
+          return <span className="text-xs text-muted-foreground">{warehouseName}</span>;
+        },
+      },
+    ];
 
-   return (
+    const actions = [
+      {
+        label: 'Edit',
+        icon: <Pencil className="h-3.5 w-3.5" />,
+        onClick: (p: Product) => openEdit(p),
+        show: () => canEdit('products'),
+      },
+      {
+        label: 'Delete',
+        icon: <Trash2 className="h-3.5 w-3.5" />,
+        onClick: (p: Product) => setDeleteConfirm({ id: p.id, name: p.name }),
+        variant: 'destructive' as const,
+        show: () => canDelete('products'),
+      },
+    ];
+
+    const fields: FormField[] = [
+      {
+        name: 'name',
+        label: 'Nama Produk *',
+        type: 'text',
+        placeholder: 'Nama produk',
+        value: form.name,
+        onChange: (v) => setForm(p => ({ ...p, name: v })),
+        required: true,
+        width: 'full',
+        validation: (v) => !v?.trim() ? 'Nama produk harus diisi' : null,
+      },
+      {
+        name: 'categoryId',
+        label: 'Kategori *',
+        type: 'select',
+        value: form.categoryId,
+        onChange: (v) => setForm(p => ({ ...p, categoryId: v })),
+        options: categories.map(c => ({ value: c.id, label: c.name })),
+        required: true,
+        width: 'half',
+      },
+      {
+        name: 'unit',
+        label: 'Satuan',
+        type: 'text',
+        placeholder: 'Pcs, Kg, dll',
+        value: form.unit,
+        onChange: (v) => setForm(p => ({ ...p, unit: v })),
+        width: 'half',
+      },
+      {
+        name: 'buyPrice',
+        label: 'Harga Beli (Rp)',
+        type: 'number',
+        placeholder: '0',
+        value: form.buyPrice,
+        onChange: (v) => setForm(p => ({ ...p, buyPrice: v })),
+        width: 'half',
+      },
+      {
+        name: 'sellPrice',
+        label: 'Harga Jual (Rp)',
+        type: 'number',
+        placeholder: '0',
+        value: form.sellPrice,
+        onChange: (v) => setForm(p => ({ ...p, sellPrice: v })),
+        width: 'half',
+      },
+      {
+        name: 'stock',
+        label: 'Stok Awal',
+        type: 'number',
+        placeholder: '0',
+        value: form.stock,
+        onChange: (v) => setForm(p => ({ ...p, stock: v })),
+        width: 'half',
+      },
+      {
+        name: 'minimumStock',
+        label: 'Min. Stok',
+        type: 'number',
+        placeholder: '0',
+        value: form.minimumStock,
+        onChange: (v) => setForm(p => ({ ...p, minimumStock: v })),
+        width: 'half',
+      },
+      {
+        name: 'warehouseId',
+        label: 'Gudang',
+        type: 'select',
+        value: form.warehouseId,
+        onChange: (v) => setForm(p => ({ ...p, warehouseId: v })),
+        options: warehouses.map(w => ({ value: w.id, label: w.name })),
+        width: 'full',
+      },
+    ];
+
+    return (
     <MainLayout title="Produk" subtitle="Kelola daftar produk dan kategori">
       <div className="mb-5 grid gap-4 sm:grid-cols-4">
         <StatCard title="Total Produk" value={`${products.length} Produk`} icon={<Package className="h-5 w-5" />} color="primary" />
@@ -202,33 +341,30 @@ const Produk = () => {
         <StatCard title="Stok Rendah" value={`${lowStock} Produk`} icon={<AlertTriangle className="h-5 w-5" />} color={lowStock > 0 ? 'warning' : 'success'} />
       </div>
 
-       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-         <div className="flex flex-wrap gap-3">
-           <div className="relative w-64">
-             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-             <Input 
-               placeholder="Cari produk..." 
-               className="pl-9 h-9" 
-               value={searchTerm} 
-               onChange={e => {
-                 setSearchTerm(e.target.value);
-                 setCurrentPage(1);
-               }} 
-             />
-           </div>
-           <Select 
-             value={String(categoryFilter ?? 'all')} 
-             onValueChange={v => {
-               setCategoryFilter(v === 'all' ? undefined : Number(v));
-               setCurrentPage(1);
-             }}
-           >
-             <SelectTrigger className="w-44 h-9"><SelectValue placeholder="Kategori" /></SelectTrigger>
-             <SelectContent>
-               <SelectItem value="all">Semua Kategori</SelectItem>
-               {categories.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
-             </SelectContent>
-           </Select>
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap gap-3">
+            <SearchInput
+              value={searchTerm}
+              onChange={(value) => {
+                setSearchTerm(value);
+                setCurrentPage(1);
+              }}
+              placeholder="Cari produk..."
+              className="w-64"
+            />
+            <Select 
+              value={String(categoryFilter ?? 'all')} 
+              onValueChange={v => {
+                setCategoryFilter(v === 'all' ? undefined : Number(v));
+                setCurrentPage(1);
+              }}
+            >
+              <SelectTrigger className="w-44 h-9"><SelectValue placeholder="Kategori" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua Kategori</SelectItem>
+                {categories.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
            <Select 
              value={String(warehouseFilter ?? 'all')} 
              onValueChange={v => {
@@ -253,199 +389,76 @@ const Produk = () => {
          </div>
        </div>
 
-      <Card>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-             <Table>
-               <TableHeader>
-                 <TableRow>
-                   <TableHead>Kode</TableHead>
-                   <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => toggleSort('nama')}>
-                     <div className="flex items-center">Nama Produk <SortIcon field="nama" /></div>
-                   </TableHead>
-                   <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => toggleSort('kategori')}>
-                     <div className="flex items-center">Kategori <SortIcon field="kategori" /></div>
-                   </TableHead>
-                   <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => toggleSort('harga_jual')}>
-                     <div className="flex items-center justify-end">Harga Jual <SortIcon field="harga_jual" /></div>
-                   </TableHead>
-                   <TableHead className="text-right">Harga Beli</TableHead>
-                   <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => toggleSort('stok_minimum')}>
-                     <div className="flex items-center">Stok / Level <SortIcon field="stok_minimum" /></div>
-                   </TableHead>
-                   <TableHead>Gudang</TableHead>
-                   {canEdit('products') || canDelete('products') ? <TableHead className="text-center">Aksi</TableHead> : null}
-                 </TableRow>
-               </TableHeader>
-               <TableBody>
-                 {isLoading ? (
-                   <TableRow><TableCell colSpan={(canEdit('products') || canDelete('products')) ? 8 : 7} className="py-10 text-center text-muted-foreground">Memuat data...</TableCell></TableRow>
-                 ) : products.length === 0 ? (
-                   <TableRow><TableCell colSpan={(canEdit('products') || canDelete('products')) ? 8 : 7} className="py-10 text-center text-muted-foreground">Tidak ada produk yang sesuai.</TableCell></TableRow>
-                  ) : products.map(p => {
-                     const isLow = Number(p.stock) <= Number(p.minimumStock ?? 0);
-                     const pct = Math.min(100, Math.round((Number(p.stock) / (Number(p.minimumStock ?? 1) * 3)) * 100));
-                     const categoryName = p.categoryName ?? categoryMap.get(p.categoryId ?? '') ?? '—';
-                     const warehouseName = p.warehouseName ?? warehouseMap.get(p.warehouseId ?? '') ?? '—';
-                    return (
-                     <TableRow key={p.id} className={isLow ? 'bg-warning/5' : ''}>
-                        <TableCell className="font-mono text-xs text-primary">{p.code ?? 'P-' + p.id.slice(0, 4)}</TableCell>
-                       <TableCell>
-                         <div className="flex items-center gap-2">
-                           <div className="flex h-8 w-8 items-center justify-center rounded bg-muted shrink-0">
-                             <Package className="h-4 w-4 text-muted-foreground" />
-                           </div>
-                           <div>
-                             <div className="font-medium text-sm">{p.name}</div>
-                             <div className="text-xs text-muted-foreground">{p.unit}</div>
-                           </div>
-                         </div>
-                       </TableCell>
-                        <TableCell><Badge variant="secondary" className="text-xs">{categoryName}</Badge></TableCell>
-                       <TableCell className="text-right text-sm">{formatCurrency(Number(p.buyPrice))}</TableCell>
-                       <TableCell className="text-right font-medium text-sm">{formatCurrency(Number(p.sellPrice))}</TableCell>
-                       <TableCell>
-                         <div className="min-w-28">
-                           <div className="flex items-center gap-1.5 mb-1">
-                             <span className={`font-bold text-sm tabular-nums ${isLow ? 'text-destructive' : ''}`}>{p.stock}</span>
-                             <span className="text-xs text-muted-foreground">/ min {p.minimumStock ?? 0}</span>
-                           </div>
-                           <Progress value={pct} className={`h-1 ${isLow ? '[&>div]:bg-destructive' : '[&>div]:bg-success'}`} />
-                         </div>
-                       </TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{warehouseName}</TableCell>
-                       {(canEdit('products') || canDelete('products')) && (
-                         <TableCell>
-                           <div className="flex justify-center gap-1">
-                             {canEdit('products') && (
-                               <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(p)}><Pencil className="h-3.5 w-3.5" /></Button>
-                             )}
-                              {canDelete('products') && (
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon" 
-                                  className="h-8 w-8 text-destructive hover:text-destructive" 
-                                  onClick={() => setDeleteConfirm({ id: p.id, name: p.name })}
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </Button>
-                              )}
-                           </div>
-                         </TableCell>
-                       )}
-                     </TableRow>
-                   );
-                 })}
-               </TableBody>
-            </Table>
+       <Card>
+         <CardContent className="p-0">
+           <DataTable<Product>
+             data={products}
+             columns={columns}
+             isLoading={isLoading}
+             sortBy={sortBy}
+             sortDirection={sortDirection}
+             onSort={handleToggleSort as (field: string) => void}
+             actions={actions}
+             emptyMessage="Tidak ada produk yang sesuai."
+           />
+          </CardContent>
+         </Card>
+
+        {pagination && (
+          <div className="mt-4 flex items-center justify-between">
+            <div className="text-sm text-muted-foreground">
+              Menampilkan {pagination.from ?? 0} - {pagination.to ?? 0} dari {pagination.total} produk
+            </div>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                disabled={currentPage === 1}
+              >
+                Sebelumnya
+              </Button>
+              <div className="flex items-center gap-1">
+                {Array.from({ length: pagination.last_page }, (_, i) => i + 1).map(page => (
+                  <Button
+                    key={page}
+                    variant={page === currentPage ? 'default' : 'outline'}
+                    size="sm"
+                    className="w-8 h-8 p-0"
+                    onClick={() => setCurrentPage(page)}
+                  >
+                    {page}
+                  </Button>
+                ))}
+              </div>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => setCurrentPage(Math.min(pagination.last_page, currentPage + 1))}
+                disabled={currentPage === pagination.last_page}
+              >
+                Berikutnya
+              </Button>
+            </div>
           </div>
-         </CardContent>
-        </Card>
+        )}
 
-       {pagination && (
-         <div className="mt-4 flex items-center justify-between">
-           <div className="text-sm text-muted-foreground">
-             Menampilkan {pagination.from ?? 0} - {pagination.to ?? 0} dari {pagination.total} produk
-           </div>
-           <div className="flex gap-2">
-             <Button 
-               variant="outline" 
-               size="sm" 
-               onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-               disabled={currentPage === 1}
-             >
-               Sebelumnya
-             </Button>
-             <div className="flex items-center gap-1">
-               {Array.from({ length: pagination.last_page }, (_, i) => i + 1).map(page => (
-                 <Button
-                   key={page}
-                   variant={page === currentPage ? 'default' : 'outline'}
-                   size="sm"
-                   className="w-8 h-8 p-0"
-                   onClick={() => setCurrentPage(page)}
-                 >
-                   {page}
-                 </Button>
-               ))}
-             </div>
-             <Button 
-               variant="outline" 
-               size="sm" 
-               onClick={() => setCurrentPage(Math.min(pagination.last_page, currentPage + 1))}
-               disabled={currentPage === pagination.last_page}
-             >
-               Berikutnya
-             </Button>
-           </div>
-         </div>
-       )}
-
-       <Dialog open={isAddOpen || !!editItem} onOpenChange={v => {
-         if (!v) { setIsAddOpen(false); setEditItem(null); setForm(BLANK_FORM); }
-       }}>
-         <DialogContent className="max-w-lg">
-           <DialogHeader>
-             <DialogTitle>{editItem ? 'Edit Produk' : 'Tambah Produk Baru'}</DialogTitle>
-           </DialogHeader>
-           <div className="space-y-4 pt-1">
-             <div className="space-y-1.5">
-               <Label>Nama Produk *</Label>
-               <Input placeholder="Nama produk" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
-             </div>
-             <div className="grid grid-cols-2 gap-4">
-               <div className="space-y-1.5">
-                 <Label>Kategori *</Label>
-                 <Select value={form.categoryId} onValueChange={v => setForm(p => ({ ...p, categoryId: v }))}>
-                   <SelectTrigger><SelectValue placeholder="Pilih kategori" /></SelectTrigger>
-                   <SelectContent>{categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
-                 </Select>
-               </div>
-               <div className="space-y-1.5">
-                 <Label>Satuan</Label>
-                 <Input placeholder="Pcs, Kg, dll" value={form.unit} onChange={e => setForm(p => ({ ...p, unit: e.target.value }))} />
-               </div>
-             </div>
-             <div className="grid grid-cols-2 gap-4">
-               <div className="space-y-1.5">
-                 <Label>Harga Beli (Rp)</Label>
-                 <Input type="number" placeholder="0" value={form.buyPrice} onChange={e => setForm(p => ({ ...p, buyPrice: e.target.value }))} />
-               </div>
-               <div className="space-y-1.5">
-                 <Label>Harga Jual (Rp)</Label>
-                 <Input type="number" placeholder="0" value={form.sellPrice} onChange={e => setForm(p => ({ ...p, sellPrice: e.target.value }))} />
-               </div>
-             </div>
-             <div className="grid grid-cols-2 gap-4">
-               <div className="space-y-1.5">
-                 <Label>Stok Awal</Label>
-                 <Input type="number" placeholder="0" value={form.stock} onChange={e => setForm(p => ({ ...p, stock: e.target.value }))} />
-               </div>
-               <div className="space-y-1.5">
-                 <Label>Min. Stok</Label>
-                 <Input type="number" placeholder="0" value={form.minimumStock} onChange={e => setForm(p => ({ ...p, minimumStock: e.target.value }))} />
-               </div>
-             </div>
-             <div className="space-y-1.5">
-               <Label>Gudang</Label>
-               <Select value={form.warehouseId} onValueChange={v => setForm(p => ({ ...p, warehouseId: v }))}>
-                 <SelectTrigger><SelectValue placeholder="Pilih gudang" /></SelectTrigger>
-                 <SelectContent>{warehouses.map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}</SelectContent>
-               </Select>
-             </div>
-             <div className="flex justify-end gap-2 pt-2">
-               <Button variant="outline" onClick={() => {
-                 setIsAddOpen(false);
-                 setEditItem(null);
-                 setForm(BLANK_FORM);
-               }}>Batal</Button>
-               <Button onClick={handleSave} disabled={createMutation.isPending || updateMutation.isPending}>
-                 {createMutation.isPending || updateMutation.isPending ? 'Menyimpan...' : 'Simpan'}
-               </Button>
-             </div>
-           </div>
-          </DialogContent>
-        </Dialog>
+        <FormDialog
+          open={isAddOpen || !!editItem}
+          onOpenChange={v => {
+            if (!v) { setIsAddOpen(false); setEditItem(null); setForm(BLANK_FORM); }
+          }}
+          title={editItem ? 'Edit Produk' : 'Tambah Produk Baru'}
+          fields={fields}
+          onSubmit={handleSave}
+          onCancel={() => {
+            setIsAddOpen(false);
+            setEditItem(null);
+            setForm(BLANK_FORM);
+          }}
+          isSubmitting={createMutation.isPending || updateMutation.isPending}
+          submitLabel="Simpan"
+        />
 
         {deleteConfirm && (
           <DeleteConfirmDialog
