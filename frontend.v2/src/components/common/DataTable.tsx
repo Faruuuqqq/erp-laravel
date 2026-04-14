@@ -284,7 +284,7 @@ export function DataTable<T extends { id?: string | number }>({
   return (
     <div className="space-y-4">
       {/* Header with search and export */}
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex items-center justify-between gap-4 px-4">
         {filterable && (
           <SearchInput
             value={searchTerm}
@@ -478,7 +478,7 @@ export function DataTable<T extends { id?: string | number }>({
 
        {/* Pagination footer */}
        {pagination && (
-         <div className="flex items-center justify-between">
+         <div className="flex items-center justify-between border-t pt-4 px-4">
            <div className={TEXT_SIZES.label}>
              {filteredData.length === 0
                ? 'Tidak ada data'
