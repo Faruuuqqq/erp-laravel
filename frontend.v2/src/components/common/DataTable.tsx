@@ -1,7 +1,8 @@
 import { useCallback, useMemo, useState } from 'react';
 import {
-  ArrowUp, ArrowDown, ChevronDown, ChevronUp, Download, EyeOff, Eye,
+  ArrowUp, ArrowDown, ChevronLeft, ChevronRight, Download, Eye,
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
@@ -16,9 +17,44 @@ import {
   DropdownMenuSeparator,
   DropdownMenuCheckboxItem,
 } from '@/components/ui/dropdown-menu';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { SearchInput } from './SearchInput';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import * as XLSX from 'xlsx';
+
+// ============================================
+// Helper Functions
+// ============================================
+
+const getAlignmentClass = (align?: 'left' | 'center' | 'right'): string => {
+  switch (align) {
+    case 'right':
+      return 'text-right justify-end';
+    case 'center':
+      return 'text-center justify-center';
+    default:
+      return 'text-left justify-start';
+  }
+};
+
+const ICON_SIZES = {
+  small: 'h-3 w-3',
+  normal: 'h-4 w-4',
+  large: 'h-5 w-5',
+} as const;
+
+const TEXT_SIZES = {
+  header: 'text-xs font-semibold',
+  body: 'text-sm',
+  label: 'text-xs text-muted-foreground',
+} as const;
 
 export interface DataTableColumn<T> {
   key: keyof T;
@@ -235,9 +271,9 @@ export function DataTable<T extends { id?: string | number }>({
     const currentDir = sortDirection || internalSortDir;
     if (currentSort !== field) return null;
     return currentDir === 'asc' ? (
-      <ArrowUp className="h-3 w-3 ml-1" />
+      <ArrowUp className={cn(ICON_SIZES.normal, 'ml-1')} />
     ) : (
-      <ArrowDown className="h-3 w-3 ml-1" />
+      <ArrowDown className={cn(ICON_SIZES.normal, 'ml-1')} />
     );
   };
 
@@ -318,52 +354,41 @@ export function DataTable<T extends { id?: string | number }>({
         <Table>
           <TableHeader>
             <TableRow>
-              {selectable && (
-                <TableHead className="w-12">
-                  <input
-                    type="checkbox"
-                    checked={selectedRows.size === paginatedData.length && paginatedData.length > 0}
-                    onChange={handleSelectAll}
-                    className="rounded border-gray-300"
-                  />
-                </TableHead>
-              )}
-              {columns.map((column) => {
-                if (!visibleColumns.has(String(column.key))) return null;
-                return (
-                  <TableHead
-                    key={String(column.key)}
-                    style={{ width: column.width }}
-                    className={`text-xs ${
-                      column.align === 'right'
-                        ? 'text-right'
-                        : column.align === 'center'
-                          ? 'text-center'
-                          : 'text-left'
-                    } ${
-                      column.sortable && (onSort || internalSortBy) ? 'cursor-pointer hover:bg-muted/50' : ''
-                    }`}
-                    onClick={() => {
-                      if (column.sortable) {
-                        handleSort(String(column.key));
-                      }
-                    }}
-                  >
-                    <div
-                      className={`flex items-center gap-1 ${
-                        column.align === 'right'
-                          ? 'justify-end'
-                          : column.align === 'center'
-                            ? 'justify-center'
-                            : ''
-                      }`}
-                    >
-                      {column.header}
-                      {column.sortable && getSortIcon(String(column.key))}
-                    </div>
-                  </TableHead>
-                );
-              })}
+               {selectable && (
+                 <TableHead className="w-12">
+                   <Checkbox
+                     checked={selectedRows.size === paginatedData.length && paginatedData.length > 0}
+                     onCheckedChange={handleSelectAll}
+                     aria-label="Pilih semua baris"
+                   />
+                 </TableHead>
+               )}
+               {columns.map((column) => {
+                 if (!visibleColumns.has(String(column.key))) return null;
+                 return (
+                   <TableHead
+                     key={String(column.key)}
+                     style={{ width: column.width }}
+                     className={cn(
+                       TEXT_SIZES.header,
+                       getAlignmentClass(column.align),
+                       column.sortable && (onSort || internalSortBy)
+                         ? 'cursor-pointer hover:bg-muted/70 focus:ring-2 focus:ring-offset-0 focus:ring-primary rounded transition-colors'
+                         : ''
+                     )}
+                     onClick={() => {
+                       if (column.sortable) {
+                         handleSort(String(column.key));
+                       }
+                     }}
+                   >
+                     <div className={cn('flex items-center gap-1', getAlignmentClass(column.align))}>
+                       {column.header}
+                       {column.sortable && getSortIcon(String(column.key))}
+                     </div>
+                   </TableHead>
+                 );
+               })}
               {actions.length > 0 && (
                 <TableHead className="text-center w-16">Aksi</TableHead>
               )}
@@ -391,36 +416,33 @@ export function DataTable<T extends { id?: string | number }>({
                   className={`${rowClassName?.(row) ?? ''} ${onRowClick ? 'cursor-pointer hover:bg-muted/50' : ''}`}
                   onClick={() => onRowClick?.(row)}
                 >
-                  {selectable && (
-                    <TableCell>
-                      <input
-                        type="checkbox"
-                        checked={selectedRows.has(row.id ?? '')}
-                        onChange={() => handleSelectRow(row.id ?? '')}
-                        onClick={e => e.stopPropagation()}
-                        className="rounded border-gray-300"
-                      />
-                    </TableCell>
-                  )}
-                  {columns.map((column) => {
-                    if (!visibleColumns.has(String(column.key))) return null;
-                    return (
-                      <TableCell
-                        key={`${idx}-${String(column.key)}`}
-                        className={`text-sm ${
-                          column.align === 'right'
-                            ? 'text-right'
-                            : column.align === 'center'
-                              ? 'text-center'
-                              : ''
-                        } ${dense ? 'py-2' : ''}`}
-                      >
-                        {column.render
-                          ? column.render(row[column.key], row)
-                          : String(row[column.key] ?? '—')}
-                      </TableCell>
-                    );
-                  })}
+                   {selectable && (
+                     <TableCell>
+                       <Checkbox
+                         checked={selectedRows.has(row.id ?? '')}
+                         onCheckedChange={() => handleSelectRow(row.id ?? '')}
+                         onClick={e => e.stopPropagation()}
+                         aria-label={`Pilih baris ${row.id}`}
+                       />
+                     </TableCell>
+                   )}
+                   {columns.map((column) => {
+                     if (!visibleColumns.has(String(column.key))) return null;
+                     return (
+                       <TableCell
+                         key={`${idx}-${String(column.key)}`}
+                         className={cn(
+                           TEXT_SIZES.body,
+                           getAlignmentClass(column.align),
+                           dense ? 'py-2' : ''
+                         )}
+                       >
+                         {column.render
+                           ? column.render(row[column.key], row)
+                           : String(row[column.key] ?? '—')}
+                       </TableCell>
+                     );
+                   })}
                   {actions.length > 0 && (
                     <TableCell className="text-center">
                       <div className="flex items-center justify-center gap-1">
@@ -454,58 +476,64 @@ export function DataTable<T extends { id?: string | number }>({
         </Table>
       </div>
 
-      {/* Pagination footer */}
-      {pagination && (
-        <div className="flex items-center justify-between">
-          <div className="text-sm text-muted-foreground">
-            {filteredData.length === 0
-              ? 'Tidak ada data'
-              : `${(currentPage - 1) * rowsPerPage + 1}–${Math.min(
-                currentPage * rowsPerPage,
-                filteredData.length
-              )} dari ${filteredData.length}`}
-          </div>
-          <div className="flex items-center gap-4">
-            <select
-              value={rowsPerPage}
-              onChange={e => {
-                setRowsPerPage(Number(e.target.value));
-                setCurrentPage(1);
-              }}
-              className="h-8 text-sm border rounded px-2"
-            >
-              {rowsPerPageOptions.map(option => (
-                <option key={option} value={option}>
-                  {option} baris
-                </option>
-              ))}
-            </select>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                disabled={currentPage === 1}
-              >
-                <ChevronUp className="h-4 w-4" />
-              </Button>
-              <div className="flex items-center justify-center gap-1 text-sm min-w-12">
-                {currentPage} / {totalPages}
-              </div>
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                disabled={currentPage === totalPages}
-              >
-                <ChevronDown className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+       {/* Pagination footer */}
+       {pagination && (
+         <div className="flex items-center justify-between">
+           <div className={TEXT_SIZES.label}>
+             {filteredData.length === 0
+               ? 'Tidak ada data'
+               : `${(currentPage - 1) * rowsPerPage + 1}–${Math.min(
+                 currentPage * rowsPerPage,
+                 filteredData.length
+               )} dari ${filteredData.length}`}
+           </div>
+           <div className="flex items-center gap-4">
+             <Select
+               value={String(rowsPerPage)}
+               onValueChange={value => {
+                 setRowsPerPage(Number(value));
+                 setCurrentPage(1);
+               }}
+             >
+               <SelectTrigger className="w-32">
+                 <SelectValue />
+               </SelectTrigger>
+               <SelectContent>
+                 {rowsPerPageOptions.map(option => (
+                   <SelectItem key={option} value={String(option)}>
+                     {option} baris
+                   </SelectItem>
+                 ))}
+               </SelectContent>
+             </Select>
+             <div className="flex gap-2">
+               <Button
+                 variant="outline"
+                 size="icon"
+                 className="h-8 w-8"
+                 onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                 disabled={currentPage === 1}
+                 aria-label="Halaman sebelumnya"
+               >
+                 <ChevronLeft className={ICON_SIZES.normal} />
+               </Button>
+               <div className="flex items-center justify-center gap-1 text-sm min-w-12">
+                 {currentPage} / {totalPages}
+               </div>
+               <Button
+                 variant="outline"
+                 size="icon"
+                 className="h-8 w-8"
+                 onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                 disabled={currentPage === totalPages}
+                 aria-label="Halaman berikutnya"
+               >
+                 <ChevronRight className={ICON_SIZES.normal} />
+               </Button>
+             </div>
+           </div>
+         </div>
+       )}
     </div>
   );
 }

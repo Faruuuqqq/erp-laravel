@@ -19,8 +19,9 @@ import {
 } from '@/components/ui/form';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { AlertCircle, Plus, Trash2 } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { cn } from '@/lib/utils';
 
 export type FormFieldType =
   | 'text'
@@ -60,17 +61,6 @@ export interface FormFieldSchema {
   showIf?: (values: Record<string, any>) => boolean;
 }
 
-export interface FormFieldGroup {
-  name: string;
-  label?: string;
-  description?: string;
-  fields: FormFieldSchema[];
-  initialCount?: number;
-  maxCount?: number;
-  addLabel?: string;
-  removeLabel?: string;
-}
-
 export interface FormSection {
   title: string;
   description?: string;
@@ -79,7 +69,6 @@ export interface FormSection {
 
 export interface FormSchema {
   fields?: FormFieldSchema[];
-  groups?: FormFieldGroup[];
   sections?: FormSection[];
 }
 
@@ -100,6 +89,73 @@ export interface FormBuilderProps {
   submitVariant?: 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link';
   className?: string;
 }
+
+// ============================================
+// Extracted Components for DRY Principle
+// ============================================
+
+interface FormFieldLabelProps {
+  field: FormFieldSchema;
+}
+
+const FormFieldLabel = ({ field }: FormFieldLabelProps) => (
+  <Label htmlFor={field.name} className="text-sm font-medium">
+    {field.label}
+    {field.required && <span className="text-destructive ml-1">*</span>}
+  </Label>
+);
+
+interface FormErrorMessageProps {
+  error?: string;
+  touched?: boolean;
+}
+
+const FormErrorMessage = ({ error, touched }: FormErrorMessageProps) =>
+  touched && error ? (
+    <p className="text-xs text-destructive" role="alert">
+      {error}
+    </p>
+  ) : null;
+
+interface FormFieldDescriptionProps {
+  description?: string;
+}
+
+const FormFieldDescription = ({ description }: FormFieldDescriptionProps) =>
+  description ? (
+    <p className="text-xs text-muted-foreground">{description}</p>
+  ) : null;
+
+interface FormFieldWrapperProps {
+  children: React.ReactNode;
+  field: FormFieldSchema;
+  error?: string;
+  touched?: boolean;
+  className?: string;
+}
+
+const FormFieldWrapper = ({
+  children,
+  field,
+  error,
+  touched,
+  className,
+}: FormFieldWrapperProps) => (
+  <div className={cn('space-y-2', className)}>
+    <FormFieldLabel field={field} />
+    {children}
+    <FormFieldDescription description={field.description} />
+    <FormErrorMessage error={error} touched={touched} />
+  </div>
+);
+
+// ============================================
+// Helper Functions
+// ============================================
+
+const getFieldErrorClass = (hasError: boolean): string => {
+  return hasError ? 'border-destructive' : '';
+};
 
 export function FormBuilder({
   schema,
@@ -125,20 +181,8 @@ export function FormBuilder({
 
   // Get all fields (flat list)
   const allFields = useMemo(() => {
-    const fields: FormFieldSchema[] = [];
-    
-    if (schema.fields) {
-      fields.push(...schema.fields);
-    }
-    
-    if (schema.groups) {
-      schema.groups.forEach(group => {
-        fields.push(...group.fields);
-      });
-    }
-    
-    return fields;
-  }, [schema]);
+    return schema.fields || [];
+  }, [schema.fields]);
 
   // Filter visible fields
   const visibleFields = useMemo(() => {
@@ -280,35 +324,42 @@ export function FormBuilder({
     const fieldError = errors[field.name] || internalErrors[field.name];
     const fieldTouched = touched[field.name] ?? internalTouched[field.name];
     const fieldValue = values[field.name] ?? internalValues[field.name];
+    const isFieldDisabled = isLoading || isSubmitting || field.disabled;
+    const hasError = fieldTouched && !!fieldError;
 
     const commonProps = {
-      disabled: isLoading || isSubmitting || field.disabled,
+      disabled: isFieldDisabled,
       value: fieldValue ?? '',
       onChange: (e: any) => handleChange(field.name, e.target.value),
       onBlur: () => handleBlur(field.name),
     };
 
+    const fieldWrapperStyle =
+      layout === 'grid' && field.type === 'textarea'
+        ? { gridColumn: `span ${columns}` }
+        : undefined;
+
     return (
-      <div
-        key={field.name}
-        className={`${
-          layout === 'grid'
-            ? `col-span-${field.type === 'textarea' ? columns : 1}`
-            : ''
-        }`}
-      >
+      <div key={field.name} style={fieldWrapperStyle}>
         {field.type === 'select' ? (
-          <div className="space-y-2">
-            <Label htmlFor={field.name} className="text-sm font-medium">
-              {field.label}
-              {field.required && <span className="text-red-500 ml-1">*</span>}
-            </Label>
+          <FormFieldWrapper
+            field={field}
+            error={fieldError}
+            touched={fieldTouched}
+          >
             <Select
               value={String(fieldValue ?? '')}
               onValueChange={val => handleChange(field.name, val)}
-              disabled={commonProps.disabled}
+              disabled={isFieldDisabled}
             >
-              <SelectTrigger id={field.name}>
+              <SelectTrigger
+                id={field.name}
+                className={getFieldErrorClass(hasError)}
+                aria-invalid={hasError}
+                aria-describedby={
+                  hasError ? `${field.name}-error` : undefined
+                }
+              >
                 <SelectValue placeholder={field.placeholder || 'Pilih...'} />
               </SelectTrigger>
               <SelectContent>
@@ -319,40 +370,42 @@ export function FormBuilder({
                 ))}
               </SelectContent>
             </Select>
-            {field.description && (
-              <p className="text-xs text-muted-foreground">{field.description}</p>
-            )}
-            {fieldTouched && fieldError && (
-              <p className="text-xs text-red-500">{fieldError}</p>
-            )}
-          </div>
+          </FormFieldWrapper>
         ) : field.type === 'checkbox' ? (
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center gap-3">
             <Checkbox
               id={field.name}
               checked={fieldValue ?? false}
               onCheckedChange={checked => handleChange(field.name, checked)}
-              disabled={commonProps.disabled}
+              disabled={isFieldDisabled}
+              aria-invalid={hasError}
+              aria-describedby={
+                hasError ? `${field.name}-error` : undefined
+              }
             />
-            <Label htmlFor={field.name} className="text-sm font-medium cursor-pointer">
-              {field.label}
-            </Label>
-            {field.description && (
-              <p className="text-xs text-muted-foreground ml-6">{field.description}</p>
-            )}
-            {fieldTouched && fieldError && (
-              <p className="text-xs text-red-500">{fieldError}</p>
-            )}
+            <div className="space-y-1 flex-1">
+              <label
+                htmlFor={field.name}
+                className="text-sm font-medium cursor-pointer"
+              >
+                {field.label}
+                {field.required && <span className="text-destructive ml-1">*</span>}
+              </label>
+              <FormFieldDescription description={field.description} />
+              <div id={`${field.name}-error`}>
+                <FormErrorMessage error={fieldError} touched={fieldTouched} />
+              </div>
+            </div>
           </div>
         ) : field.type === 'radio' ? (
-          <div className="space-y-2">
-            <Label className="text-sm font-medium">
-              {field.label}
-              {field.required && <span className="text-red-500 ml-1">*</span>}
-            </Label>
+          <FormFieldWrapper
+            field={field}
+            error={fieldError}
+            touched={fieldTouched}
+          >
             <div className="space-y-2">
               {field.options?.map(option => (
-                <div key={option.value} className="flex items-center space-x-2">
+                <div key={option.value} className="flex items-center gap-2">
                   <input
                     type="radio"
                     id={`${field.name}-${option.value}`}
@@ -360,87 +413,88 @@ export function FormBuilder({
                     value={option.value}
                     checked={fieldValue === option.value}
                     onChange={e => handleChange(field.name, e.target.value)}
-                    disabled={commonProps.disabled}
+                    disabled={isFieldDisabled}
+                    aria-invalid={hasError}
+                    className="cursor-pointer"
                   />
-                  <Label
+                  <label
                     htmlFor={`${field.name}-${option.value}`}
-                    className="text-sm cursor-pointer"
+                    className="text-sm font-medium cursor-pointer"
                   >
                     {option.label}
-                  </Label>
+                  </label>
                 </div>
               ))}
             </div>
-            {field.description && (
-              <p className="text-xs text-muted-foreground">{field.description}</p>
-            )}
-            {fieldTouched && fieldError && (
-              <p className="text-xs text-red-500">{fieldError}</p>
-            )}
-          </div>
+          </FormFieldWrapper>
         ) : field.type === 'textarea' ? (
-          <div className="space-y-2">
-            <Label htmlFor={field.name} className="text-sm font-medium">
-              {field.label}
-              {field.required && <span className="text-red-500 ml-1">*</span>}
-            </Label>
+          <FormFieldWrapper
+            field={field}
+            error={fieldError}
+            touched={fieldTouched}
+          >
             <Textarea
               id={field.name}
               placeholder={field.placeholder}
               value={fieldValue ?? ''}
               onChange={e => handleChange(field.name, e.target.value)}
               onBlur={() => handleBlur(field.name)}
-              disabled={commonProps.disabled}
+              disabled={isFieldDisabled}
               maxLength={field.maxLength}
-              className={fieldTouched && fieldError ? 'border-red-500' : ''}
+              className={getFieldErrorClass(hasError)}
+              aria-invalid={hasError}
+              aria-describedby={
+                hasError ? `${field.name}-error` : undefined
+              }
             />
-            <div className="flex justify-between items-center">
-              {field.description && (
-                <p className="text-xs text-muted-foreground">{field.description}</p>
-              )}
-              {field.maxLength && (
-                <p className="text-xs text-muted-foreground">
-                  {String(fieldValue ?? '').length} / {field.maxLength}
-                </p>
-              )}
-            </div>
-            {fieldTouched && fieldError && (
-              <p className="text-xs text-red-500">{fieldError}</p>
+            {field.maxLength && (
+              <p className="text-xs text-muted-foreground text-right">
+                {String(fieldValue ?? '').length} / {field.maxLength}
+              </p>
             )}
-          </div>
-         ) : (
-           <div className="space-y-2">
-             <Label htmlFor={field.name} className="text-sm font-medium">
-               {field.label}
-               {field.required && <span className="text-red-500 ml-1">*</span>}
-             </Label>
-             <Input
-               id={field.name}
-               type={field.type}
-               placeholder={field.placeholder}
-               {...commonProps}
-               className={fieldTouched && fieldError ? 'border-red-500' : ''}
-               min={field.min}
-               max={field.max}
-               maxLength={field.maxLength}
-             />
-             {field.description && (
-               <p className="text-xs text-muted-foreground">{field.description}</p>
-             )}
-             {fieldTouched && fieldError && (
-               <p className="text-xs text-red-500">{fieldError}</p>
-             )}
-           </div>
-         )}
-       </div>
-     );
-   };
+          </FormFieldWrapper>
+        ) : (
+          <FormFieldWrapper
+            field={field}
+            error={fieldError}
+            touched={fieldTouched}
+          >
+            <Input
+              id={field.name}
+              type={field.type}
+              placeholder={field.placeholder}
+              {...commonProps}
+              className={getFieldErrorClass(hasError)}
+              min={field.min}
+              max={field.max}
+              maxLength={field.maxLength}
+              aria-invalid={hasError}
+              aria-describedby={
+                hasError ? `${field.name}-error` : undefined
+              }
+              aria-required={field.required}
+            />
+          </FormFieldWrapper>
+        )}
+      </div>
+    );
+  };
 
-  const gridClass = layout === 'grid' 
-    ? `grid grid-cols-${columns} gap-6` 
-    : layout === 'horizontal' 
-      ? 'flex flex-wrap gap-4' 
-      : 'space-y-6';
+  const gridStyle =
+    layout === 'grid'
+      ? {
+        display: 'grid',
+        gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+        gap: '1.5rem',
+      }
+      : undefined;
+
+  const containerClass =
+    layout === 'horizontal'
+      ? 'flex flex-wrap gap-4'
+      : layout === 'grid'
+        ? ''
+        : 'space-y-6';
 
   return (
     <form onSubmit={handleSubmit} className={`space-y-6 ${className}`}>
@@ -464,7 +518,7 @@ export function FormBuilder({
                 <p className="text-sm text-muted-foreground">{section.description}</p>
               )}
             </div>
-            <div className={gridClass}>
+            <div className={containerClass} style={gridStyle}>
               {allFields.map((field, idx) => {
                 if (!section.fieldNames.includes(field.name)) return null;
                 if (field.hidden) return null;
@@ -475,25 +529,10 @@ export function FormBuilder({
           </div>
         ))
       ) : (
-        <div className={gridClass}>
+        <div className={containerClass} style={gridStyle}>
           {visibleFields.map((field, idx) => renderField(field, idx))}
         </div>
       )}
-
-      {/* Form groups (dynamic arrays) */}
-      {schema.groups?.map(group => (
-        <div key={group.name} className="space-y-4 border rounded-lg p-4">
-          <div>
-            <h4 className="font-medium">{group.label ?? group.name}</h4>
-            {group.description && (
-              <p className="text-sm text-muted-foreground">{group.description}</p>
-            )}
-          </div>
-          
-          {/* This is a placeholder for dynamic array support */}
-          {/* Full implementation would include add/remove buttons for repeating field groups */}
-        </div>
-      ))}
 
       {/* Form actions */}
       <div className="flex gap-3 justify-end pt-6 border-t">
