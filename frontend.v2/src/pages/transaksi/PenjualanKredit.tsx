@@ -119,7 +119,8 @@ const PenjualanKredit = () => {
   const diskonTotalNum = parseFloat(state.diskonTotal) || 0;
   const grandTotal = subtotal - diskonTotalNum;
   const dpNum = parseFloat(state.dp) || 0;
-  const sisaPiutang = grandTotal - dpNum;
+  const sisaPiutang = Math.max(0, grandTotal - dpNum);
+  const isDpOverTotal = dpNum > grandTotal;
 
   // Credit limit validation
   const existingPiutang = customer ? Number(customer.balance ?? 0) : 0;
@@ -131,6 +132,7 @@ const PenjualanKredit = () => {
   const handleSave = useCallback(async () => {
     if (state.cart.length === 0) return toast({ title: 'Keranjang masih kosong', variant: 'destructive' });
     if (!state.selectedCustomer) return toast({ title: 'Pilih customer terlebih dahulu', variant: 'destructive' });
+    if (isDpOverTotal) return toast({ title: 'DP tidak boleh melebihi grand total', variant: 'destructive' });
     try {
       const result = await createTx.mutateAsync({
         type: 'penjualan_kredit',
@@ -139,7 +141,7 @@ const PenjualanKredit = () => {
         salesId: state.selectedSales || null,
         warehouseId: state.selectedGudang || null,
         discount: diskonTotalNum,
-        paid: dpNum,
+        paid: Math.min(dpNum, grandTotal),
         dueDate: state.jatuhTempo || undefined,
         notes: state.catatan,
         items: state.cart.map(i => ({ productId: i.productId, quantity: i.qty, price: i.harga, discount: i.diskon })),
@@ -151,7 +153,7 @@ const PenjualanKredit = () => {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Gagal menyimpan';
       toast({ title: 'Error', description: msg, variant: 'destructive' });
     }
-  }, [state, diskonTotalNum, dpNum, createTx, toast]);
+  }, [state, diskonTotalNum, dpNum, grandTotal, isDpOverTotal, createTx, toast]);
 
    // Reset handler
     const reset = useCallback(() => { setState(BLANK()); setSaved(false); setSavedTrx(null); setIsPreviewOpen(false); setIsDraftPreviewOpen(false); }, []);
@@ -230,21 +232,35 @@ const PenjualanKredit = () => {
       </div>
     ), [state.tanggal, customer?.name, state.catatan, state.cart, subtotal, diskonTotalNum, grandTotal, dpNum, sisaPiutang, isOverLimit]);
 
-    if (saved && savedTrx) {
-     return (
-       <SuccessScreen
-         title="Penjualan Kredit Berhasil"
-         invoiceNumber={savedTrx.invoiceNumber}
-         invoiceLabel="No. Faktur"
-         total={savedTrx.remaining ?? 0}
-         totalLabel="Total Piutang Ditambahkan"
-         iconColor="success"
-         onPrint={() => setIsPreviewOpen(true)}
-         canPrint={canPrint('transactions.credit_sale')}
-         onReset={reset}
-       />
-     );
-   }
+if (saved && savedTrx) {
+      return (
+        <>
+          <SuccessScreen
+            title="Penjualan Kredit Berhasil"
+            invoiceNumber={savedTrx.invoiceNumber}
+            invoiceLabel="No. Faktur"
+            total={savedTrx.remaining ?? 0}
+            totalLabel="Total Piutang Ditambahkan"
+            iconColor="success"
+            onPrint={() => setIsPreviewOpen(true)}
+            canPrint={canPrint('transactions.credit_sale')}
+            onReset={reset}
+          />
+          <PrintPreviewDialog
+            isOpen={isPreviewOpen}
+            onClose={() => setIsPreviewOpen(false)}
+            title="Faktur Penjualan Kredit"
+            documentId="faktur-penjualan-kredit-print"
+            filename={`faktur-penjualan-kredit-${savedTrx.invoiceNumber}`}
+            backendPdf={{ transactionId: savedTrx.id, documentType: 'invoice' }}
+          >
+            <div id="faktur-penjualan-kredit-print">
+              <FakturPenjualan transaction={savedTrx} />
+            </div>
+          </PrintPreviewDialog>
+        </>
+      );
+    }
 
   return (
     <MainLayout title="Penjualan Kredit" subtitle="Buat transaksi penjualan dengan pembayaran kredit">
@@ -366,7 +382,7 @@ const PenjualanKredit = () => {
                         <TableCell className="text-right tabular-nums text-xs">{formatCurrency(item.harga)}</TableCell>
                         <TableCell className="text-right tabular-nums text-xs">{item.diskon > 0 ? `${item.diskon}%` : '-'}</TableCell>
                         <TableCell className="text-right font-semibold tabular-nums">{formatCurrency(item.subtotal)}</TableCell>
-                        <TableCell><Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:bg-destructive/10" onClick={() => removeItem(idx)}><Trash2 className="h-3.5 w-3.5" /></Button></TableCell>
+                        <TableCell><Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:bg-destructive/10" onClick={() => removeItem(idx)} aria-label={`Hapus item ${item.nama}`} title={`Hapus ${item.nama}`}><Trash2 className="h-3.5 w-3.5" /></Button></TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -401,6 +417,12 @@ const PenjualanKredit = () => {
                 <Input type="number" value={state.dp} onChange={e => set('dp', e.target.value)} className="text-right h-9 text-sm" min="0" />
               </div>
 
+              {isDpOverTotal && (
+                <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-2.5 text-xs text-destructive">
+                  DP melebihi grand total.
+                </div>
+              )}
+
               <div className="rounded-lg border bg-warning/10 p-3">
                 <p className="text-xs text-muted-foreground mb-0.5">Sisa Piutang</p>
                 <p className="text-xl font-bold text-warning tabular-nums">{formatCurrency(sisaPiutang)}</p>
@@ -424,7 +446,7 @@ const PenjualanKredit = () => {
                 {canCreate('transactions.credit_sale') && (
                   <div className="flex gap-2 pt-1">
                     <Button variant="outline" className="flex-1 h-9 text-sm" onClick={reset}>Reset</Button>
-                    <Button className="flex-1 h-9 text-sm" onClick={handleSave} disabled={state.cart.length === 0 || createTx.isPending}>
+                    <Button className="flex-1 h-9 text-sm" onClick={handleSave} disabled={state.cart.length === 0 || isDpOverTotal || createTx.isPending}>
                       {createTx.isPending ? 'Menyimpan...' : 'Simpan'}
                     </Button>
                   </div>
@@ -437,26 +459,12 @@ const PenjualanKredit = () => {
         </div>
       </div>
 
-       {savedTrx && (
-         <PrintPreviewDialog
-           isOpen={isPreviewOpen}
-           onClose={() => setIsPreviewOpen(false)}
-           title="Faktur Penjualan Kredit"
-           documentId="faktur-penjualan-kredit-print"
-           filename={`faktur-penjualan-kredit-${savedTrx.invoiceNumber}`}
-         >
-           <div id="faktur-penjualan-kredit-print">
-             <FakturPenjualan transaction={savedTrx} />
-           </div>
-         </PrintPreviewDialog>
-       )}
-
-       {/* Draft Preview Dialog */}
+{/* Draft Preview Dialog */}
        <DraftPreviewDialog
          isOpen={isDraftPreviewOpen}
          onClose={() => setIsDraftPreviewOpen(false)}
          content={draftPreviewContent}
-         title="Penjualan Kredit"
+         title="Preview Penjualan Kredit"
        />
     </MainLayout>
   );

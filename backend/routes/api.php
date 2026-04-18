@@ -58,6 +58,7 @@ Route::middleware(['auth:sanctum', 'throttle:60,1'])->group(function () {
     Route::apiResource('transactions', TransactionController::class);
     Route::patch('transactions/{transaction}/payment', [TransactionController::class, 'updatePayment']);
     Route::patch('transactions/{transaction}/toggle-hidden', [TransactionController::class, 'toggleHidden']);
+    Route::get('transactions/{transaction}/print/document', [TransactionController::class, 'printDocument']);
     Route::get('transactions/{transaction}/print/invoice', [TransactionController::class, 'printInvoice']);
     Route::get('transactions/{transaction}/print/receipt', [TransactionController::class, 'printReceipt']);
 

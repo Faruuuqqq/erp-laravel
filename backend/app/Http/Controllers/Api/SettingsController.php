@@ -98,6 +98,14 @@ class SettingsController extends Controller
             'address' => 'nullable|string|max:500',
             'npwp' => 'nullable|string|max:50',
             'siup' => 'nullable|string|max:50',
+            'email' => 'nullable|email|max:100',
+            'bank_name' => 'nullable|string|max:120',
+            'bank_account_number' => 'nullable|string|max:60',
+            'bank_account_name' => 'nullable|string|max:120',
+            'billing_due_days' => 'nullable|integer|min:1|max:90',
+            'billing_payment_terms' => 'nullable|string|max:1000',
+            'billing_approver_name' => 'nullable|string|max:120',
+            'billing_approver_title' => 'nullable|string|max:120',
         ]);
 
         if ($validator->fails()) {
@@ -107,7 +115,21 @@ class SettingsController extends Controller
         $user = $request->user();
 
         // Store settings per user
-        foreach ($request->only(['store_name', 'phone', 'address', 'npwp', 'siup']) as $key => $value) {
+        foreach ($request->only([
+            'store_name',
+            'phone',
+            'address',
+            'npwp',
+            'siup',
+            'email',
+            'bank_name',
+            'bank_account_number',
+            'bank_account_name',
+            'billing_due_days',
+            'billing_payment_terms',
+            'billing_approver_name',
+            'billing_approver_title',
+        ]) as $key => $value) {
             Setting::updateOrCreate(
                 [
                     'key' => $key,
@@ -199,6 +221,14 @@ class SettingsController extends Controller
             'address' => '',
             'npwp' => '',
             'siup' => '',
+            'email' => '',
+            'bank_name' => '',
+            'bank_account_number' => '',
+            'bank_account_name' => '',
+            'billing_due_days' => 7,
+            'billing_payment_terms' => 'Pembayaran maksimal {due_days} hari sejak tanggal terbit dokumen.',
+            'billing_approver_name' => 'Finance',
+            'billing_approver_title' => 'AR Officer',
         ];
     }
 

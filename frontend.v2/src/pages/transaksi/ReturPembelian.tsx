@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -112,6 +112,16 @@ const ReturPembelian = () => {
   const removeItem = useCallback((idx: number) => setItems(prev => prev.filter((_, i) => i !== idx)), []);
   const totalNilai = items.reduce((s, i) => s + i.subtotal, 0);
 
+  const selectedSupplierName = useMemo(
+    () => suppliers.find(s => s.id === selectedSupplier)?.name || '-',
+    [selectedSupplier, suppliers]
+  );
+
+  const selectedAlasanLabel = useMemo(
+    () => ALASAN_OPTIONS.find(a => a.value === alasan)?.label || '-',
+    [alasan]
+  );
+
   const handleSave = useCallback(() => {
     if (items.length === 0) return toast({ title: 'Belum ada barang retur', variant: 'destructive' });
     if (!alasan) return toast({ title: 'Pilih alasan retur', variant: 'destructive' });
@@ -144,19 +154,103 @@ const ReturPembelian = () => {
     setSelectedFakturId(''); setSelectedSupplier(''); setAlasan(''); setCatatan(''); setIsDraftPreviewOpen(false);
   }, []);
 
+  const draftPreviewContent = useMemo(() => (
+    <div className="w-full text-sm space-y-4 p-4">
+      <div className="border-b pb-4">
+        <p className="font-semibold text-lg">Retur Pembelian (Draft)</p>
+        <p className="text-xs text-muted-foreground">Belum disimpan</p>
+      </div>
+      <div className="space-y-1 text-xs">
+        <div className="flex justify-between">
+          <span>Tanggal Retur:</span>
+          <span className="font-semibold">{tanggal}</span>
+        </div>
+        <div className="flex justify-between">
+          <span>Supplier:</span>
+          <span className="font-semibold">{selectedSupplierName}</span>
+        </div>
+        <div className="flex justify-between">
+          <span>Alasan Retur:</span>
+          <span className="font-semibold">{selectedAlasanLabel}</span>
+        </div>
+        {catatan && (
+          <div className="flex justify-between">
+            <span>Catatan:</span>
+            <span className="font-semibold">{catatan}</span>
+          </div>
+        )}
+      </div>
+      <div className="border-t pt-4">
+        <p className="text-xs font-semibold text-muted-foreground mb-2">Daftar Barang Retur</p>
+        <table className="w-full text-xs">
+          <thead className="border-b bg-muted/50">
+            <tr>
+              <th className="text-left py-2">No</th>
+              <th className="text-left py-2">Produk</th>
+              <th className="text-right py-2">Qty</th>
+              <th className="text-right py-2">Harga</th>
+              <th className="text-right py-2">Subtotal</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item, idx) => (
+              <tr key={`${item.productId}-${idx}`} className="border-b">
+                <td className="py-2">{idx + 1}</td>
+                <td className="py-2">{item.nama}</td>
+                <td className="text-right">{item.qty}</td>
+                <td className="text-right">{formatCurrency(item.harga)}</td>
+                <td className="text-right font-semibold">{formatCurrency(item.subtotal)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="space-y-1 text-xs border-t pt-4">
+        <div className="flex justify-between">
+          <span>Total Item:</span>
+          <span className="font-semibold">{items.length} produk</span>
+        </div>
+        <div className="flex justify-between">
+          <span>Total Qty:</span>
+          <span className="font-semibold">{items.reduce((s, i) => s + i.qty, 0)} pcs</span>
+        </div>
+        <div className="flex justify-between font-semibold text-base border-t pt-2">
+          <span>Total Nilai Retur:</span>
+          <span className="text-destructive">{formatCurrency(totalNilai)}</span>
+        </div>
+      </div>
+    </div>
+  ), [catatan, items, selectedAlasanLabel, selectedSupplierName, tanggal, totalNilai]);
+
   if (saved) {
     return (
-      <SuccessScreen
-        title="Retur Berhasil Diproses"
-        invoiceNumber={savedInvoice}
-        invoiceLabel="No. Retur"
-        total={totalNilai}
-        totalLabel="Nilai retur dikurangi dari utang"
-        iconColor="success"
-        onPrint={() => setIsPreviewOpen(true)}
-        canPrint={canPrint('transactions.return_purchase') && !!savedTransaction}
-        onReset={reset}
-      />
+      <>
+        <SuccessScreen
+          title="Retur Berhasil Diproses"
+          invoiceNumber={savedInvoice}
+          invoiceLabel="No. Retur"
+          total={totalNilai}
+          totalLabel="Nilai retur dikurangi dari utang"
+          iconColor="success"
+          onPrint={() => setIsPreviewOpen(true)}
+          canPrint={canPrint('transactions.return_purchase') && !!savedTransaction}
+          onReset={reset}
+        />
+        {savedTransaction && (
+          <PrintPreviewDialog
+            isOpen={isPreviewOpen}
+            onClose={() => setIsPreviewOpen(false)}
+            title="Surat Retur Pembelian"
+            documentId="retur-pembelian-print"
+            filename={`retur-pembelian-${savedInvoice}`}
+            backendPdf={{ transactionId: savedTransaction.id, documentType: 'document' }}
+          >
+            <div id="retur-pembelian-print">
+              <ReturPembelianPrint transaction={savedTransaction} />
+            </div>
+          </PrintPreviewDialog>
+        )}
+      </>
     );
   }
 
@@ -258,7 +352,7 @@ const ReturPembelian = () => {
                         <TableCell className="text-right tabular-nums text-xs">{formatCurrency(item.harga)}</TableCell>
                         <TableCell className="text-right font-semibold tabular-nums text-destructive">{formatCurrency(item.subtotal)}</TableCell>
                         <TableCell>
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:bg-destructive/10" onClick={() => removeItem(idx)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:bg-destructive/10" onClick={() => removeItem(idx)} aria-label={`Hapus item ${item.nama}`} title={`Hapus ${item.nama}`}><Trash2 className="h-3.5 w-3.5" /></Button>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -321,98 +415,12 @@ const ReturPembelian = () => {
         </AlertDialogContent>
       </AlertDialog>
 
-      {savedTransaction && (
-        <PrintPreviewDialog
-          isOpen={isPreviewOpen}
-          onClose={() => setIsPreviewOpen(false)}
-          title="Surat Retur Pembelian"
-          documentId="retur-pembelian-print"
-          filename={`retur-pembelian-${savedInvoice}`}
-        >
-          <div id="retur-pembelian-print">
-            <ReturPembelianPrint transaction={savedTransaction} />
-          </div>
-        </PrintPreviewDialog>
-      )}
-
-      {/* Draft Preview Dialog */}
-      {(() => {
-        const draftPreviewContent = (
-          <div className="w-full text-sm space-y-4 p-4">
-            <div className="border-b pb-4">
-              <p className="font-semibold text-lg">Retur Pembelian (Draft)</p>
-              <p className="text-xs text-muted-foreground">Belum disimpan</p>
-            </div>
-            <div className="space-y-1 text-xs">
-              <div className="flex justify-between">
-                <span>Tanggal Retur:</span>
-                <span className="font-semibold">{tanggal}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Supplier:</span>
-                <span className="font-semibold">{suppliers.find(s => s.id === selectedSupplier)?.name || '-'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Alasan Retur:</span>
-                <span className="font-semibold">{ALASAN_OPTIONS.find(a => a.value === alasan)?.label || '-'}</span>
-              </div>
-              {catatan && (
-                <div className="flex justify-between">
-                  <span>Catatan:</span>
-                  <span className="font-semibold">{catatan}</span>
-                </div>
-              )}
-            </div>
-            <div className="border-t pt-4">
-              <p className="text-xs font-semibold text-muted-foreground mb-2">Daftar Barang Retur</p>
-              <table className="w-full text-xs">
-                <thead className="border-b bg-muted/50">
-                  <tr>
-                    <th className="text-left py-2">No</th>
-                    <th className="text-left py-2">Produk</th>
-                    <th className="text-right py-2">Qty</th>
-                    <th className="text-right py-2">Harga</th>
-                    <th className="text-right py-2">Subtotal</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((item, idx) => (
-                    <tr key={idx} className="border-b">
-                      <td className="py-2">{idx + 1}</td>
-                      <td className="py-2">{item.nama}</td>
-                      <td className="text-right">{item.qty}</td>
-                      <td className="text-right">{formatCurrency(item.harga)}</td>
-                      <td className="text-right font-semibold">{formatCurrency(item.subtotal)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="space-y-1 text-xs border-t pt-4">
-              <div className="flex justify-between">
-                <span>Total Item:</span>
-                <span className="font-semibold">{items.length} produk</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Total Qty:</span>
-                <span className="font-semibold">{items.reduce((s, i) => s + i.qty, 0)} pcs</span>
-              </div>
-              <div className="flex justify-between font-semibold text-base border-t pt-2">
-                <span>Total Nilai Retur:</span>
-                <span className="text-destructive">{formatCurrency(totalNilai)}</span>
-              </div>
-            </div>
-          </div>
-        );
-        return (
-          <DraftPreviewDialog
-            isOpen={isDraftPreviewOpen}
-            onClose={() => setIsDraftPreviewOpen(false)}
-            content={draftPreviewContent}
-            title="Preview Retur Pembelian"
-          />
-        );
-      })()}
+<DraftPreviewDialog
+        isOpen={isDraftPreviewOpen}
+        onClose={() => setIsDraftPreviewOpen(false)}
+        content={draftPreviewContent}
+        title="Preview Retur Pembelian"
+      />
     </MainLayout>
   );
 };

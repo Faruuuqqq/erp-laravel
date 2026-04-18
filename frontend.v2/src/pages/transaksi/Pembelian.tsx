@@ -212,18 +212,94 @@ const Pembelian = () => {
 
   const reset = useCallback(() => { setState(BLANK_STATE()); setSaved(false); }, []);
 
-  if (saved) {
+  const draftPreviewContent = useMemo(() => (
+    <div className="w-full text-sm space-y-4 p-4">
+      <div className="border-b pb-4">
+        <p className="font-semibold text-lg">Pembelian (Draft)</p>
+        <p className="text-xs text-muted-foreground">Belum disimpan</p>
+      </div>
+      <div className="space-y-1 text-xs">
+        <div className="flex justify-between">
+          <span>Tanggal:</span>
+          <span className="font-semibold">{state.tanggal}</span>
+        </div>
+        <div className="flex justify-between">
+          <span>Supplier:</span>
+          <span className="font-semibold">{supplier?.name || '-'}</span>
+        </div>
+        {state.catatan && (
+          <div className="flex justify-between">
+            <span>Catatan:</span>
+            <span className="font-semibold">{state.catatan}</span>
+          </div>
+        )}
+      </div>
+      <table className="w-full text-xs">
+        <thead className="border-b bg-muted/50">
+          <tr>
+            <th className="text-left py-2">Produk</th>
+            <th className="text-right py-2">Qty</th>
+            <th className="text-right py-2">Harga</th>
+            <th className="text-right py-2">Subtotal</th>
+          </tr>
+        </thead>
+        <tbody>
+          {state.cart.map(item => (
+            <tr key={item.productId} className="border-b">
+              <td className="py-2">{item.nama}</td>
+              <td className="text-right">{item.qty}</td>
+              <td className="text-right">{formatCurrency(item.harga)}</td>
+              <td className="text-right font-semibold">{formatCurrency(item.subtotal)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="space-y-1 text-xs border-t pt-4">
+        <div className="flex justify-between">
+          <span>Subtotal:</span>
+          <span>{formatCurrency(subtotal)}</span>
+        </div>
+        {parseFloat(state.diskon) > 0 && (
+          <div className="flex justify-between text-warning">
+            <span>Diskon:</span>
+            <span>-{formatCurrency(parseFloat(state.diskon) || 0)}</span>
+          </div>
+        )}
+        <div className="flex justify-between font-semibold text-base border-t pt-2">
+          <span>Total:</span>
+          <span>{formatCurrency(grandTotal)}</span>
+        </div>
+      </div>
+    </div>
+  ), [grandTotal, state.cart, state.catatan, state.diskon, state.tanggal, subtotal, supplier?.name]);
+
+  if (saved && savedTrx) {
     return (
-      <SuccessScreen
-        title="Pembelian Berhasil Disimpan"
-        subtitle="Transaksi berhasil disimpan"
-        invoiceNumber={savedInvoice}
-        total={savedTotal}
-        onPrint={() => setIsPreviewOpen(true)}
-        canPrint={canPrint('transactions.purchase')}
-        onReset={reset}
-        extra={isKredit && <Badge variant="outline" className="mt-2 text-warning border-warning">Dicatat sebagai Utang</Badge>}
-      />
+      <>
+        <SuccessScreen
+          title="Pembelian Berhasil Disimpan"
+          subtitle="Transaksi berhasil disimpan"
+          invoiceNumber={savedInvoice}
+          total={savedTotal}
+          onPrint={() => setIsPreviewOpen(true)}
+          canPrint={canPrint('transactions.purchase')}
+          onReset={reset}
+          extra={isKredit && <Badge variant="outline" className="mt-2 text-warning border-warning">Dicatat sebagai Utang</Badge>}
+        />
+
+        <PrintPreviewDialog
+          isOpen={isPreviewOpen}
+          onClose={() => setIsPreviewOpen(false)}
+          title="Faktur Pembelian"
+          documentId="faktur-pembelian-print"
+          filename={`Faktur-Pembelian-${savedTrx.invoiceNumber}`}
+          backendPdf={{ transactionId: savedTrx.id, documentType: 'invoice' }}
+        >
+          <div id="faktur-pembelian-print">
+            <FakturPembelian transaction={savedTrx} />
+          </div>
+        </PrintPreviewDialog>
+      </>
     );
   }
 
@@ -336,7 +412,7 @@ const Pembelian = () => {
                         <TableCell className="text-right tabular-nums text-xs">{formatCurrency(item.harga)}</TableCell>
                         <TableCell className="text-right font-semibold tabular-nums">{formatCurrency(item.subtotal)}</TableCell>
                         <TableCell>
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:bg-destructive/10" onClick={() => removeItem(idx)}>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:bg-destructive/10" onClick={() => removeItem(idx)} aria-label={`Hapus item ${item.nama}`} title={`Hapus ${item.nama}`}>
                             <Trash2 className="h-3.5 w-3.5" />
                           </Button>
                         </TableCell>
@@ -430,93 +506,37 @@ const Pembelian = () => {
        {/* Print Preview Dialog */}
        {savedTrx && (
          <PrintPreviewDialog
-           isOpen={isPreviewOpen}
-           onClose={() => setIsPreviewOpen(false)}
-           title="Faktur Pembelian"
-           documentId="faktur-pembelian-print"
-           filename={`Faktur-Pembelian-${savedTrx.invoiceNumber}`}
-         >
+            isOpen={isPreviewOpen}
+            onClose={() => setIsPreviewOpen(false)}
+            title="Faktur Pembelian"
+            documentId="faktur-pembelian-print"
+            filename={`Faktur-Pembelian-${savedTrx.invoiceNumber}`}
+            backendPdf={{ transactionId: savedTrx.id, documentType: 'invoice' }}
+          >
            <div id="faktur-pembelian-print">
              <FakturPembelian transaction={savedTrx} />
            </div>
          </PrintPreviewDialog>
        )}
 
-       {/* Draft Preview Dialog */}
-       {(() => {
-         const draftPreviewContent = (
-           <div className="w-full text-sm space-y-4 p-4">
-             <div className="border-b pb-4">
-               <p className="font-semibold text-lg">Pembelian (Draft)</p>
-               <p className="text-xs text-muted-foreground">Belum disimpan</p>
-             </div>
-             <div className="space-y-1 text-xs">
-               <div className="flex justify-between">
-                 <span>Tanggal:</span>
-                 <span className="font-semibold">{state.tanggal}</span>
-               </div>
-               <div className="flex justify-between">
-                 <span>Supplier:</span>
-                 <span className="font-semibold">{supplier?.name || '-'}</span>
-               </div>
-               {state.catatan && (
-                 <div className="flex justify-between">
-                   <span>Catatan:</span>
-                   <span className="font-semibold">{state.catatan}</span>
-                 </div>
-               )}
-             </div>
-             <table className="w-full text-xs">
-               <thead className="border-b bg-muted/50">
-                 <tr>
-                   <th className="text-left py-2">Produk</th>
-                   <th className="text-right py-2">Qty</th>
-                   <th className="text-right py-2">Harga</th>
-                   <th className="text-right py-2">Subtotal</th>
-                 </tr>
-               </thead>
-               <tbody>
-                 {state.cart.map(item => (
-                   <tr key={item.productId} className="border-b">
-                     <td className="py-2">{item.nama}</td>
-                     <td className="text-right">{item.qty}</td>
-                     <td className="text-right">{formatCurrency(item.harga)}</td>
-                     <td className="text-right font-semibold">{formatCurrency(item.subtotal)}</td>
-                   </tr>
-                 ))}
-               </tbody>
-             </table>
-             <div className="space-y-1 text-xs border-t pt-4">
-               <div className="flex justify-between">
-                 <span>Subtotal:</span>
-                 <span>{formatCurrency(subtotal)}</span>
-               </div>
-               {parseFloat(state.diskon) > 0 && (
-                 <div className="flex justify-between text-warning">
-                   <span>Diskon:</span>
-                   <span>-{formatCurrency(parseFloat(state.diskon) || 0)}</span>
-                 </div>
-               )}
-               <div className="flex justify-between font-semibold text-base border-t pt-2">
-                 <span>Total:</span>
-                 <span>{formatCurrency(grandTotal)}</span>
-               </div>
-             </div>
-           </div>
-         );
-         return (
-           <DraftPreviewDialog
-             isOpen={isDraftPreviewOpen}
-             onClose={() => setIsDraftPreviewOpen(false)}
-             content={draftPreviewContent}
-             title="Preview Pembelian"
-           />
-         );
-       })()}
+       <DraftPreviewDialog
+         isOpen={isDraftPreviewOpen}
+         onClose={() => setIsDraftPreviewOpen(false)}
+         content={draftPreviewContent}
+         title="Preview Pembelian"
+       />
 
 
       {/* Price Conflict Dialog */}
-      <AlertDialog open={priceConflict.show} onOpenChange={v => !v && setPriceConflict({ show: false, existingPrice: 0, newPrice: 0, productName: '' })}>
+      <AlertDialog
+        open={priceConflict.show}
+        onOpenChange={v => {
+          if (!v) {
+            setPriceConflict({ show: false, existingPrice: 0, newPrice: 0, productName: '' });
+            setPendingAddToCart(null);
+          }
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Produk dengan Harga Berbeda</AlertDialogTitle>
@@ -536,7 +556,9 @@ const Pembelian = () => {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="flex gap-2">
-            <AlertDialogCancel className="flex-1">Gunakan Harga Lama</AlertDialogCancel>
+            <AlertDialogCancel className="flex-1" onClick={() => handleConfirmPriceConflict(false)}>
+              Gunakan Harga Lama
+            </AlertDialogCancel>
             <AlertDialogAction 
               className="flex-1"
               onClick={() => handleConfirmPriceConflict(true)}

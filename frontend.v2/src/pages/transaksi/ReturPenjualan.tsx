@@ -109,6 +109,87 @@ const ReturPenjualan = () => {
 
   const totalNilai = items.reduce((s, i) => s + i.subtotal, 0);
 
+  const selectedCustomerName = useMemo(
+    () => customers.find(c => c.id === selectedCustomer)?.name || '-',
+    [customers, selectedCustomer]
+  );
+
+  const draftPreviewContent = useMemo(() => (
+    <div className="w-full text-sm space-y-4 p-4">
+      <div className="border-b pb-4">
+        <p className="font-semibold text-lg">Retur Penjualan (Draft)</p>
+        <p className="text-xs text-muted-foreground">Belum disimpan</p>
+      </div>
+      <div className="space-y-1 text-xs">
+        <div className="flex justify-between">
+          <span>No. Retur:</span>
+          <span className="font-semibold">{noRetur}</span>
+        </div>
+        <div className="flex justify-between">
+          <span>Tanggal Retur:</span>
+          <span className="font-semibold">{tanggal}</span>
+        </div>
+        <div className="flex justify-between">
+          <span>Customer:</span>
+          <span className="font-semibold">{selectedCustomerName}</span>
+        </div>
+        <div className="flex justify-between">
+          <span>Alasan Retur:</span>
+          <span className="font-semibold">{alasan || '-'}</span>
+        </div>
+        <div className="flex justify-between">
+          <span>Metode Pengembalian:</span>
+          <span className="font-semibold">{metodeKembalian || '-'}</span>
+        </div>
+        {catatan && (
+          <div className="flex justify-between">
+            <span>Catatan:</span>
+            <span className="font-semibold">{catatan}</span>
+          </div>
+        )}
+      </div>
+      <div className="border-t pt-4">
+        <p className="text-xs font-semibold text-muted-foreground mb-2">Daftar Barang Retur</p>
+        <table className="w-full text-xs">
+          <thead className="border-b bg-muted/50">
+            <tr>
+              <th className="text-left py-2">No</th>
+              <th className="text-left py-2">Produk</th>
+              <th className="text-right py-2">Qty</th>
+              <th className="text-right py-2">Harga</th>
+              <th className="text-right py-2">Subtotal</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item, idx) => (
+              <tr key={`${item.productId}-${idx}`} className="border-b">
+                <td className="py-2">{idx + 1}</td>
+                <td className="py-2">{item.nama}</td>
+                <td className="text-right">{item.qty}</td>
+                <td className="text-right">{formatCurrency(item.harga)}</td>
+                <td className="text-right font-semibold">{formatCurrency(item.subtotal)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="space-y-1 text-xs border-t pt-4">
+        <div className="flex justify-between">
+          <span>Total Item:</span>
+          <span className="font-semibold">{items.length} produk</span>
+        </div>
+        <div className="flex justify-between">
+          <span>Total Qty:</span>
+          <span className="font-semibold">{items.reduce((s, i) => s + i.qty, 0)}</span>
+        </div>
+        <div className="flex justify-between font-semibold text-base border-t pt-2">
+          <span>Total Nilai Retur:</span>
+          <span className="text-warning">{formatCurrency(totalNilai)}</span>
+        </div>
+      </div>
+    </div>
+  ), [alasan, catatan, items, metodeKembalian, noRetur, selectedCustomerName, tanggal, totalNilai]);
+
   const handleSave = useCallback(() => {
     if (items.length === 0) return toast({ title: 'Belum ada barang retur', variant: 'destructive' });
     if (!alasan) return toast({ title: 'Pilih alasan retur', variant: 'destructive' });
@@ -116,21 +197,37 @@ const ReturPenjualan = () => {
     setConfirmOpen(true);
   }, [items.length, alasan, metodeKembalian, toast]);
 
-   if (saved) {
-     return (
-       <SuccessScreen
-         title="Retur Penjualan Diproses"
-         invoiceNumber={noRetur}
-         invoiceLabel="No. Retur"
-         total={totalNilai}
-         totalLabel={`Nilai retur - metode: ${metodeKembalian}`}
-         iconColor="warning"
-         onPrint={() => setIsPreviewOpen(true)}
-         canPrint={!!savedTrx}
-         onReset={() => { setItems([]); setSaved(false); setSavedTrx(null); setSelectedFaktur(''); setSelectedCustomer(''); setAlasan(''); setMetodeKembalian(''); setCatatan(''); }}
-       />
-     );
-   }
+if (saved) {
+      return (
+        <>
+          <SuccessScreen
+            title="Retur Penjualan Diproses"
+            invoiceNumber={noRetur}
+            invoiceLabel="No. Retur"
+            total={totalNilai}
+            totalLabel={`Nilai retur - metode: ${metodeKembalian}`}
+            iconColor="warning"
+            onPrint={() => setIsPreviewOpen(true)}
+            canPrint={!!savedTrx}
+            onReset={() => { setItems([]); setSaved(false); setSavedTrx(null); setSelectedFaktur(''); setSelectedCustomer(''); setAlasan(''); setMetodeKembalian(''); setCatatan(''); }}
+          />
+          {savedTrx && (
+            <PrintPreviewDialog
+              isOpen={isPreviewOpen}
+              onClose={() => setIsPreviewOpen(false)}
+              title="Surat Retur Penjualan"
+              documentId="retur-penjualan-print"
+              filename={`retur-penjualan-${savedTrx.invoiceNumber}`}
+              backendPdf={{ transactionId: savedTrx.id, documentType: 'document' }}
+            >
+              <div id="retur-penjualan-print">
+                <ReturPenjualanPrint transaction={savedTrx} />
+              </div>
+            </PrintPreviewDialog>
+          )}
+        </>
+      );
+    }
 
   return (
     <MainLayout title="Retur Penjualan" subtitle="Terima retur barang dari customer">
@@ -232,7 +329,7 @@ const ReturPenjualan = () => {
                           <TableCell className="text-right tabular-nums text-xs">{formatCurrency(item.harga)}</TableCell>
                           <TableCell className="text-right font-semibold tabular-nums text-warning">{formatCurrency(item.subtotal)}</TableCell>
                           <TableCell>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:bg-destructive/10" onClick={() => removeItem(idx)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:bg-destructive/10" onClick={() => removeItem(idx)} aria-label={`Hapus item ${item.nama}`} title={`Hapus ${item.nama}`}><Trash2 className="h-3.5 w-3.5" /></Button>
                           </TableCell>
                         </TableRow>
                       ))
@@ -328,106 +425,12 @@ const ReturPenjualan = () => {
         </AlertDialogContent>
       </AlertDialog>
 
-       {savedTrx && (
-         <PrintPreviewDialog
-           isOpen={isPreviewOpen}
-           onClose={() => setIsPreviewOpen(false)}
-           title="Surat Retur Penjualan"
-           documentId="retur-penjualan-print"
-           filename={`retur-penjualan-${savedTrx.invoiceNumber}`}
-         >
-           <div id="retur-penjualan-print">
-             <ReturPenjualanPrint transaction={savedTrx} />
-           </div>
-         </PrintPreviewDialog>
-       )}
-
-       {/* Draft Preview Dialog */}
-       {(() => {
-         const draftPreviewContent = (
-           <div className="w-full text-sm space-y-4 p-4">
-             <div className="border-b pb-4">
-               <p className="font-semibold text-lg">Retur Penjualan (Draft)</p>
-               <p className="text-xs text-muted-foreground">Belum disimpan</p>
-             </div>
-             <div className="space-y-1 text-xs">
-               <div className="flex justify-between">
-                 <span>No. Retur:</span>
-                 <span className="font-semibold">{noRetur}</span>
-               </div>
-               <div className="flex justify-between">
-                 <span>Tanggal Retur:</span>
-                 <span className="font-semibold">{tanggal}</span>
-               </div>
-               <div className="flex justify-between">
-                 <span>Customer:</span>
-                 <span className="font-semibold">{customers.find(c => c.id === selectedCustomer)?.name || '-'}</span>
-               </div>
-               <div className="flex justify-between">
-                 <span>Alasan Retur:</span>
-                 <span className="font-semibold">{alasan || '-'}</span>
-               </div>
-               <div className="flex justify-between">
-                 <span>Metode Pengembalian:</span>
-                 <span className="font-semibold">{metodeKembalian || '-'}</span>
-               </div>
-               {catatan && (
-                 <div className="flex justify-between">
-                   <span>Catatan:</span>
-                   <span className="font-semibold">{catatan}</span>
-                 </div>
-               )}
-             </div>
-             <div className="border-t pt-4">
-               <p className="text-xs font-semibold text-muted-foreground mb-2">Daftar Barang Retur</p>
-               <table className="w-full text-xs">
-                 <thead className="border-b bg-muted/50">
-                   <tr>
-                     <th className="text-left py-2">No</th>
-                     <th className="text-left py-2">Produk</th>
-                     <th className="text-right py-2">Qty</th>
-                     <th className="text-right py-2">Harga</th>
-                     <th className="text-right py-2">Subtotal</th>
-                   </tr>
-                 </thead>
-                 <tbody>
-                   {items.map((item, idx) => (
-                     <tr key={idx} className="border-b">
-                       <td className="py-2">{idx + 1}</td>
-                       <td className="py-2">{item.nama}</td>
-                       <td className="text-right">{item.qty}</td>
-                       <td className="text-right">{formatCurrency(item.harga)}</td>
-                       <td className="text-right font-semibold">{formatCurrency(item.subtotal)}</td>
-                     </tr>
-                   ))}
-                 </tbody>
-               </table>
-             </div>
-             <div className="space-y-1 text-xs border-t pt-4">
-               <div className="flex justify-between">
-                 <span>Total Item:</span>
-                 <span className="font-semibold">{items.length} produk</span>
-               </div>
-               <div className="flex justify-between">
-                 <span>Total Qty:</span>
-                 <span className="font-semibold">{items.reduce((s, i) => s + i.qty, 0)}</span>
-               </div>
-               <div className="flex justify-between font-semibold text-base border-t pt-2">
-                 <span>Total Nilai Retur:</span>
-                 <span className="text-warning">{formatCurrency(totalNilai)}</span>
-               </div>
-             </div>
-           </div>
-         );
-         return (
-           <DraftPreviewDialog
-             isOpen={isDraftPreviewOpen}
-             onClose={() => setIsDraftPreviewOpen(false)}
-             content={draftPreviewContent}
-             title="Preview Retur Penjualan"
-           />
-         );
-       })()}
+<DraftPreviewDialog
+         isOpen={isDraftPreviewOpen}
+         onClose={() => setIsDraftPreviewOpen(false)}
+         content={draftPreviewContent}
+         title="Preview Retur Penjualan"
+       />
      </MainLayout>
    );
  };

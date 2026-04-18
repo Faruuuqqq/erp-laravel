@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/contexts/AuthContext';
@@ -28,6 +29,14 @@ interface StoreForm {
   address: string;
   npwp: string;
   siup: string;
+  email: string;
+  bank_name: string;
+  bank_account_number: string;
+  bank_account_name: string;
+  billing_due_days: string;
+  billing_payment_terms: string;
+  billing_approver_name: string;
+  billing_approver_title: string;
 }
 
 interface PasswordForm {
@@ -54,6 +63,14 @@ interface SettingsData {
     address?: string;
     npwp?: string;
     siup?: string;
+    email?: string;
+    bank_name?: string;
+    bank_account_number?: string;
+    bank_account_name?: string;
+    billing_due_days?: number;
+    billing_payment_terms?: string;
+    billing_approver_name?: string;
+    billing_approver_title?: string;
   };
   notifications: {
     low_stock_alert?: boolean;
@@ -84,6 +101,14 @@ const Pengaturan = () => {
      address: '',
      npwp: '',
      siup: '',
+     email: '',
+     bank_name: '',
+     bank_account_number: '',
+     bank_account_name: '',
+     billing_due_days: '7',
+     billing_payment_terms: 'Pembayaran maksimal {due_days} hari sejak tanggal terbit dokumen.',
+     billing_approver_name: 'Finance',
+     billing_approver_title: 'AR Officer',
    });
 
    // Password Form State
@@ -113,7 +138,15 @@ const Pengaturan = () => {
       settingsData.data.store.phone !== storeForm.phone ||
       settingsData.data.store.address !== storeForm.address ||
       settingsData.data.store.npwp !== storeForm.npwp ||
-      settingsData.data.store.siup !== storeForm.siup
+      settingsData.data.store.siup !== storeForm.siup ||
+      (settingsData.data.store.email ?? '') !== storeForm.email ||
+      (settingsData.data.store.bank_name ?? '') !== storeForm.bank_name ||
+      (settingsData.data.store.bank_account_number ?? '') !== storeForm.bank_account_number ||
+      (settingsData.data.store.bank_account_name ?? '') !== storeForm.bank_account_name ||
+      String(settingsData.data.store.billing_due_days ?? 7) !== storeForm.billing_due_days ||
+      (settingsData.data.store.billing_payment_terms ?? 'Pembayaran maksimal {due_days} hari sejak tanggal terbit dokumen.') !== storeForm.billing_payment_terms ||
+      (settingsData.data.store.billing_approver_name ?? 'Finance') !== storeForm.billing_approver_name ||
+      (settingsData.data.store.billing_approver_title ?? 'AR Officer') !== storeForm.billing_approver_title
     );
 
     // Load settings data when fetched - only once to prevent overwriting user changes
@@ -137,6 +170,14 @@ const Pengaturan = () => {
             address: data.store.address || '',
             npwp: data.store.npwp || '',
             siup: data.store.siup || '',
+            email: data.store.email || '',
+            bank_name: data.store.bank_name || '',
+            bank_account_number: data.store.bank_account_number || '',
+            bank_account_name: data.store.bank_account_name || '',
+            billing_due_days: String(data.store.billing_due_days ?? 7),
+            billing_payment_terms: data.store.billing_payment_terms || 'Pembayaran maksimal {due_days} hari sejak tanggal terbit dokumen.',
+            billing_approver_name: data.store.billing_approver_name || 'Finance',
+            billing_approver_title: data.store.billing_approver_title || 'AR Officer',
           });
         }
         
@@ -251,13 +292,38 @@ const Pengaturan = () => {
        originalData.phone === storeForm.phone &&
        originalData.address === storeForm.address &&
        originalData.npwp === storeForm.npwp &&
-       originalData.siup === storeForm.siup
+       originalData.siup === storeForm.siup &&
+       (originalData.email ?? '') === storeForm.email &&
+       (originalData.bank_name ?? '') === storeForm.bank_name &&
+       (originalData.bank_account_number ?? '') === storeForm.bank_account_number &&
+       (originalData.bank_account_name ?? '') === storeForm.bank_account_name &&
+       String(originalData.billing_due_days ?? 7) === storeForm.billing_due_days &&
+       (originalData.billing_payment_terms ?? 'Pembayaran maksimal {due_days} hari sejak tanggal terbit dokumen.') === storeForm.billing_payment_terms &&
+       (originalData.billing_approver_name ?? 'Finance') === storeForm.billing_approver_name &&
+       (originalData.billing_approver_title ?? 'AR Officer') === storeForm.billing_approver_title
      ) {
        toast({ title: 'Tidak ada perubahan pada informasi toko' });
        return;
      }
 
-     updateStoreMutation.mutate(storeForm, {
+     const billingDueDays = Number.parseInt(storeForm.billing_due_days, 10);
+     if (!Number.isFinite(billingDueDays) || billingDueDays < 1 || billingDueDays > 90) {
+       toast({ title: 'Jatuh tempo harus antara 1 sampai 90 hari', variant: 'destructive' });
+       return;
+     }
+
+     if (!storeForm.billing_payment_terms.trim()) {
+       toast({ title: 'Syarat pembayaran harus diisi', variant: 'destructive' });
+       return;
+     }
+
+     updateStoreMutation.mutate({
+       ...storeForm,
+       billing_due_days: billingDueDays,
+       billing_payment_terms: storeForm.billing_payment_terms.trim(),
+       billing_approver_name: storeForm.billing_approver_name.trim(),
+       billing_approver_title: storeForm.billing_approver_title.trim(),
+     }, {
        onSuccess: () => {
          toast({
            title: 'Informasi toko berhasil diperbarui',
@@ -487,9 +553,9 @@ const Pengaturan = () => {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                 <div className="space-y-2">
-                   <Label htmlFor="store_name">Nama Toko *</Label>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="store_name">Nama Toko *</Label>
                    <Input
                      id="store_name"
                      aria-label="Nama toko"
@@ -498,21 +564,34 @@ const Pengaturan = () => {
                      placeholder="Nama toko Anda"
                    />
                  </div>
-                 <div className="space-y-2">
-                   <Label htmlFor="phone">No. Telepon</Label>
-                   <Input
+                  <div className="space-y-2">
+                    <Label htmlFor="phone">No. Telepon</Label>
+                    <Input
                      id="phone"
                      type="tel"
                      aria-label="Nomor telepon toko"
                      value={storeForm.phone}
                      onChange={(e) => setStoreForm({ ...storeForm, phone: e.target.value })}
-                     placeholder="021-1234567"
-                   />
-                 </div>
-               </div>
-               <div className="space-y-2">
-                 <Label htmlFor="address">Alamat</Label>
-                 <Input
+                      placeholder="021-1234567"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="store_email">Email Toko</Label>
+                  <Input
+                    id="store_email"
+                    type="email"
+                    aria-label="Email toko"
+                    value={storeForm.email}
+                    onChange={(e) => setStoreForm({ ...storeForm, email: e.target.value })}
+                    placeholder="billing@tokoanda.com"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="address">Alamat</Label>
+                  <Input
                    id="address"
                    aria-label="Alamat toko"
                    value={storeForm.address}
@@ -539,10 +618,103 @@ const Pengaturan = () => {
                      value={storeForm.siup}
                      onChange={(e) => setStoreForm({ ...storeForm, siup: e.target.value })}
                      placeholder="Masukkan No. SIUP"
-                   />
+                    />
+                  </div>
                  </div>
-                </div>
-                <form onSubmit={(e) => { e.preventDefault(); handleStoreSave(); }}>
+
+                 <Separator />
+
+                 <div className="space-y-1">
+                   <p className="text-sm font-semibold">Konfigurasi Dokumen Kontra Bon</p>
+                   <p className="text-xs text-muted-foreground">Dipakai untuk PDF penagihan resmi (bank transfer, jatuh tempo, dan penanggung jawab).</p>
+                 </div>
+
+                 <div className="grid gap-4 md:grid-cols-2">
+                   <div className="space-y-2">
+                     <Label htmlFor="bank_name">Nama Bank</Label>
+                     <Input
+                       id="bank_name"
+                       aria-label="Nama bank penerima pembayaran"
+                       value={storeForm.bank_name}
+                       onChange={(e) => setStoreForm({ ...storeForm, bank_name: e.target.value })}
+                       placeholder="BCA / Mandiri"
+                     />
+                   </div>
+                   <div className="space-y-2">
+                     <Label htmlFor="bank_account_number">No. Rekening</Label>
+                     <Input
+                       id="bank_account_number"
+                       aria-label="Nomor rekening penerima"
+                       value={storeForm.bank_account_number}
+                       onChange={(e) => setStoreForm({ ...storeForm, bank_account_number: e.target.value })}
+                       placeholder="1234567890"
+                     />
+                   </div>
+                 </div>
+
+                 <div className="grid gap-4 md:grid-cols-2">
+                   <div className="space-y-2">
+                     <Label htmlFor="bank_account_name">Nama Pemilik Rekening</Label>
+                     <Input
+                       id="bank_account_name"
+                       aria-label="Nama pemilik rekening"
+                       value={storeForm.bank_account_name}
+                       onChange={(e) => setStoreForm({ ...storeForm, bank_account_name: e.target.value })}
+                       placeholder="PT Toko Anda"
+                     />
+                   </div>
+                   <div className="space-y-2">
+                     <Label htmlFor="billing_due_days">Jatuh Tempo (hari)</Label>
+                     <Input
+                       id="billing_due_days"
+                       type="number"
+                       min={1}
+                       max={90}
+                       aria-label="Jumlah hari jatuh tempo kontra bon"
+                       value={storeForm.billing_due_days}
+                       onChange={(e) => setStoreForm({ ...storeForm, billing_due_days: e.target.value })}
+                       placeholder="7"
+                     />
+                   </div>
+                 </div>
+
+                 <div className="space-y-2">
+                   <Label htmlFor="billing_payment_terms">Syarat Pembayaran</Label>
+                   <Textarea
+                     id="billing_payment_terms"
+                     aria-label="Template syarat pembayaran kontra bon"
+                     rows={4}
+                     value={storeForm.billing_payment_terms}
+                     onChange={(e) => setStoreForm({ ...storeForm, billing_payment_terms: e.target.value })}
+                     placeholder="Gunakan placeholder {due_days}"
+                   />
+                   <p className="text-xs text-muted-foreground">Gunakan placeholder <code>{'{due_days}'}</code> agar otomatis diganti sesuai nilai jatuh tempo.</p>
+                 </div>
+
+                 <div className="grid gap-4 md:grid-cols-2">
+                   <div className="space-y-2">
+                     <Label htmlFor="billing_approver_name">Nama Penanggung Jawab</Label>
+                     <Input
+                       id="billing_approver_name"
+                       aria-label="Nama penanggung jawab kontra bon"
+                       value={storeForm.billing_approver_name}
+                       onChange={(e) => setStoreForm({ ...storeForm, billing_approver_name: e.target.value })}
+                       placeholder="Finance"
+                     />
+                   </div>
+                   <div className="space-y-2">
+                     <Label htmlFor="billing_approver_title">Jabatan Penanggung Jawab</Label>
+                     <Input
+                       id="billing_approver_title"
+                       aria-label="Jabatan penanggung jawab kontra bon"
+                       value={storeForm.billing_approver_title}
+                       onChange={(e) => setStoreForm({ ...storeForm, billing_approver_title: e.target.value })}
+                       placeholder="AR Officer"
+                     />
+                   </div>
+                 </div>
+
+                 <form onSubmit={(e) => { e.preventDefault(); handleStoreSave(); }}>
                   <Button 
                     type="submit"
                     disabled={updateStoreMutation.isPending || !isStoreDirty}

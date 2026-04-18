@@ -1,12 +1,13 @@
-import { ReactNode, useCallback, useState } from 'react';
+import { ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Printer, FileDown, X } from 'lucide-react';
+import { Printer, FileDown } from 'lucide-react';
 import { useLazyPdfExport } from '@/hooks/useLazyPdfExport';
 import { useToast } from '@/hooks/use-toast';
 import { usePrint } from '@/contexts/usePrint';
+import { useDownloadTransactionPdf } from '@/hooks/api/useTransactions';
 
 interface PrintPreviewDialogProps {
   isOpen: boolean;
@@ -16,6 +17,10 @@ interface PrintPreviewDialogProps {
   documentId: string;
   filename?: string;
   printContent?: ReactNode;
+  backendPdf?: {
+    transactionId: string;
+    documentType: 'invoice' | 'receipt' | 'document';
+  };
 }
 
 export const PrintPreviewDialog = ({
@@ -26,12 +31,21 @@ export const PrintPreviewDialog = ({
   documentId,
   filename = 'document',
   printContent,
+  backendPdf,
 }: PrintPreviewDialogProps) => {
   const { toast } = useToast();
   const { printDocument } = usePrint();
   const { exportToPdf } = useLazyPdfExport();
+  const downloadTransactionPdf = useDownloadTransactionPdf();
   const [isExporting, setIsExporting] = useState(false);
   const [customFilename, setCustomFilename] = useState(filename);
+  const exportTargetId = useMemo(() => `${documentId}-export-root`, [documentId]);
+
+  useEffect(() => {
+    if (isOpen) {
+      setCustomFilename(filename);
+    }
+  }, [filename, isOpen]);
 
   const handlePrint = useCallback(() => {
     try {
@@ -52,14 +66,23 @@ export const PrintPreviewDialog = ({
   const handleExportPdf = useCallback(async () => {
     try {
       setIsExporting(true);
-      const pdfFilename = customFilename.endsWith('.pdf')
-        ? customFilename
-        : `${customFilename}.pdf`;
-      
-      await exportToPdf(documentId, {
-        filename: pdfFilename,
-        title: title,
-      });
+      const trimmedFilename = customFilename.trim();
+      const pdfFilename = trimmedFilename.endsWith('.pdf')
+        ? trimmedFilename
+        : `${trimmedFilename}.pdf`;
+
+      if (backendPdf) {
+        await downloadTransactionPdf.mutateAsync({
+          transactionId: backendPdf.transactionId,
+          filename: pdfFilename,
+          documentType: backendPdf.documentType,
+        });
+      } else {
+        await exportToPdf(exportTargetId, {
+          filename: pdfFilename,
+          title: title,
+        });
+      }
       
       toast({
         title: 'Berhasil',
@@ -76,7 +99,7 @@ export const PrintPreviewDialog = ({
     } finally {
       setIsExporting(false);
     }
-  }, [customFilename, documentId, title, exportToPdf, toast, onClose]);
+  }, [backendPdf, customFilename, downloadTransactionPdf, exportTargetId, title, exportToPdf, toast, onClose]);
 
   return (
     <Dialog open={isOpen} onOpenChange={(state) => {
@@ -84,22 +107,12 @@ export const PrintPreviewDialog = ({
     }}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center justify-between">
-            <span>Preview - {title}</span>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6"
-              onClick={onClose}
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </DialogTitle>
+          <DialogTitle>Preview - {title}</DialogTitle>
         </DialogHeader>
 
         {/* Print Preview Area */}
         <div
-          id={documentId}
+          id={exportTargetId}
           className="border rounded-lg p-6 bg-white text-black overflow-auto max-h-[500px]"
         >
           {children}
@@ -142,7 +155,7 @@ export const PrintPreviewDialog = ({
           </Button>
           <Button
             onClick={handleExportPdf}
-            disabled={isExporting || !customFilename}
+            disabled={isExporting || !customFilename.trim()}
             className="h-9 text-sm"
           >
             <FileDown className="mr-1.5 h-4 w-4" />
