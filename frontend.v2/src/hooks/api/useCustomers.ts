@@ -12,19 +12,57 @@ interface CustomerQueryParams {
 
 interface CreateCustomerRequest {
   name: string;
-  phone: string;
+  phone?: string;
+  phone2?: string;
   email?: string;
   address?: string;
-  credit_limit?: number;
+  city?: string;
+  creditLimit?: number;
+  discount?: string;
+  warehouse?: string;
+  priceList?: string;
+  area?: string;
+  notes?: string;
+  npwp?: string;
 }
 
 interface UpdateCustomerRequest {
   name?: string;
   phone?: string;
+  phone2?: string;
   email?: string;
   address?: string;
-  credit_limit?: number;
+  city?: string;
+  creditLimit?: number;
+  discount?: string;
+  warehouse?: string;
+  priceList?: string;
+  area?: string;
+  notes?: string;
+  npwp?: string;
 }
+
+const mapCustomerPayloadToBackend = (
+  data: CreateCustomerRequest | UpdateCustomerRequest
+): Record<string, unknown> => {
+  const payload: Record<string, unknown> = {
+    name: data.name,
+    phone: data.phone,
+    phone2: data.phone2,
+    email: data.email,
+    address: data.address,
+    city: data.city,
+    credit_limit: data.creditLimit,
+    discount: data.discount,
+    warehouse: data.warehouse,
+    price_list: data.priceList,
+    daerah: data.area,
+    keterangan: data.notes,
+    npwp: data.npwp,
+  };
+
+  return Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== undefined));
+};
 
 // Query key factory
 export const customerKeys = {
@@ -56,7 +94,7 @@ export const useCustomer = (id: string) => {
 export const useCreateCustomer = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: CreateCustomerRequest) => api.post('/customers', data),
+    mutationFn: (data: CreateCustomerRequest) => api.post('/customers', mapCustomerPayloadToBackend(data)),
     onMutate: async (newCustomer) => {
       await queryClient.cancelQueries({ queryKey: customerKeys.lists() });
       const previousCustomers = queryClient.getQueryData(customerKeys.lists());
@@ -89,7 +127,7 @@ export const useUpdateCustomer = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: UpdateCustomerRequest }) =>
-      api.put(`/customers/${id}`, data),
+      api.put(`/customers/${id}`, mapCustomerPayloadToBackend(data)),
     onMutate: async ({ id, data }) => {
       await queryClient.cancelQueries({ queryKey: customerKeys.detail(id) });
       const previousCustomer = queryClient.getQueryData(customerKeys.detail(id));

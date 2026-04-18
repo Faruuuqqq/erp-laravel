@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -9,19 +9,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '@/components/ui/form';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Loader2 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PHONE_DIGITS_REGEX = /^\d{10,}$/;
+const NON_DIGIT_REGEX = /\D/g;
 
 export type FormFieldType =
   | 'text'
@@ -83,6 +79,8 @@ export interface FormBuilderProps {
   touched?: Record<string, boolean>;
   layout?: 'vertical' | 'horizontal' | 'grid';
   columns?: number;
+  density?: 'default' | 'compact';
+  stickyActions?: boolean;
   submitLabel?: string;
   resetLabel?: string;
   showReset?: boolean;
@@ -168,6 +166,8 @@ export function FormBuilder({
   touched = {},
   layout = 'vertical',
   columns = 2,
+  density = 'default',
+  stickyActions = false,
   submitLabel = 'Simpan',
   resetLabel = 'Reset',
   showReset = true,
@@ -178,11 +178,25 @@ export function FormBuilder({
   const [internalErrors, setInternalErrors] = useState<Record<string, string>>({});
   const [internalTouched, setInternalTouched] = useState<Record<string, boolean>>({});
   const [isValidating, setIsValidating] = useState(false);
+  const internalValuesRef = useRef(internalValues);
+  const onChangeRef = useRef(onChange);
+
+  useEffect(() => {
+    internalValuesRef.current = internalValues;
+  }, [internalValues]);
+
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
 
   // Get all fields (flat list)
   const allFields = useMemo(() => {
     return schema.fields || [];
   }, [schema.fields]);
+
+  const fieldByName = useMemo(() => {
+    return new Map(allFields.map(field => [field.name, field]));
+  }, [allFields]);
 
   // Filter visible fields
   const visibleFields = useMemo(() => {
@@ -200,8 +214,7 @@ export function FormBuilder({
     }
 
     if (value && field.type === 'email') {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(value)) {
+      if (!EMAIL_REGEX.test(String(value))) {
         return `${field.label} tidak valid`;
       }
     }
@@ -215,7 +228,7 @@ export function FormBuilder({
     }
 
     if (value && field.type === 'phone') {
-      if (!/^\d{10,}$/.test(value.replace(/\D/g, ''))) {
+      if (!PHONE_DIGITS_REGEX.test(String(value).replace(NON_DIGIT_REGEX, ''))) {
         return `${field.label} harus berupa angka minimal 10 digit`;
       }
     }
@@ -266,32 +279,36 @@ export function FormBuilder({
 
   // Handle field change
   const handleChange = useCallback((fieldName: string, value: any) => {
-    const newValues = { ...internalValues, [fieldName]: value };
-    setInternalValues(newValues);
-    onChange?.(newValues);
+    setInternalValues(prevValues => {
+      const newValues = { ...prevValues, [fieldName]: value };
+      internalValuesRef.current = newValues;
+      onChangeRef.current?.(newValues);
+      return newValues;
+    });
 
-    // Clear error when user starts typing
-    if (internalErrors[fieldName]) {
-      setInternalErrors(prev => {
-        const newErrors = { ...prev };
-        delete newErrors[fieldName];
-        return newErrors;
-      });
-    }
-  }, [internalValues, internalErrors, onChange]);
+    setInternalErrors(prevErrors => {
+      if (!(fieldName in prevErrors)) {
+        return prevErrors;
+      }
+
+      const newErrors = { ...prevErrors };
+      delete newErrors[fieldName];
+      return newErrors;
+    });
+  }, []);
 
   // Handle field blur
   const handleBlur = useCallback((fieldName: string) => {
     setInternalTouched(prev => ({ ...prev, [fieldName]: true }));
 
-    const field = allFields.find(f => f.name === fieldName);
+    const field = fieldByName.get(fieldName);
     if (field) {
-      const error = validateField(field, internalValues[fieldName]);
+      const error = validateField(field, internalValuesRef.current[fieldName]);
       if (error) {
         setInternalErrors(prev => ({ ...prev, [fieldName]: error }));
       }
     }
-  }, [internalValues, allFields, validateField]);
+  }, [fieldByName, validateField]);
 
   // Handle submit
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
@@ -320,7 +337,7 @@ export function FormBuilder({
   }, [values]);
 
   // Render form field
-  const renderField = (field: FormFieldSchema, index: number) => {
+  const renderField = useCallback((field: FormFieldSchema) => {
     const fieldError = errors[field.name] || internalErrors[field.name];
     const fieldTouched = touched[field.name] ?? internalTouched[field.name];
     const fieldValue = values[field.name] ?? internalValues[field.name];
@@ -346,6 +363,7 @@ export function FormBuilder({
             field={field}
             error={fieldError}
             touched={fieldTouched}
+            className={density === 'compact' ? 'space-y-1.5' : undefined}
           >
             <Select
               value={String(fieldValue ?? '')}
@@ -354,7 +372,7 @@ export function FormBuilder({
             >
               <SelectTrigger
                 id={field.name}
-                className={getFieldErrorClass(hasError)}
+                className={cn(getFieldErrorClass(hasError), density === 'compact' && 'h-9')}
                 aria-invalid={hasError}
                 aria-describedby={
                   hasError ? `${field.name}-error` : undefined
@@ -402,6 +420,7 @@ export function FormBuilder({
             field={field}
             error={fieldError}
             touched={fieldTouched}
+            className={density === 'compact' ? 'space-y-1.5' : undefined}
           >
             <div className="space-y-2">
               {field.options?.map(option => (
@@ -432,6 +451,7 @@ export function FormBuilder({
             field={field}
             error={fieldError}
             touched={fieldTouched}
+            className={density === 'compact' ? 'space-y-1.5' : undefined}
           >
             <Textarea
               id={field.name}
@@ -441,7 +461,7 @@ export function FormBuilder({
               onBlur={() => handleBlur(field.name)}
               disabled={isFieldDisabled}
               maxLength={field.maxLength}
-              className={getFieldErrorClass(hasError)}
+              className={cn(getFieldErrorClass(hasError), density === 'compact' && 'min-h-[72px]')}
               aria-invalid={hasError}
               aria-describedby={
                 hasError ? `${field.name}-error` : undefined
@@ -458,13 +478,14 @@ export function FormBuilder({
             field={field}
             error={fieldError}
             touched={fieldTouched}
+            className={density === 'compact' ? 'space-y-1.5' : undefined}
           >
             <Input
               id={field.name}
               type={field.type}
               placeholder={field.placeholder}
               {...commonProps}
-              className={getFieldErrorClass(hasError)}
+              className={cn(getFieldErrorClass(hasError), density === 'compact' && 'h-9')}
               min={field.min}
               max={field.max}
               maxLength={field.maxLength}
@@ -478,26 +499,60 @@ export function FormBuilder({
         )}
       </div>
     );
-  };
+  }, [
+    errors,
+    internalErrors,
+    touched,
+    internalTouched,
+    values,
+    internalValues,
+    isLoading,
+    isSubmitting,
+    handleChange,
+    handleBlur,
+    layout,
+    columns,
+    density,
+  ]);
 
-  const gridStyle =
+  const resolvedColumns = Math.max(1, Math.min(columns, 4));
+  const gridColumnClass =
+    resolvedColumns === 1
+      ? 'grid-cols-1'
+      : resolvedColumns === 2
+        ? 'grid-cols-1 md:grid-cols-2'
+        : resolvedColumns === 3
+          ? 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3'
+          : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-4';
+
+  const gridClass =
     layout === 'grid'
-      ? {
-        display: 'grid',
-        gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
-        gap: '1.5rem',
-      }
-      : undefined;
+      ? cn('grid', gridColumnClass, density === 'compact' ? 'gap-3' : 'gap-6')
+      : '';
 
   const containerClass =
     layout === 'horizontal'
       ? 'flex flex-wrap gap-4'
       : layout === 'grid'
-        ? ''
-        : 'space-y-6';
+        ? gridClass
+        : density === 'compact'
+          ? 'space-y-4'
+          : 'space-y-6';
+
+  const isActionsDisabled = isLoading || isSubmitting || isValidating;
+  const isSubmitBusy = isSubmitting || isValidating;
+  const submitButtonText = isSubmitting
+    ? 'Menyimpan...'
+    : isValidating
+      ? 'Memvalidasi...'
+      : submitLabel;
 
   return (
-    <form onSubmit={handleSubmit} className={`space-y-6 ${className}`}>
+    <form
+      onSubmit={handleSubmit}
+      className={cn(density === 'compact' ? 'space-y-4' : 'space-y-6', className)}
+      aria-busy={isSubmitBusy}
+    >
       {/* Display error summary if there are validation errors */}
       {Object.keys(internalErrors).length > 0 && Object.keys(internalTouched).length > 0 && (
         <Alert variant="destructive">
@@ -511,37 +566,50 @@ export function FormBuilder({
       {/* Sections */}
       {schema.sections ? (
         schema.sections.map((section, sectionIdx) => (
-          <div key={sectionIdx} className="space-y-4">
+          <div key={sectionIdx} className={density === 'compact' ? 'space-y-3' : 'space-y-4'}>
             <div>
-              <h3 className="text-lg font-semibold">{section.title}</h3>
+              <h3 className={cn('font-semibold', density === 'compact' ? 'text-base' : 'text-lg')}>
+                {section.title}
+              </h3>
               {section.description && (
-                <p className="text-sm text-muted-foreground">{section.description}</p>
+                <p className={cn('text-muted-foreground', density === 'compact' ? 'text-xs' : 'text-sm')}>
+                  {section.description}
+                </p>
               )}
             </div>
-            <div className={containerClass} style={gridStyle}>
-              {allFields.map((field, idx) => {
+            <div className={containerClass}>
+              {allFields.map(field => {
                 if (!section.fieldNames.includes(field.name)) return null;
                 if (field.hidden) return null;
                 if (field.showIf && !field.showIf(internalValues)) return null;
-                return renderField(field, idx);
+                return renderField(field);
               })}
             </div>
           </div>
         ))
       ) : (
-        <div className={containerClass} style={gridStyle}>
-          {visibleFields.map((field, idx) => renderField(field, idx))}
+        <div className={containerClass}>
+          {visibleFields.map(renderField)}
         </div>
       )}
 
       {/* Form actions */}
-      <div className="flex gap-3 justify-end pt-6 border-t">
+      <div
+        className={cn(
+          'flex flex-wrap items-center justify-end gap-2 border-t px-4',
+          density === 'compact' ? 'pt-4' : 'pt-6',
+          stickyActions && 'sticky bottom-0 z-10 -mx-4 bg-background/95 px-4 pb-2 backdrop-blur supports-[backdrop-filter]:bg-background/80'
+        )}
+      >
         {showReset && (
           <Button
             type="button"
             variant="outline"
             onClick={handleReset}
-            disabled={isLoading || isSubmitting || isValidating}
+            disabled={isActionsDisabled}
+            aria-label={resetLabel}
+            title="Reset semua field ke nilai awal"
+            className={density === 'compact' ? 'h-9' : undefined}
           >
             {resetLabel}
           </Button>
@@ -549,9 +617,18 @@ export function FormBuilder({
         <Button
           type="submit"
           variant={submitVariant}
-          disabled={isLoading || isSubmitting || isValidating}
+          disabled={isActionsDisabled}
+          aria-label={submitLabel}
+          aria-busy={isSubmitBusy}
+          title={
+            isSubmitBusy
+              ? 'Form sedang diproses'
+              : 'Simpan data formulir'
+          }
+          className={cn('min-w-[128px]', density === 'compact' && 'h-9')}
         >
-          {isSubmitting ? 'Menyimpan...' : submitLabel}
+          {isSubmitBusy && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
+          {submitButtonText}
         </Button>
       </div>
     </form>

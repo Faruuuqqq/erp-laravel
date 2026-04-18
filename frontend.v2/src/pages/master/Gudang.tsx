@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { DeleteConfirmDialog } from '@/components/dialogs/DeleteConfirmDialog';
 import { DataTable, FormBuilder, type DataTableColumn, type FormSchema } from '@/components/common';
 import { Plus, Pencil, Trash2, Warehouse } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { StatCard } from '@/components/ui/StatCard';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -17,7 +17,6 @@ import type { Warehouse as WarehouseType } from '@/types';
 const INITIAL_FORM_VALUES = {
   name: '',
   address: '',
-  manager: '',
   status: 'aktif',
 };
 
@@ -28,8 +27,8 @@ const warehouseFormSchema: FormSchema = {
       fieldNames: ['name', 'address'],
     },
     {
-      title: 'Pengelola & Status',
-      fieldNames: ['manager', 'status'],
+      title: 'Status Gudang',
+      fieldNames: ['status'],
     },
   ],
   fields: [
@@ -48,12 +47,6 @@ const warehouseFormSchema: FormSchema = {
       type: 'textarea',
       placeholder: 'Alamat gudang',
       maxLength: 500,
-    },
-    {
-      name: 'manager',
-      label: 'Pengelola',
-      type: 'text',
-      placeholder: 'Nama pengelola',
     },
     {
       name: 'status',
@@ -111,19 +104,18 @@ const GudangPage = () => {
       render: (addr) => <span className="max-w-48 line-clamp-2">{addr || '—'}</span>,
     },
     {
-      key: 'manager',
-      header: 'Pengelola',
-      sortable: false,
-      filterable: false,
-      render: (manager) => manager || '—',
-    },
-    {
       key: 'status',
       header: 'Status',
       sortable: true,
       filterable: true,
       render: (status) => (
-        <span className={`text-xs font-medium ${status === 'aktif' ? 'text-green-600' : 'text-yellow-600'}`}>
+        <span
+          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
+            status === 'aktif'
+              ? 'bg-green-100 text-green-700'
+              : 'bg-yellow-100 text-yellow-700'
+          }`}
+        >
           {status === 'aktif' ? 'Aktif' : 'Nonaktif'}
         </span>
       ),
@@ -140,7 +132,6 @@ const GudangPage = () => {
         setFormValues({
           name: w.name,
           address: w.address || '',
-          manager: w.manager || '',
           status: (w.status as 'aktif' | 'nonaktif') || 'aktif',
         });
         setIsAddOpen(true);
@@ -169,7 +160,6 @@ const GudangPage = () => {
                 data: {
                   name: values.name,
                   address: values.address,
-                  manager: values.manager,
                   status: values.status,
                 },
               });
@@ -177,7 +167,6 @@ const GudangPage = () => {
               await createMutation.mutateAsync({
                 name: values.name,
                 address: values.address,
-                manager: values.manager,
                 status: values.status,
               });
             }
@@ -213,12 +202,16 @@ const GudangPage = () => {
     [executeRetryable, deleteMutation]
   );
 
-  // Handle add/edit dialog close
-  const handleDialogClose = () => {
-    setIsAddOpen(false);
-    setEditItem(null);
-    setFormValues(INITIAL_FORM_VALUES);
-  };
+  const handleDialogOpenChange = useCallback((open: boolean) => {
+    setIsAddOpen(open);
+
+    if (!open) {
+      setEditItem(null);
+      setFormValues(INITIAL_FORM_VALUES);
+    }
+  }, []);
+
+  const isEditMode = Boolean(editItem);
 
   return (
     <MainLayout title="Gudang" subtitle="Kelola daftar gudang penyimpanan">
@@ -267,6 +260,7 @@ const GudangPage = () => {
           <DataTable
             columns={columns}
             data={warehouses}
+            variant="master"
             isLoading={isLoading}
             filterable
             pagination
@@ -282,23 +276,35 @@ const GudangPage = () => {
       </Card>
 
       {/* Add/Edit Gudang Dialog with FormBuilder */}
-      <Dialog open={isAddOpen} onOpenChange={handleDialogClose}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>
-              {editItem ? 'Edit Gudang' : 'Tambah Gudang Baru'}
+      <Dialog open={isAddOpen} onOpenChange={handleDialogOpenChange}>
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-[940px] overflow-hidden p-0 sm:max-h-[92vh]">
+          <DialogHeader className="border-b bg-muted/20 px-5 py-3 pr-12 sm:px-6">
+            <DialogTitle className="flex items-center gap-2 text-base sm:text-lg">
+              <Warehouse className="h-4 w-4 text-primary" />
+              {isEditMode ? 'Edit Gudang' : 'Tambah Gudang Baru'}
             </DialogTitle>
+            <DialogDescription>
+              {isEditMode
+                ? 'Perbarui informasi gudang agar alur stok dan distribusi tetap akurat.'
+                : 'Tambahkan gudang baru untuk mengelola penyimpanan dan distribusi barang.'}
+            </DialogDescription>
           </DialogHeader>
-          <FormBuilder
-            schema={warehouseFormSchema}
-            values={formValues}
-            onChange={setFormValues}
-            onSubmit={handleFormSubmit}
-            isSubmitting={isSubmitting}
-            layout="vertical"
-            submitLabel={editItem ? 'Perbarui' : 'Tambah'}
-            showReset={false}
-          />
+          <div className="max-h-[calc(92vh-5rem)] overflow-y-auto px-4 py-3 sm:px-5 sm:py-4">
+            <FormBuilder
+              schema={warehouseFormSchema}
+              values={formValues}
+              onChange={setFormValues}
+              onSubmit={handleFormSubmit}
+              isSubmitting={isSubmitting}
+              layout="grid"
+              columns={2}
+              density="compact"
+              stickyActions
+              submitLabel={isEditMode ? 'Perbarui' : 'Tambah'}
+              showReset={false}
+              className="space-y-4"
+            />
+          </div>
         </DialogContent>
       </Dialog>
 

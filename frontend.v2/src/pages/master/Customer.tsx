@@ -7,7 +7,7 @@ import { DeleteConfirmDialog } from '@/components/dialogs/DeleteConfirmDialog';
 import { DataTable, FormBuilder, type DataTableColumn, type FormSchema } from '@/components/common';
 
 import { Plus, Pencil, Trash2, Phone, MapPin, AlertCircle, Users } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { StatCard } from '@/components/ui/StatCard';
 import { useToast } from '@/hooks/use-toast';
 import { useCustomers, useCreateCustomer, useUpdateCustomer, useDeleteCustomer } from '@/hooks/api/useCustomers';
@@ -18,20 +18,32 @@ import type { Customer } from '@/types';
 const INITIAL_FORM_VALUES = {
   name: '',
   phone: '',
+  phone2: '',
   email: '',
+  city: '',
   address: '',
-  credit_limit: '10000000',
+  creditLimit: '0',
+  discount: '',
+  warehouse: '',
+  priceList: '',
+  area: '',
+  npwp: '',
+  notes: '',
 };
 
 const customerFormSchema: FormSchema = {
   sections: [
     {
       title: 'Informasi Dasar',
-      fieldNames: ['name', 'phone', 'email'],
+      fieldNames: ['name', 'phone', 'phone2', 'email', 'city'],
     },
     {
       title: 'Alamat & Kredit',
-      fieldNames: ['address', 'credit_limit'],
+      fieldNames: ['address', 'creditLimit', 'discount'],
+    },
+    {
+      title: 'Preferensi Tambahan',
+      fieldNames: ['warehouse', 'priceList', 'area', 'npwp', 'notes'],
     },
   ],
   fields: [
@@ -51,26 +63,79 @@ const customerFormSchema: FormSchema = {
       placeholder: '08...',
     },
     {
+      name: 'phone2',
+      label: 'Telepon 2',
+      type: 'phone',
+      placeholder: '08... (opsional)',
+    },
+    {
       name: 'email',
       label: 'Email',
       type: 'email',
       placeholder: 'email@example.com',
     },
     {
+      name: 'city',
+      label: 'Kota',
+      type: 'text',
+      placeholder: 'Contoh: Jakarta',
+      maxLength: 50,
+    },
+    {
       name: 'address',
       label: 'Alamat',
       type: 'textarea',
       placeholder: 'Alamat lengkap pelanggan',
-      required: true,
       maxLength: 500,
     },
     {
-      name: 'credit_limit',
+      name: 'creditLimit',
       label: 'Limit Kredit (Rp)',
       type: 'number',
-      placeholder: '10000000',
-      required: true,
+      placeholder: '0',
       min: 0,
+    },
+    {
+      name: 'discount',
+      label: 'Diskon',
+      type: 'text',
+      placeholder: 'Contoh: 10% / Retail A',
+      maxLength: 50,
+    },
+    {
+      name: 'warehouse',
+      label: 'Gudang Preferensi',
+      type: 'text',
+      placeholder: 'Nama gudang default',
+      maxLength: 50,
+    },
+    {
+      name: 'priceList',
+      label: 'Price List',
+      type: 'text',
+      placeholder: 'Kategori harga customer',
+      maxLength: 50,
+    },
+    {
+      name: 'area',
+      label: 'Daerah',
+      type: 'text',
+      placeholder: 'Area distribusi',
+      maxLength: 50,
+    },
+    {
+      name: 'npwp',
+      label: 'NPWP',
+      type: 'text',
+      placeholder: 'Nomor NPWP customer',
+      maxLength: 20,
+    },
+    {
+      name: 'notes',
+      label: 'Keterangan',
+      type: 'textarea',
+      placeholder: 'Catatan tambahan customer',
+      maxLength: 255,
     },
   ],
 };
@@ -150,6 +215,7 @@ const CustomerPage = () => {
       sortable: true,
       filterable: false,
       render: (balance) => (
+        <div className="inline-flex min-w-28 items-center justify-end rounded-md bg-orange-50 px-2 py-1">
         <span
           className={`font-semibold tabular-nums ${
             balance > 0 ? 'text-orange-600' : 'text-muted-foreground'
@@ -157,6 +223,7 @@ const CustomerPage = () => {
         >
           {formatCurrency(balance)}
         </span>
+        </div>
       ),
     },
     {
@@ -165,7 +232,9 @@ const CustomerPage = () => {
       align: 'right',
       sortable: false,
       filterable: false,
-      render: (limit) => formatCurrency(limit || 0),
+      render: (limit) => (
+        <span className="tabular-nums text-muted-foreground">{formatCurrency(limit || 0)}</span>
+      ),
     },
     {
       key: 'totalTransactions',
@@ -173,7 +242,7 @@ const CustomerPage = () => {
       align: 'right',
       sortable: false,
       filterable: false,
-      render: (count) => count || 0,
+      render: (count) => <span className="tabular-nums">{count || 0}</span>,
     },
   ];
 
@@ -187,9 +256,17 @@ const CustomerPage = () => {
         setFormValues({
           name: c.name,
           phone: c.phone || '',
+          phone2: c.phone2 || '',
           email: c.email || '',
+          city: c.city || '',
           address: c.address || '',
-          credit_limit: String(c.creditLimit || 10000000),
+          creditLimit: String(c.creditLimit ?? 0),
+          discount: c.discount || '',
+          warehouse: c.warehouse || '',
+          priceList: c.priceList || '',
+          area: c.area || '',
+          npwp: c.npwp || '',
+          notes: c.notes || '',
         });
         setIsAddOpen(true);
       },
@@ -217,18 +294,34 @@ const CustomerPage = () => {
                 data: {
                   name: values.name,
                   phone: values.phone,
+                  phone2: values.phone2,
                   email: values.email,
+                  city: values.city,
                   address: values.address,
-                  credit_limit: Number(values.credit_limit),
+                  creditLimit: Number(values.creditLimit || 0),
+                  discount: values.discount,
+                  warehouse: values.warehouse,
+                  priceList: values.priceList,
+                  area: values.area,
+                  npwp: values.npwp,
+                  notes: values.notes,
                 },
               });
             } else {
               await createMutation.mutateAsync({
                 name: values.name,
                 phone: values.phone,
+                phone2: values.phone2,
                 email: values.email,
+                city: values.city,
                 address: values.address,
-                credit_limit: Number(values.credit_limit),
+                creditLimit: Number(values.creditLimit || 0),
+                discount: values.discount,
+                warehouse: values.warehouse,
+                priceList: values.priceList,
+                area: values.area,
+                npwp: values.npwp,
+                notes: values.notes,
               });
             }
             setIsAddOpen(false);
@@ -263,12 +356,16 @@ const CustomerPage = () => {
     [executeRetryable, deleteMutation]
   );
 
-  // Handle add/edit dialog close
-  const handleDialogClose = () => {
-    setIsAddOpen(false);
-    setEditItem(null);
-    setFormValues(INITIAL_FORM_VALUES);
-  };
+  const handleDialogOpenChange = useCallback((open: boolean) => {
+    setIsAddOpen(open);
+
+    if (!open) {
+      setEditItem(null);
+      setFormValues(INITIAL_FORM_VALUES);
+    }
+  }, []);
+
+  const isEditMode = Boolean(editItem);
 
   return (
     <MainLayout title="Customer" subtitle="Kelola data customer toko Anda">
@@ -317,6 +414,7 @@ const CustomerPage = () => {
           <DataTable
             columns={columns}
             data={customers}
+            variant="master"
             isLoading={isLoading}
             filterable
             pagination
@@ -332,23 +430,35 @@ const CustomerPage = () => {
       </Card>
 
       {/* Add/Edit Customer Dialog with FormBuilder */}
-      <Dialog open={isAddOpen} onOpenChange={handleDialogClose}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>
-              {editItem ? 'Edit Customer' : 'Tambah Customer Baru'}
+      <Dialog open={isAddOpen} onOpenChange={handleDialogOpenChange}>
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-[1100px] overflow-hidden p-0 sm:max-h-[92vh]">
+          <DialogHeader className="border-b bg-muted/20 px-5 py-3 pr-12 sm:px-6">
+            <DialogTitle className="flex items-center gap-2 text-base sm:text-lg">
+              <Users className="h-4 w-4 text-primary" />
+              {isEditMode ? 'Edit Customer' : 'Tambah Customer Baru'}
             </DialogTitle>
+            <DialogDescription>
+              {isEditMode
+                ? 'Perbarui informasi customer agar data transaksi dan piutang tetap akurat.'
+                : 'Lengkapi data customer baru untuk mulai mencatat transaksi dengan benar.'}
+            </DialogDescription>
           </DialogHeader>
-          <FormBuilder
-            schema={customerFormSchema}
-            values={formValues}
-            onChange={setFormValues}
-            onSubmit={handleFormSubmit}
-            isSubmitting={isSubmitting}
-            layout="vertical"
-            submitLabel={editItem ? 'Perbarui' : 'Tambah'}
-            showReset={false}
-          />
+          <div className="max-h-[calc(92vh-5rem)] overflow-y-auto px-4 py-3 sm:px-5 sm:py-4">
+            <FormBuilder
+              schema={customerFormSchema}
+              values={formValues}
+              onChange={setFormValues}
+              onSubmit={handleFormSubmit}
+              isSubmitting={isSubmitting}
+              layout="grid"
+              columns={2}
+              density="compact"
+              stickyActions
+              submitLabel={isEditMode ? 'Perbarui' : 'Tambah'}
+              showReset={false}
+              className="space-y-4"
+            />
+          </div>
         </DialogContent>
       </Dialog>
 

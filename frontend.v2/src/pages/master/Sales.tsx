@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { DeleteConfirmDialog } from '@/components/dialogs/DeleteConfirmDialog';
 import { DataTable, FormBuilder, type DataTableColumn, type FormSchema } from '@/components/common';
 import { Plus, Pencil, Trash2, TrendingUp } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { StatCard } from '@/components/ui/StatCard';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -19,6 +19,7 @@ const INITIAL_FORM_VALUES = {
   name: '',
   phone: '',
   email: '',
+  address: '',
   area: '',
   status: 'aktif',
 };
@@ -27,7 +28,7 @@ const salesFormSchema: FormSchema = {
   sections: [
     {
       title: 'Informasi Dasar',
-      fieldNames: ['name', 'phone', 'email'],
+      fieldNames: ['name', 'phone', 'email', 'address'],
     },
     {
       title: 'Area Kerja & Status',
@@ -61,6 +62,13 @@ const salesFormSchema: FormSchema = {
       label: 'Area Kerja',
       type: 'text',
       placeholder: 'Jakarta Utara',
+    },
+    {
+      name: 'address',
+      label: 'Alamat',
+      type: 'textarea',
+      placeholder: 'Alamat sales',
+      maxLength: 500,
     },
     {
       name: 'status',
@@ -138,7 +146,13 @@ const SalesPage = () => {
       sortable: true,
       filterable: true,
       render: (status) => (
-        <span className={`text-xs font-medium ${status === 'aktif' ? 'text-green-600' : 'text-yellow-600'}`}>
+        <span
+          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
+            status === 'aktif'
+              ? 'bg-green-100 text-green-700'
+              : 'bg-yellow-100 text-yellow-700'
+          }`}
+        >
           {status === 'aktif' ? 'Aktif' : 'Nonaktif'}
         </span>
       ),
@@ -149,7 +163,11 @@ const SalesPage = () => {
       align: 'right',
       sortable: true,
       filterable: false,
-      render: (sales) => <span className="font-semibold tabular-nums text-primary">{formatCurrency(Number(sales ?? 0))}</span>,
+      render: (sales) => (
+        <div className="inline-flex min-w-28 items-center justify-end rounded-md bg-primary/10 px-2 py-1">
+          <span className="font-semibold tabular-nums text-primary">{formatCurrency(Number(sales ?? 0))}</span>
+        </div>
+      ),
     },
   ];
 
@@ -164,6 +182,7 @@ const SalesPage = () => {
           name: s.name,
           phone: s.phone || '',
           email: s.email || '',
+          address: s.address || '',
           area: s.area || '',
           status: (s.status ?? 'aktif') as 'aktif' | 'nonaktif',
         });
@@ -194,6 +213,7 @@ const SalesPage = () => {
                   name: values.name,
                   phone: values.phone,
                   email: values.email,
+                  address: values.address,
                   area: values.area,
                   status: values.status,
                 },
@@ -203,6 +223,7 @@ const SalesPage = () => {
                 name: values.name,
                 phone: values.phone,
                 email: values.email,
+                address: values.address,
                 area: values.area,
                 status: values.status,
               });
@@ -239,12 +260,16 @@ const SalesPage = () => {
     [executeRetryable, deleteMutation]
   );
 
-  // Handle add/edit dialog close
-  const handleDialogClose = () => {
-    setIsAddOpen(false);
-    setEditItem(null);
-    setFormValues(INITIAL_FORM_VALUES);
-  };
+  const handleDialogOpenChange = useCallback((open: boolean) => {
+    setIsAddOpen(open);
+
+    if (!open) {
+      setEditItem(null);
+      setFormValues(INITIAL_FORM_VALUES);
+    }
+  }, []);
+
+  const isEditMode = Boolean(editItem);
 
   return (
     <MainLayout title="Sales" subtitle="Kelola daftar sales / marketing">
@@ -293,6 +318,7 @@ const SalesPage = () => {
           <DataTable
             columns={columns}
             data={salesReps}
+            variant="master"
             isLoading={isLoading}
             filterable
             pagination
@@ -308,23 +334,35 @@ const SalesPage = () => {
       </Card>
 
       {/* Add/Edit Sales Dialog with FormBuilder */}
-      <Dialog open={isAddOpen} onOpenChange={handleDialogClose}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>
-              {editItem ? 'Edit Sales' : 'Tambah Sales Baru'}
+      <Dialog open={isAddOpen} onOpenChange={handleDialogOpenChange}>
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-[1000px] overflow-hidden p-0 sm:max-h-[92vh]">
+          <DialogHeader className="border-b bg-muted/20 px-5 py-3 pr-12 sm:px-6">
+            <DialogTitle className="flex items-center gap-2 text-base sm:text-lg">
+              <TrendingUp className="h-4 w-4 text-primary" />
+              {isEditMode ? 'Edit Sales' : 'Tambah Sales Baru'}
             </DialogTitle>
+            <DialogDescription>
+              {isEditMode
+                ? 'Perbarui data sales agar area kerja dan performa penjualan tetap terpantau.'
+                : 'Tambahkan data sales baru untuk memperluas cakupan area dan monitoring penjualan.'}
+            </DialogDescription>
           </DialogHeader>
-          <FormBuilder
-            schema={salesFormSchema}
-            values={formValues}
-            onChange={setFormValues}
-            onSubmit={handleFormSubmit}
-            isSubmitting={isSubmitting}
-            layout="vertical"
-            submitLabel={editItem ? 'Perbarui' : 'Tambah'}
-            showReset={false}
-          />
+          <div className="max-h-[calc(92vh-5rem)] overflow-y-auto px-4 py-3 sm:px-5 sm:py-4">
+            <FormBuilder
+              schema={salesFormSchema}
+              values={formValues}
+              onChange={setFormValues}
+              onSubmit={handleFormSubmit}
+              isSubmitting={isSubmitting}
+              layout="grid"
+              columns={2}
+              density="compact"
+              stickyActions
+              submitLabel={isEditMode ? 'Perbarui' : 'Tambah'}
+              showReset={false}
+              className="space-y-4"
+            />
+          </div>
         </DialogContent>
       </Dialog>
 

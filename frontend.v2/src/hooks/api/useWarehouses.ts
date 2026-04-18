@@ -10,10 +10,9 @@ interface WarehouseParams {
 }
 
 interface CreateUpdateWarehouseRequest {
-  code: string;
   name: string;
-  address: string;
-  manager: string;
+  address?: string;
+  manager?: string;
   status: 'aktif' | 'nonaktif';
 }
 

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import apiClient from '@/lib/api-client';
 import type { Transaction, PaginatedResponse } from '@/types';
 
 interface TransactionQueryParams {
@@ -88,5 +89,78 @@ export const usePrintInvoice = () => {
 export const usePrintReceipt = () => {
   return useMutation({
     mutationFn: (id: string) => api.get(`/transactions/${id}/print/receipt`),
+  });
+};
+
+interface DownloadPrintPdfPayload {
+  transactionId: string;
+  filename: string;
+  documentType: 'invoice' | 'receipt' | 'document';
+}
+
+interface DownloadKontraBonPdfPayload {
+  customerId: string;
+  transactionIds: string[];
+  filename: string;
+  interestRate?: number;
+}
+
+export const useDownloadTransactionPdf = () => {
+  return useMutation({
+    mutationFn: async ({ transactionId, filename, documentType }: DownloadPrintPdfPayload) => {
+      const endpoint =
+        documentType === 'invoice'
+          ? 'invoice'
+          : documentType === 'receipt'
+            ? 'receipt'
+            : 'document';
+      const response = await apiClient.getClient().get<Blob>(
+        `/transactions/${transactionId}/print/${endpoint}`,
+        {
+          params: { download: 1, filename },
+          responseType: 'blob',
+        }
+      );
+
+      const blob = response.data;
+      const objectUrl = window.URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = objectUrl;
+      anchor.download = filename.toLowerCase().endsWith('.pdf') ? filename : `${filename}.pdf`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.URL.revokeObjectURL(objectUrl);
+    },
+  });
+};
+
+export const useDownloadKontraBonPdf = () => {
+  return useMutation({
+    mutationFn: async ({ customerId, transactionIds, filename, interestRate }: DownloadKontraBonPdfPayload) => {
+      const response = await apiClient.getClient().post<Blob>(
+        '/kontra-bon/print',
+        {
+          customer_id: customerId,
+          transaction_ids: transactionIds,
+          interest_rate: interestRate ?? 0,
+          download: true,
+          filename,
+        },
+        {
+          responseType: 'blob',
+        }
+      );
+
+      const blob = response.data;
+      const objectUrl = window.URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = objectUrl;
+      anchor.download = filename.toLowerCase().endsWith('.pdf') ? filename : `${filename}.pdf`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.URL.revokeObjectURL(objectUrl);
+    },
   });
 };

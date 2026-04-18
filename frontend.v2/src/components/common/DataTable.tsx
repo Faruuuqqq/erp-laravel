@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ArrowUp, ArrowDown, ChevronLeft, ChevronRight, Download, Eye,
 } from 'lucide-react';
@@ -56,6 +56,9 @@ const TEXT_SIZES = {
   label: 'text-xs text-muted-foreground',
 } as const;
 
+const ACTION_COLUMN_WIDTH = 'w-[108px]';
+const DEFAULT_ROWS_PER_PAGE = 25;
+
 export interface DataTableColumn<T> {
   key: keyof T;
   header: string;
@@ -78,6 +81,7 @@ export interface DataTableAction<T> {
 export interface DataTableProps<T> {
   data: T[];
   columns: DataTableColumn<T>[];
+  variant?: 'default' | 'master';
   isLoading?: boolean;
   sortBy?: string;
   sortDirection?: 'asc' | 'desc';
@@ -103,6 +107,7 @@ export interface DataTableProps<T> {
 export function DataTable<T extends { id?: string | number }>({
   data,
   columns,
+  variant = 'default',
   isLoading = false,
   sortBy,
   sortDirection,
@@ -133,7 +138,11 @@ export function DataTable<T extends { id?: string | number }>({
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
-  const [rowsPerPage, setRowsPerPage] = useState(rowsPerPageOptions[0] ?? 10);
+  const [rowsPerPage, setRowsPerPage] = useState(
+    rowsPerPageOptions.includes(DEFAULT_ROWS_PER_PAGE)
+      ? DEFAULT_ROWS_PER_PAGE
+      : (rowsPerPageOptions[0] ?? DEFAULT_ROWS_PER_PAGE)
+  );
 
   // Column visibility
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(
@@ -142,6 +151,9 @@ export function DataTable<T extends { id?: string | number }>({
 
   // Row selection
   const [selectedRows, setSelectedRows] = useState<Set<string | number>>(new Set());
+  const isMasterVariant = variant === 'master';
+  const currentSortField = sortBy || internalSortBy;
+  const currentSortDir = sortDirection || internalSortDir;
 
   // Filter data
   const filteredData = useMemo(() => {
@@ -161,29 +173,27 @@ export function DataTable<T extends { id?: string | number }>({
   // Sort data
   const sortedData = useMemo(() => {
     const sorted = [...filteredData];
-    const currentSort = sortBy || internalSortBy;
-    const currentDir = sortDirection || internalSortDir;
 
-    if (currentSort) {
+    if (currentSortField) {
       sorted.sort((a, b) => {
-        const aVal = a[currentSort as keyof T];
-        const bVal = b[currentSort as keyof T];
+        const aVal = a[currentSortField as keyof T];
+        const bVal = b[currentSortField as keyof T];
 
-        if (aVal == null) return currentDir === 'asc' ? 1 : -1;
-        if (bVal == null) return currentDir === 'asc' ? -1 : 1;
+        if (aVal == null) return currentSortDir === 'asc' ? 1 : -1;
+        if (bVal == null) return currentSortDir === 'asc' ? -1 : 1;
 
         if (typeof aVal === 'number' && typeof bVal === 'number') {
-          return currentDir === 'asc' ? aVal - bVal : bVal - aVal;
+          return currentSortDir === 'asc' ? aVal - bVal : bVal - aVal;
         }
 
         const aStr = String(aVal).toLowerCase();
         const bStr = String(bVal).toLowerCase();
-        return currentDir === 'asc' ? aStr.localeCompare(bStr) : bStr.localeCompare(aStr);
+        return currentSortDir === 'asc' ? aStr.localeCompare(bStr) : bStr.localeCompare(aStr);
       });
     }
 
     return sorted;
-  }, [filteredData, sortBy, internalSortBy, sortDirection, internalSortDir]);
+  }, [filteredData, currentSortField, currentSortDir]);
 
   // Paginate data
   const paginatedData = useMemo(() => {
@@ -193,6 +203,17 @@ export function DataTable<T extends { id?: string | number }>({
   }, [sortedData, currentPage, rowsPerPage, pagination]);
 
   const totalPages = pagination ? Math.ceil(sortedData.length / rowsPerPage) : 1;
+
+  useEffect(() => {
+    if (!pagination) return;
+
+    const safeTotalPages = Math.max(totalPages, 1);
+    setCurrentPage(prev => {
+      if (prev < 1) return 1;
+      if (prev > safeTotalPages) return safeTotalPages;
+      return prev;
+    });
+  }, [pagination, totalPages]);
 
   // Handlers
   const handleSort = useCallback((field: string) => {
@@ -267,10 +288,8 @@ export function DataTable<T extends { id?: string | number }>({
   }, [sortedData, columns, visibleColumns, exportFilename]);
 
   const getSortIcon = (field: string) => {
-    const currentSort = sortBy || internalSortBy;
-    const currentDir = sortDirection || internalSortDir;
-    if (currentSort !== field) return null;
-    return currentDir === 'asc' ? (
+    if (currentSortField !== field) return null;
+    return currentSortDir === 'asc' ? (
       <ArrowUp className={cn(ICON_SIZES.normal, 'ml-1')} />
     ) : (
       <ArrowDown className={cn(ICON_SIZES.normal, 'ml-1')} />
@@ -281,24 +300,53 @@ export function DataTable<T extends { id?: string | number }>({
     + Array.from(visibleColumns).length
     + (actions.length > 0 ? 1 : 0);
 
+  const rangeStart = filteredData.length === 0
+    ? 0
+    : ((currentPage - 1) * rowsPerPage) + 1;
+  const rangeEnd = filteredData.length === 0
+    ? 0
+    : Math.min(currentPage * rowsPerPage, filteredData.length);
+
   return (
-    <div className="space-y-4">
+    <div className="overflow-hidden rounded-md">
       {/* Header with search and export */}
-      <div className="flex items-center justify-between gap-4 px-4">
-        {filterable && (
-          <SearchInput
-            value={searchTerm}
-            onChange={setSearchTerm}
-            placeholder={searchPlaceholder}
-            className="max-w-xs"
-          />
+      <div
+        className={cn(
+          'px-4',
+          isMasterVariant
+            ? 'flex flex-col gap-3 border-b bg-muted/20 py-3 sm:flex-row sm:items-center sm:justify-between'
+            : 'flex items-center justify-between gap-4 py-2'
         )}
-        <div className="flex items-center gap-2 ml-auto">
+      >
+        <div className="flex flex-1 items-center gap-3">
+          {filterable && (
+            <SearchInput
+              value={searchTerm}
+              onChange={setSearchTerm}
+              placeholder={searchPlaceholder}
+              className="w-full sm:max-w-xs"
+            />
+          )}
+          {isMasterVariant && (
+            <div className="hidden text-xs text-muted-foreground sm:block">
+              Menampilkan <span className="font-medium text-foreground">{filteredData.length}</span>
+              {' '}dari {data.length} data
+            </div>
+          )}
+        </div>
+
+        <div className={cn('flex items-center gap-2', isMasterVariant ? 'self-end sm:self-auto' : 'ml-auto')}>
           {/* Column visibility toggle */}
           {columns.length > 3 && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon" className="h-9 w-9">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9"
+                  aria-label="Atur visibilitas kolom"
+                  title="Atur kolom"
+                >
                   <Eye className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
@@ -330,7 +378,13 @@ export function DataTable<T extends { id?: string | number }>({
           {exportable && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon" className="h-9 w-9">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9"
+                  aria-label="Ekspor data"
+                  title="Ekspor data"
+                >
                   <Download className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
@@ -350,10 +404,10 @@ export function DataTable<T extends { id?: string | number }>({
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto rounded-md border">
+      <div className="overflow-x-auto">
         <Table>
-          <TableHeader>
-            <TableRow>
+          <TableHeader className={cn(isMasterVariant && 'bg-muted/30')}>
+            <TableRow className={cn(isMasterVariant && 'hover:bg-transparent')}>
                {selectable && (
                  <TableHead className="w-12">
                    <Checkbox
@@ -363,34 +417,54 @@ export function DataTable<T extends { id?: string | number }>({
                    />
                  </TableHead>
                )}
-               {columns.map((column) => {
-                 if (!visibleColumns.has(String(column.key))) return null;
-                 return (
-                   <TableHead
-                     key={String(column.key)}
-                     style={{ width: column.width }}
-                     className={cn(
-                       TEXT_SIZES.header,
-                       getAlignmentClass(column.align),
-                       column.sortable && (onSort || internalSortBy)
-                         ? 'cursor-pointer hover:bg-muted/70 focus:ring-2 focus:ring-offset-0 focus:ring-primary rounded transition-colors'
-                         : ''
-                     )}
-                     onClick={() => {
-                       if (column.sortable) {
-                         handleSort(String(column.key));
-                       }
-                     }}
-                   >
-                     <div className={cn('flex items-center gap-1', getAlignmentClass(column.align))}>
-                       {column.header}
-                       {column.sortable && getSortIcon(String(column.key))}
-                     </div>
-                   </TableHead>
-                 );
+                {columns.map((column) => {
+                  if (!visibleColumns.has(String(column.key))) return null;
+
+                  const isSorted = currentSortField === String(column.key);
+                  const isSortable = !!column.sortable;
+
+                  return (
+                    <TableHead
+                      key={String(column.key)}
+                      style={{ width: column.width }}
+                      aria-sort={
+                        isSortable
+                          ? isSorted
+                            ? (currentSortDir === 'asc' ? 'ascending' : 'descending')
+                            : 'none'
+                          : undefined
+                      }
+                      tabIndex={isSortable ? 0 : undefined}
+                      className={cn(
+                        TEXT_SIZES.header,
+                        isMasterVariant && 'h-11 whitespace-nowrap',
+                        getAlignmentClass(column.align),
+                        isSortable
+                          ? 'cursor-pointer select-none hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 transition-colors'
+                          : ''
+                      )}
+                      onClick={() => {
+                        if (isSortable) {
+                          handleSort(String(column.key));
+                        }
+                      }}
+                      onKeyDown={event => {
+                        if (!isSortable) return;
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          handleSort(String(column.key));
+                        }
+                      }}
+                    >
+                      <div className={cn('flex items-center gap-1', getAlignmentClass(column.align))}>
+                        {column.header}
+                        {isSortable && getSortIcon(String(column.key))}
+                      </div>
+                    </TableHead>
+                  );
                })}
               {actions.length > 0 && (
-                <TableHead className="text-center w-16">Aksi</TableHead>
+                <TableHead className={cn('text-center', ACTION_COLUMN_WIDTH)}>Aksi</TableHead>
               )}
             </TableRow>
           </TableHeader>
@@ -410,20 +484,30 @@ export function DataTable<T extends { id?: string | number }>({
                 </TableCell>
               </TableRow>
             ) : (
-              paginatedData.map((row, idx) => (
-                <TableRow
-                  key={row.id ?? idx}
-                  className={`${rowClassName?.(row) ?? ''} ${onRowClick ? 'cursor-pointer hover:bg-muted/50' : ''}`}
-                  onClick={() => onRowClick?.(row)}
-                >
-                   {selectable && (
-                     <TableCell>
-                       <Checkbox
-                         checked={selectedRows.has(row.id ?? '')}
-                         onCheckedChange={() => handleSelectRow(row.id ?? '')}
-                         onClick={e => e.stopPropagation()}
-                         aria-label={`Pilih baris ${row.id}`}
-                       />
+               paginatedData.map((row, idx) => {
+                 const rowId = row.id ?? '';
+                 const isRowSelected = selectedRows.has(rowId);
+
+                 return (
+                  <TableRow
+                    key={row.id ?? idx}
+                    className={cn(
+                      'transition-colors',
+                      isMasterVariant ? 'odd:bg-muted/[0.02] hover:bg-muted/40' : 'hover:bg-muted/30',
+                      rowClassName?.(row),
+                      onRowClick && 'cursor-pointer',
+                      isRowSelected && 'bg-primary/5 hover:bg-primary/10'
+                   )}
+                   onClick={() => onRowClick?.(row)}
+                 >
+                    {selectable && (
+                      <TableCell>
+                        <Checkbox
+                          checked={isRowSelected}
+                          onCheckedChange={() => handleSelectRow(rowId)}
+                          onClick={e => e.stopPropagation()}
+                          aria-label={`Pilih baris ${row.id}`}
+                        />
                      </TableCell>
                    )}
                    {columns.map((column) => {
@@ -431,21 +515,21 @@ export function DataTable<T extends { id?: string | number }>({
                      return (
                        <TableCell
                          key={`${idx}-${String(column.key)}`}
-                         className={cn(
-                           TEXT_SIZES.body,
-                           getAlignmentClass(column.align),
-                           dense ? 'py-2' : ''
-                         )}
-                       >
+                          className={cn(
+                            TEXT_SIZES.body,
+                            getAlignmentClass(column.align),
+                            dense ? 'py-2' : 'py-3'
+                          )}
+                        >
                          {column.render
                            ? column.render(row[column.key], row)
                            : String(row[column.key] ?? '—')}
                        </TableCell>
                      );
                    })}
-                  {actions.length > 0 && (
-                    <TableCell className="text-center">
-                      <div className="flex items-center justify-center gap-1">
+                   {actions.length > 0 && (
+                     <TableCell className={cn('text-center', ACTION_COLUMN_WIDTH)}>
+                       <div className="flex items-center justify-center gap-1">
                         {actions.map((action, actionIdx) => {
                           const show = action.show ? action.show(row) : true;
                           if (!show) return null;
@@ -460,6 +544,7 @@ export function DataTable<T extends { id?: string | number }>({
                                 e.stopPropagation();
                                 action.onClick(row);
                               }}
+                              aria-label={action.label}
                               title={action.label}
                             >
                               {action.icon}
@@ -470,7 +555,8 @@ export function DataTable<T extends { id?: string | number }>({
                     </TableCell>
                   )}
                 </TableRow>
-              ))
+              );
+              })
             )}
           </TableBody>
         </Table>
@@ -478,58 +564,68 @@ export function DataTable<T extends { id?: string | number }>({
 
        {/* Pagination footer */}
        {pagination && (
-         <div className="flex items-center justify-between border-t pt-4 px-4">
+         <div
+           className={cn(
+             'border-t px-4',
+             isMasterVariant
+               ? 'flex flex-col gap-3 bg-muted/20 py-3 sm:flex-row sm:items-center sm:justify-between'
+               : 'flex items-center justify-between pt-4'
+           )}
+         >
            <div className={TEXT_SIZES.label}>
-             {filteredData.length === 0
-               ? 'Tidak ada data'
-               : `${(currentPage - 1) * rowsPerPage + 1}–${Math.min(
-                 currentPage * rowsPerPage,
-                 filteredData.length
-               )} dari ${filteredData.length}`}
-           </div>
-           <div className="flex items-center gap-4">
-             <Select
-               value={String(rowsPerPage)}
-               onValueChange={value => {
-                 setRowsPerPage(Number(value));
-                 setCurrentPage(1);
-               }}
-             >
-               <SelectTrigger className="w-32">
-                 <SelectValue />
-               </SelectTrigger>
-               <SelectContent>
+              {filteredData.length === 0
+                ? 'Tidak ada data'
+                : `${rangeStart}–${rangeEnd} dari ${filteredData.length} data`}
+            </div>
+           <div className={cn('flex flex-wrap items-center', isMasterVariant ? 'gap-3 sm:gap-4' : 'gap-4')}>
+              <div className="flex items-center gap-2">
+                <span className={TEXT_SIZES.label}>Baris</span>
+              <Select
+                value={String(rowsPerPage)}
+                onValueChange={value => {
+                  setRowsPerPage(Number(value));
+                  setCurrentPage(1);
+                }}
+              >
+                <SelectTrigger className={cn('w-24 bg-background', isMasterVariant ? 'h-8' : 'h-9')}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
                  {rowsPerPageOptions.map(option => (
                    <SelectItem key={option} value={String(option)}>
                      {option} baris
                    </SelectItem>
                  ))}
-               </SelectContent>
-             </Select>
-             <div className="flex gap-2">
-               <Button
-                 variant="outline"
-                 size="icon"
-                 className="h-8 w-8"
-                 onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                 disabled={currentPage === 1}
-                 aria-label="Halaman sebelumnya"
-               >
-                 <ChevronLeft className={ICON_SIZES.normal} />
-               </Button>
-               <div className="flex items-center justify-center gap-1 text-sm min-w-12">
-                 {currentPage} / {totalPages}
-               </div>
-               <Button
-                 variant="outline"
-                 size="icon"
-                 className="h-8 w-8"
-                 onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                 disabled={currentPage === totalPages}
-                 aria-label="Halaman berikutnya"
-               >
-                 <ChevronRight className={ICON_SIZES.normal} />
-               </Button>
+                </SelectContent>
+              </Select>
+              </div>
+
+              <div className={cn('flex items-center gap-1 rounded-md bg-background', isMasterVariant ? 'border p-1' : 'gap-2')}>
+                <Button
+                  variant={isMasterVariant ? 'ghost' : 'outline'}
+                  size="icon"
+                  className={cn(isMasterVariant ? 'h-7 w-7' : 'h-8 w-8')}
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                  aria-label="Halaman sebelumnya"
+                  title="Halaman sebelumnya"
+                >
+                  <ChevronLeft className={ICON_SIZES.normal} />
+                </Button>
+                <div className="flex min-w-16 items-center justify-center gap-1 text-sm font-medium tabular-nums">
+                  {currentPage} / {totalPages}
+                </div>
+                <Button
+                  variant={isMasterVariant ? 'ghost' : 'outline'}
+                  size="icon"
+                  className={cn(isMasterVariant ? 'h-7 w-7' : 'h-8 w-8')}
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                  aria-label="Halaman berikutnya"
+                  title="Halaman berikutnya"
+                >
+                  <ChevronRight className={ICON_SIZES.normal} />
+                </Button>
              </div>
            </div>
          </div>

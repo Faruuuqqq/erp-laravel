@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { DeleteConfirmDialog } from '@/components/dialogs/DeleteConfirmDialog';
 import { DataTable, FormBuilder, type DataTableColumn, type FormSchema } from '@/components/common';
 import { Plus, Pencil, Trash2, Building2 } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { StatCard } from '@/components/ui/StatCard';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -17,7 +17,9 @@ import type { Supplier as SupplierType } from '@/types';
 const INITIAL_FORM_VALUES = {
   name: '',
   phone: '',
+  phone2: '',
   email: '',
+  city: '',
   address: '',
   noRekening: '',
 };
@@ -26,7 +28,7 @@ const supplierFormSchema: FormSchema = {
   sections: [
     {
       title: 'Informasi Dasar',
-      fieldNames: ['name', 'phone', 'email'],
+      fieldNames: ['name', 'phone', 'phone2', 'email', 'city'],
     },
     {
       title: 'Alamat & Rekening',
@@ -54,6 +56,19 @@ const supplierFormSchema: FormSchema = {
       label: 'Email',
       type: 'email',
       placeholder: 'email@example.com',
+    },
+    {
+      name: 'phone2',
+      label: 'Telepon 2',
+      type: 'phone',
+      placeholder: '08... (opsional)',
+    },
+    {
+      name: 'city',
+      label: 'Kota',
+      type: 'text',
+      placeholder: 'Contoh: Bandung',
+      maxLength: 50,
     },
     {
       name: 'address',
@@ -117,7 +132,11 @@ const SupplierPage = () => {
       header: 'Kota',
       sortable: false,
       filterable: true,
-      render: (city) => city ?? '—',
+      render: (city) => (
+        <span className="inline-flex rounded-full bg-muted px-2 py-0.5 text-xs font-medium">
+          {city ?? '—'}
+        </span>
+      ),
     },
     {
       key: 'phone',
@@ -148,9 +167,11 @@ const SupplierPage = () => {
       filterable: false,
       render: (balance) =>
         Number(balance ?? 0) > 0 ? (
-          <span className="font-semibold text-destructive">{formatCurrency(Number(balance))}</span>
+          <div className="inline-flex min-w-28 items-center justify-end rounded-md bg-destructive/10 px-2 py-1">
+            <span className="font-semibold tabular-nums text-destructive">{formatCurrency(Number(balance))}</span>
+          </div>
         ) : (
-          <span className="text-sm text-muted-foreground">Lunas</span>
+          <span className="inline-flex rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700">Lunas</span>
         ),
     },
   ];
@@ -165,7 +186,9 @@ const SupplierPage = () => {
         setFormValues({
           name: s.name,
           phone: s.phone || '',
+          phone2: s.phone2 || '',
           email: s.email || '',
+          city: s.city || '',
           address: s.address || '',
           noRekening: s.noRekening || '',
         });
@@ -195,18 +218,22 @@ const SupplierPage = () => {
                 data: {
                   name: values.name,
                   phone: values.phone,
+                  phone2: values.phone2,
                   email: values.email,
+                  city: values.city,
                   address: values.address,
-                  no_rekening: values.noRekening,
+                  noRekening: values.noRekening,
                 },
               });
             } else {
               await createMutation.mutateAsync({
                 name: values.name,
                 phone: values.phone,
+                phone2: values.phone2,
                 email: values.email,
+                city: values.city,
                 address: values.address,
-                no_rekening: values.noRekening,
+                noRekening: values.noRekening,
               });
             }
             setIsAddOpen(false);
@@ -241,12 +268,16 @@ const SupplierPage = () => {
     [executeRetryable, deleteMutation]
   );
 
-  // Handle add/edit dialog close
-  const handleDialogClose = () => {
-    setIsAddOpen(false);
-    setEditItem(null);
-    setFormValues(INITIAL_FORM_VALUES);
-  };
+  const handleDialogOpenChange = useCallback((open: boolean) => {
+    setIsAddOpen(open);
+
+    if (!open) {
+      setEditItem(null);
+      setFormValues(INITIAL_FORM_VALUES);
+    }
+  }, []);
+
+  const isEditMode = Boolean(editItem);
 
   return (
     <MainLayout title="Supplier" subtitle="Kelola data supplier toko Anda">
@@ -295,6 +326,7 @@ const SupplierPage = () => {
           <DataTable
             columns={columns}
             data={suppliers}
+            variant="master"
             isLoading={isLoading}
             filterable
             pagination
@@ -310,23 +342,35 @@ const SupplierPage = () => {
       </Card>
 
       {/* Add/Edit Supplier Dialog with FormBuilder */}
-      <Dialog open={isAddOpen} onOpenChange={handleDialogClose}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>
-              {editItem ? 'Edit Supplier' : 'Tambah Supplier Baru'}
+      <Dialog open={isAddOpen} onOpenChange={handleDialogOpenChange}>
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-[1000px] overflow-hidden p-0 sm:max-h-[92vh]">
+          <DialogHeader className="border-b bg-muted/20 px-5 py-3 pr-12 sm:px-6">
+            <DialogTitle className="flex items-center gap-2 text-base sm:text-lg">
+              <Building2 className="h-4 w-4 text-primary" />
+              {isEditMode ? 'Edit Supplier' : 'Tambah Supplier Baru'}
             </DialogTitle>
+            <DialogDescription>
+              {isEditMode
+                ? 'Perbarui profil supplier agar informasi kontak dan pembayaran tetap sinkron.'
+                : 'Masukkan data supplier baru untuk mempercepat proses pembelian dan pencatatan utang.'}
+            </DialogDescription>
           </DialogHeader>
-          <FormBuilder
-            schema={supplierFormSchema}
-            values={formValues}
-            onChange={setFormValues}
-            onSubmit={handleFormSubmit}
-            isSubmitting={isSubmitting}
-            layout="vertical"
-            submitLabel={editItem ? 'Perbarui' : 'Tambah'}
-            showReset={false}
-          />
+          <div className="max-h-[calc(92vh-5rem)] overflow-y-auto px-4 py-3 sm:px-5 sm:py-4">
+            <FormBuilder
+              schema={supplierFormSchema}
+              values={formValues}
+              onChange={setFormValues}
+              onSubmit={handleFormSubmit}
+              isSubmitting={isSubmitting}
+              layout="grid"
+              columns={2}
+              density="compact"
+              stickyActions
+              submitLabel={isEditMode ? 'Perbarui' : 'Tambah'}
+              showReset={false}
+              className="space-y-4"
+            />
+          </div>
         </DialogContent>
       </Dialog>
 

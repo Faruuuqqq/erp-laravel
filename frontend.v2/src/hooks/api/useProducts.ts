@@ -45,12 +45,14 @@ export const useProduct = (id: string) => {
 
 interface CreateProductRequest {
   name: string;
-  code?: string;
-  category?: string;
-  categoryId?: string;
-  buyPrice?: number;
-  sellPrice?: number;
-  unit?: string;
+  code: string;
+  category: string;
+  buyPrice: number;
+  sellPrice: number;
+  stock: number;
+  minStock: number;
+  unit: string;
+  warehouseId?: string;
 }
 
 export const useCreateProduct = () => {
@@ -103,13 +105,15 @@ export const useCreateProduct = () => {
 };
 
 interface UpdateProductRequest {
-  name?: string;
   code?: string;
+  name?: string;
   category?: string;
-  categoryId?: string;
   buyPrice?: number;
   sellPrice?: number;
+  stock?: number;
+  minStock?: number;
   unit?: string;
+  warehouseId?: string;
 }
 
 export const useUpdateProduct = () => {

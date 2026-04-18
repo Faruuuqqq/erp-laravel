@@ -16,16 +16,17 @@ import { useProducts, useCreateProduct, useUpdateProduct, useDeleteProduct } fro
 import { useCategories } from '@/hooks/api/useCategories';
 import { useWarehouses } from '@/hooks/api/useWarehouses';
 import type { Product } from '@/types';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 
 const INITIAL_FORM_VALUES = {
+  code: '',
   name: '',
-  categoryId: '',
+  category: '',
   buyPrice: '',
   sellPrice: '',
   stock: '',
-  minimumStock: '',
+  minStock: '',
   unit: '',
   warehouseId: '',
 };
@@ -34,7 +35,7 @@ const productFormSchema: FormSchema = {
   sections: [
     {
       title: 'Informasi Dasar',
-      fieldNames: ['name', 'categoryId', 'unit'],
+      fieldNames: ['code', 'name', 'category', 'unit'],
     },
     {
       title: 'Harga',
@@ -42,7 +43,7 @@ const productFormSchema: FormSchema = {
     },
     {
       title: 'Stok & Gudang',
-      fieldNames: ['stock', 'minimumStock', 'warehouseId'],
+      fieldNames: ['stock', 'minStock', 'warehouseId'],
     },
   ],
   fields: [
@@ -53,12 +54,24 @@ const productFormSchema: FormSchema = {
       placeholder: 'Nama produk',
       required: true,
       minLength: 3,
-      maxLength: 200,
+      maxLength: 100,
     },
     {
-      name: 'categoryId',
+      name: 'code',
+      label: 'Kode Produk',
+      type: 'text',
+      placeholder: 'Contoh: PRD001',
+      required: true,
+      minLength: 2,
+      maxLength: 20,
+      pattern: '^[A-Z0-9\\-]+$',
+      description: 'Gunakan huruf kapital, angka, dan tanda strip (-).',
+    },
+    {
+      name: 'category',
       label: 'Kategori',
       type: 'select',
+      placeholder: 'Pilih kategori',
       required: true,
       options: [],
     },
@@ -82,7 +95,7 @@ const productFormSchema: FormSchema = {
       type: 'number',
       placeholder: '0',
       required: true,
-      min: 0,
+      min: 0.01,
     },
     {
       name: 'stock',
@@ -93,7 +106,7 @@ const productFormSchema: FormSchema = {
       min: 0,
     },
     {
-      name: 'minimumStock',
+      name: 'minStock',
       label: 'Min. Stok',
       type: 'number',
       placeholder: '0',
@@ -149,14 +162,13 @@ const ProdukPage = () => {
   const totalNilai = formatCurrency(filteredProducts.reduce((s, p) => s + Number(p.buyPrice ?? 0) * Number(p.stock ?? 0), 0));
   const lowStock = filteredProducts.filter(p => Number(p.stock) <= Number(p.minimumStock ?? 0)).length;
 
-  // Update form schema with dynamic options
   const dynamicFormSchema: FormSchema = {
     ...productFormSchema,
     fields: productFormSchema.fields.map(field => {
-      if (field.name === 'categoryId') {
+      if (field.name === 'category') {
         return {
           ...field,
-          options: categories.map(c => ({ value: c.id, label: c.name })),
+          options: categories.map(c => ({ value: c.name, label: c.name })),
         };
       }
       if (field.name === 'warehouseId') {
@@ -203,7 +215,11 @@ const ProdukPage = () => {
       filterable: true,
       render: (catId, prod) => {
         const categoryName = prod.categoryName ?? categoryMap.get(catId ?? '') ?? '—';
-        return <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">{categoryName}</span>;
+        return (
+          <span className="inline-flex rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700">
+            {categoryName}
+          </span>
+        );
       },
     },
     {
@@ -212,7 +228,9 @@ const ProdukPage = () => {
       align: 'right',
       sortable: true,
       filterable: false,
-      render: (price) => <span className="font-medium text-sm">{formatCurrency(Number(price))}</span>,
+      render: (price) => (
+        <span className="font-medium text-sm tabular-nums">{formatCurrency(Number(price))}</span>
+      ),
     },
     {
       key: 'buyPrice',
@@ -220,7 +238,7 @@ const ProdukPage = () => {
       align: 'right',
       sortable: false,
       filterable: false,
-      render: (price) => <span className="text-sm">{formatCurrency(Number(price))}</span>,
+      render: (price) => <span className="text-sm tabular-nums">{formatCurrency(Number(price))}</span>,
     },
     {
       key: 'stock',
@@ -248,7 +266,11 @@ const ProdukPage = () => {
       filterable: true,
       render: (warehouseId, prod) => {
         const warehouseName = prod.warehouseName ?? warehouseMap.get(warehouseId ?? '') ?? '—';
-        return <span className="text-xs text-muted-foreground">{warehouseName}</span>;
+        return (
+          <span className="inline-flex rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+            {warehouseName}
+          </span>
+        );
       },
     },
   ];
@@ -261,12 +283,13 @@ const ProdukPage = () => {
       onClick: (p: Product) => {
         setEditItem(p);
         setFormValues({
+          code: p.code || '',
           name: p.name,
-          categoryId: p.categoryId ?? '',
+          category: p.categoryName || p.category || '',
           buyPrice: String(p.buyPrice ?? ''),
           sellPrice: String(p.sellPrice ?? ''),
           stock: String(p.stock ?? ''),
-          minimumStock: String(p.minimumStock ?? ''),
+          minStock: String(p.minimumStock ?? p.minStock ?? ''),
           unit: p.unit ?? '',
           warehouseId: p.warehouseId ?? '',
         });
@@ -291,14 +314,15 @@ const ProdukPage = () => {
         await executeRetryable(
           async () => {
             const payload = {
+              code: values.code,
               name: values.name,
-              category_id: values.categoryId,
-              buy_price: Number(values.buyPrice),
-              sell_price: Number(values.sellPrice),
+              category: values.category,
+              buyPrice: Number(values.buyPrice),
+              sellPrice: Number(values.sellPrice),
               stock: Number(values.stock),
-              minimum_stock: Number(values.minimumStock),
+              minStock: Number(values.minStock),
               unit: values.unit,
-              warehouse_id: values.warehouseId,
+              warehouseId: values.warehouseId || undefined,
             };
 
             if (editItem) {
@@ -338,12 +362,16 @@ const ProdukPage = () => {
     [executeRetryable, deleteMutation]
   );
 
-  // Handle add/edit dialog close
-  const handleDialogClose = () => {
-    setIsAddOpen(false);
-    setEditItem(null);
-    setFormValues(INITIAL_FORM_VALUES);
-  };
+  const handleDialogOpenChange = useCallback((open: boolean) => {
+    setIsAddOpen(open);
+
+    if (!open) {
+      setEditItem(null);
+      setFormValues(INITIAL_FORM_VALUES);
+    }
+  }, []);
+
+  const isEditMode = Boolean(editItem);
 
   return (
     <MainLayout title="Produk" subtitle="Kelola daftar produk dan kategori">
@@ -424,6 +452,7 @@ const ProdukPage = () => {
           <DataTable
             columns={columns}
             data={filteredProducts}
+            variant="master"
             isLoading={isLoading}
             filterable
             pagination
@@ -439,23 +468,35 @@ const ProdukPage = () => {
       </Card>
 
       {/* Add/Edit Produk Dialog with FormBuilder */}
-      <Dialog open={isAddOpen} onOpenChange={handleDialogClose}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>
-              {editItem ? 'Edit Produk' : 'Tambah Produk Baru'}
+      <Dialog open={isAddOpen} onOpenChange={handleDialogOpenChange}>
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-[1200px] overflow-hidden p-0 sm:max-h-[92vh]">
+          <DialogHeader className="border-b bg-muted/20 px-5 py-3 pr-12 sm:px-6">
+            <DialogTitle className="flex items-center gap-2 text-base sm:text-lg">
+              <Package className="h-4 w-4 text-primary" />
+              {isEditMode ? 'Edit Produk' : 'Tambah Produk Baru'}
             </DialogTitle>
+            <DialogDescription>
+              {isEditMode
+                ? 'Perbarui detail produk agar harga, kategori, dan stok tetap sinkron dengan gudang.'
+                : 'Isi detail produk baru untuk memulai pencatatan stok, harga, dan kategori.'}
+            </DialogDescription>
           </DialogHeader>
-          <FormBuilder
-            schema={dynamicFormSchema}
-            values={formValues}
-            onChange={setFormValues}
-            onSubmit={handleFormSubmit}
-            isSubmitting={isSubmitting}
-            layout="vertical"
-            submitLabel={editItem ? 'Perbarui' : 'Tambah'}
-            showReset={false}
-          />
+          <div className="max-h-[calc(92vh-5rem)] overflow-y-auto px-4 py-3 sm:px-5 sm:py-4">
+            <FormBuilder
+              schema={dynamicFormSchema}
+              values={formValues}
+              onChange={setFormValues}
+              onSubmit={handleFormSubmit}
+              isSubmitting={isSubmitting}
+              layout="grid"
+              columns={2}
+              density="compact"
+              stickyActions
+              submitLabel={isEditMode ? 'Perbarui' : 'Tambah'}
+              showReset={false}
+              className="space-y-4"
+            />
+          </div>
         </DialogContent>
       </Dialog>
 
