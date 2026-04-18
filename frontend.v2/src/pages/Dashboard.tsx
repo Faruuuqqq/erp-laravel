@@ -101,6 +101,7 @@ const CashFlowChart = memo(({
               size="sm"
               className="h-7 text-xs"
               onClick={() => onTrendRangeChange(r)}
+              aria-pressed={trendRange === r}
             >
               {r === 'week' ? 'Minggu Ini' : 'Bulan Ini'}
             </Button>
@@ -150,6 +151,7 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const [trendRange, setTrendRange] = useState<'week' | 'month'>('week');
   const [dismissedLowStockAlert, setDismissedLowStockAlert] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // --- Real API hooks ---------------------------------------------------
   const {
@@ -177,17 +179,21 @@ const Dashboard = () => {
     data: trendData,
     isLoading: trendLoading,
     isError: trendError,
+    refetch: refetchTrend,
   } = useSalesTrend(trendRange);
   
   const {
     data: expensesData,
     isLoading: expensesLoading,
     isError: expensesError,
+    refetch: refetchExpenses,
   } = useExpensesStats('today');
 
   const {
     data: financialData,
     isLoading: financialLoading,
+    isError: financialError,
+    refetch: refetchFinancial,
   } = useFinancialSummary('today');
 
   // --- Type-safe data extraction -----------------------------------------------
@@ -208,11 +214,21 @@ const Dashboard = () => {
   };
 
   // --- Callbacks -------------------------------------------------------
-  const handleRefreshAll = useCallback(() => {
-    refetchStats();
-    refetchRecent();
-    refetchLowStock();
-  }, [refetchStats, refetchRecent, refetchLowStock]);
+  const handleRefreshAll = useCallback(async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    await Promise.allSettled([
+      refetchStats(),
+      refetchRecent(),
+      refetchLowStock(),
+      refetchTrend(),
+      refetchExpenses(),
+      refetchFinancial(),
+    ]);
+    setIsRefreshing(false);
+  }, [isRefreshing, refetchStats, refetchRecent, refetchLowStock, refetchTrend, refetchExpenses, refetchFinancial]);
+
+  const hasSecondaryError = trendError || expensesError || financialError;
 
   return (
     <MainLayout
@@ -224,6 +240,13 @@ const Dashboard = () => {
         <div className="mb-5 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive flex items-center justify-between">
           <span>Gagal memuat data dashboard</span>
           <Button variant="link" size="sm" onClick={() => refetchStats()}>Coba lagi</Button>
+        </div>
+      )}
+
+      {hasSecondaryError && !statsError && (
+        <div className="mb-5 rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm text-warning flex items-center justify-between">
+          <span>Beberapa widget dashboard belum berhasil dimuat. Data lain tetap tersedia.</span>
+          <Button variant="link" size="sm" onClick={handleRefreshAll}>Muat ulang</Button>
         </div>
       )}
 
@@ -425,8 +448,9 @@ const Dashboard = () => {
                 onClick={handleRefreshAll}
                 title="Refresh semua data"
                 aria-label="Refresh data"
+                disabled={isRefreshing}
               >
-                <RefreshCw className="h-3.5 w-3.5" />
+                <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
               </Button>
               <Button
                 variant="ghost"

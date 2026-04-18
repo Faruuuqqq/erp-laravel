@@ -48,10 +48,10 @@ INSERT INTO categories (id, name, created_at, updated_at) VALUES
 -- ============================================
 -- WAREHOUSES
 -- ============================================
-INSERT INTO warehouses (id, name, address, total_products, status, created_at, updated_at) VALUES
-(1, 'Gudang Utama', 'Jl. Industri No. 1, Jakarta Industrial Estate', 350, 'active', NOW(), NOW()),
-(2, 'Gudang Cabang A', 'Jl. Raya Pahlawan No. 100, Bandung', 180, 'active', NOW(), NOW()),
-(3, 'Gudang Cabang B', 'Jl. Karang Pilang No. 50, Surabaya', 220, 'active', NOW(), NOW());
+INSERT INTO warehouses (id, name, address, status, created_at, updated_at) VALUES
+(1, 'Gudang Utama', 'Jl. Industri No. 1, Jakarta Industrial Estate', 'active', NOW(), NOW()),
+(2, 'Gudang Cabang A', 'Jl. Raya Pahlawan No. 100, Bandung', 'active', NOW(), NOW()),
+(3, 'Gudang Cabang B', 'Jl. Karang Pilang No. 50, Surabaya', 'active', NOW(), NOW());
 
 -- ============================================
 -- SUPPLIERS (15 suppliers)

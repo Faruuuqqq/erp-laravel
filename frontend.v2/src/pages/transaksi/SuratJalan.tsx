@@ -348,7 +348,7 @@ const SuratJalan = () => {
                         <TableCell className="text-xs text-muted-foreground">{item.keterangan || '-'}</TableCell>
                         {canCreate('transactions.delivery_note') && (
                           <TableCell>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:bg-destructive/10" onClick={() => removeItem(idx)}>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:bg-destructive/10" onClick={() => removeItem(idx)} aria-label={`Hapus item ${item.nama}`} title={`Hapus ${item.nama}`}>
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>
                           </TableCell>
@@ -418,13 +418,14 @@ const SuratJalan = () => {
       </div>
 
        {/* Print Preview - Only show after saved */}
-       {savedTransaction && (
+        {savedTransaction && (
          <PrintPreviewDialog
            isOpen={isPreviewOpen}
            onClose={() => setIsPreviewOpen(false)}
            title="Surat Jalan"
            documentId="surat-jalan-print"
            filename={`surat-jalan-${savedTransaction.invoiceNumber}`}
+           backendPdf={{ transactionId: savedTransaction.id, documentType: 'document' }}
          >
            <div id="surat-jalan-print">
              <SuratJalanPrint transaction={savedTransaction} />
