@@ -12,8 +12,17 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Package, ArrowUp, ArrowDown, Printer } from 'lucide-react';
+import { Package, ArrowUp, ArrowDown, Printer, Download } from 'lucide-react';
 import { StatCard } from '@/components/ui/StatCard';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableFooter,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { api } from '@/lib/api';
 import { useQuery } from '@tanstack/react-query';
 import { formatCurrency } from '@/lib/utils';
@@ -21,6 +30,7 @@ import { usePrint } from '@/contexts/usePrint';
 import { KartuStokPrint } from '@/components/print/KartuStokPrint';
 import { resolveDirection } from '@/constants/stockDirection';
 import { useToast } from '@/components/ui/use-toast';
+import { exportToExcel, formatDateRange } from '@/lib/export';
 import type {
   StockMutationResponse,
   QueryParams,
@@ -218,6 +228,41 @@ const KartuStok = () => {
     }
   }, [product, fromDate, toDate, printEntries, printDocument, toast]);
 
+  // Handle XLSX export
+  const handleExportXLSX = useCallback(() => {
+    if (!product) return;
+
+    try {
+      const filename = `kartu-stok-${product.code}-${formatDateRange(fromDate || 'all', toDate || 'all')}`;
+      exportToExcel(
+        printEntries.map((entry) => ({
+          Tanggal: entry.tanggal,
+          Keterangan: entry.keterangan,
+          'No. Referensi': entry.referensi,
+          'Masuk (qty)': entry.masuk,
+          'Keluar (qty)': entry.keluar,
+          'Saldo (qty)': entry.saldo,
+        })),
+        filename,
+        { sheetName: `${product.code} - ${product.name}` }
+      );
+      toast({
+        title: 'Sukses',
+        description: 'Data kartu stok berhasil diekspor ke Excel',
+      });
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : 'Gagal mengekspor data kartu stok';
+      toast({
+        title: 'Error',
+        description: message,
+        variant: 'destructive',
+      });
+    }
+  }, [product, printEntries, fromDate, toDate, toast]);
+
   // Render
   return (
     <MainLayout
@@ -228,16 +273,28 @@ const KartuStok = () => {
         title="Kartu Stok"
         description="Audit trail lengkap pergerakan stok per produk"
         actions={
-          <Button
-            onClick={handlePrint}
-            disabled={!selectedProduct}
-            size="sm"
-            variant="outline"
-            className="gap-2"
-          >
-            <Printer className="h-4 w-4" />
-            Cetak
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              onClick={handlePrint}
+              disabled={!selectedProduct}
+              size="sm"
+              variant="outline"
+              className="gap-2"
+            >
+              <Printer className="h-4 w-4" />
+              Cetak
+            </Button>
+            <Button
+              onClick={handleExportXLSX}
+              disabled={!selectedProduct}
+              size="sm"
+              variant="outline"
+              className="gap-2"
+            >
+              <Download className="h-4 w-4" />
+              Export
+            </Button>
+          </div>
         }
       />
 
@@ -399,121 +456,106 @@ const KartuStok = () => {
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b bg-muted/40 text-xs text-muted-foreground">
-                  {[
-                    '#',
-                    'Tanggal',
-                    'Keterangan',
-                    'No. Referensi',
-                    'Masuk',
-                    'Keluar',
-                    'Saldo',
-                  ].map(h => (
-                    <th
-                      key={h}
-                      className="px-4 py-3 text-left font-semibold whitespace-nowrap"
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {/* Opening balance row */}
-                <tr className="border-b bg-muted/20 italic">
-                  <td className="px-4 py-2 text-muted-foreground text-xs">
-                    —
-                  </td>
-                  <td className="px-4 py-2 text-muted-foreground whitespace-nowrap text-xs">
-                    {fromDate
-                      ? new Date(fromDate).toLocaleDateString(
-                          'id-ID'
-                        )
-                      : '—'}
-                  </td>
-                  <td
-                    className="px-4 py-2 text-muted-foreground text-xs"
-                    colSpan={2}
-                  >
-                    Saldo Awal
-                  </td>
-                  <td className="px-4 py-2" />
-                  <td className="px-4 py-2" />
-                  <td className="px-4 py-2 font-bold tabular-nums text-base">
-                    {openingStock}
-                  </td>
-                </tr>
-
-                {/* Data rows */}
-                {mutations.map((m, i) => (
-                  <tr
-                    key={m.id}
-                    className="border-b hover:bg-muted/20 transition-colors"
-                  >
-                    <td className="px-4 py-3 text-muted-foreground text-xs">
-                      {i + 1}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
-                      {new Date(m.createdAt).toLocaleDateString(
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/40">
+                <TableHead className="w-12">#</TableHead>
+                <TableHead>Tanggal</TableHead>
+                <TableHead>Keterangan</TableHead>
+                <TableHead>No. Referensi</TableHead>
+                <TableHead>Masuk</TableHead>
+                <TableHead>Keluar</TableHead>
+                <TableHead>Saldo</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {/* Opening balance row */}
+              <TableRow className="bg-muted/20 italic">
+                <TableCell className="text-muted-foreground text-xs">
+                  —
+                </TableCell>
+                <TableCell className="text-muted-foreground whitespace-nowrap text-xs">
+                  {fromDate
+                    ? new Date(fromDate).toLocaleDateString(
                         'id-ID'
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {m.notes ?? m.type}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs text-primary">
-                      {m.reference}
-                    </td>
-                    <td className="px-4 py-3">
-                      {m._dir === 'IN' && (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-success/10 border border-success/30 px-2 py-0.5 text-xs font-semibold text-success">
-                          <ArrowUp className="h-3 w-3" />
-                          +{m.quantity}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {m._dir === 'OUT' && (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 border border-destructive/30 px-2 py-0.5 text-xs font-semibold text-destructive">
-                          <ArrowDown className="h-3 w-3" />
-                          -{m.quantity}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 font-bold tabular-nums text-base">
-                      {m._runningBalance}
-                    </td>
-                  </tr>
-                ))}
+                      )
+                    : '—'}
+                </TableCell>
+                <TableCell className="text-muted-foreground text-xs" colSpan={2}>
+                  Saldo Awal
+                </TableCell>
+                <TableCell />
+                <TableCell />
+                <TableCell className="font-bold tabular-nums text-base">
+                  {openingStock}
+                </TableCell>
+              </TableRow>
 
-                {/* Summary row */}
-                <tr className="bg-muted/40 border-t-2">
-                  <td
-                    colSpan={4}
-                    className="px-4 py-3 font-bold text-sm"
-                  >
-                    RINGKASAN PERIODE
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="text-success font-bold">
-                      +{totalMasuk}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="text-destructive font-bold">
-                      -{totalKeluar}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 font-bold text-base text-primary">
-                    {saldoAkhirPeriode}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+              {/* Data rows */}
+              {mutations.map((m, i) => (
+                <TableRow
+                  key={m.id}
+                  className="hover:bg-muted/20 transition-colors"
+                >
+                  <TableCell className="text-muted-foreground text-xs">
+                    {i + 1}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground whitespace-nowrap">
+                    {new Date(m.createdAt).toLocaleDateString(
+                      'id-ID'
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {m.notes ?? m.type}
+                  </TableCell>
+                  <TableCell className="font-mono text-xs text-primary">
+                    {m.reference}
+                  </TableCell>
+                  <TableCell>
+                    {m._dir === 'IN' && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-success/10 border border-success/30 px-2 py-0.5 text-xs font-semibold text-success">
+                        <ArrowUp className="h-3 w-3" />
+                        +{m.quantity}
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {m._dir === 'OUT' && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 border border-destructive/30 px-2 py-0.5 text-xs font-semibold text-destructive">
+                        <ArrowDown className="h-3 w-3" />
+                        -{m.quantity}
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell className="font-bold tabular-nums text-base">
+                    {m._runningBalance}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+
+            {/* Summary row in footer */}
+            <TableFooter>
+              <TableRow className="bg-muted/40">
+                <TableCell colSpan={4} className="font-bold text-sm">
+                  RINGKASAN PERIODE
+                </TableCell>
+                <TableCell>
+                  <span className="text-success font-bold">
+                    +{totalMasuk}
+                  </span>
+                </TableCell>
+                <TableCell>
+                  <span className="text-destructive font-bold">
+                    -{totalKeluar}
+                  </span>
+                </TableCell>
+                <TableCell className="font-bold text-base text-primary">
+                  {saldoAkhirPeriode}
+                </TableCell>
+              </TableRow>
+            </TableFooter>
+          </Table>
         )}
       </DataTableContainer>
     </MainLayout>

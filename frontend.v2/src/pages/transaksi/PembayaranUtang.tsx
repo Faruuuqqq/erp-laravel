@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,12 +7,15 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Search, Receipt, Check, Eye, AlertCircle } from 'lucide-react';
+import { Receipt, Check, Eye, AlertCircle } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useSuppliers } from '@/hooks/api/useSuppliers';
 import { useTransactions, useCreateTransaction } from '@/hooks/api/useTransactions';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { SearchInput } from '@/components/common';
+import { DraftPreviewDialog } from '@/components/dialogs/DraftPreviewDialog';
 import { PrintPreviewDialog } from '@/components/dialogs/PrintPreviewDialog';
 import { PembayaranUtangPrint } from '@/components/print/PembayaranUtangPrint';
 import { formatCurrency } from '@/lib/utils';
@@ -45,19 +48,24 @@ const PembayaranUtang = () => {
     ...(filterSupplier !== 'all' ? { supplier_id: filterSupplier } : {}),
   });
 
-  const suppliers = suppliersData?.data ?? [];
-  // Filter to only ones with remaining > 0 (outstanding utang)
-  const utangList: Transaction[] = (txData?.data ?? []).filter(t => (t.remaining ?? 0) > 0);
+   const suppliers = suppliersData?.data ?? [];
+   // Filter to only ones with remaining > 0 (outstanding utang)
+   const utangList: Transaction[] = (txData?.data ?? []).filter(t => (t.remaining ?? 0) > 0);
 
-  const filtered = utangList.filter(u => {
-    const supplierName = u.supplier ?? '';
-    const matchSearch = u.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      supplierName.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchSupplier = filterSupplier === 'all' || u.supplierId === filterSupplier;
-    return matchSearch && matchSupplier;
-  });
+   const debouncedSearch = useDebouncedValue(searchTerm, 300);
+
+   const filtered = utangList.filter(u => {
+     const supplierName = u.supplier ?? '';
+     const matchSearch = u.invoiceNumber.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+       supplierName.toLowerCase().includes(debouncedSearch.toLowerCase());
+     const matchSupplier = filterSupplier === 'all' || u.supplierId === filterSupplier;
+     return matchSearch && matchSupplier;
+   });
 
   const totalSelected = utangList.filter(u => selectedItems.includes(u.id)).reduce((s, u) => s + (u.remaining ?? 0), 0);
+  const selectedUtang = utangList.filter(u => selectedItems.includes(u.id));
+  const selectedSupplierIds = Array.from(new Set(selectedUtang.map(u => u.supplierId).filter(Boolean)));
+  const hasMixedSuppliers = selectedSupplierIds.length > 1;
   const jumlahBayarNum = parseFloat(jumlahBayar) || 0;
 
   const toggleItem = useCallback((id: string) => {
@@ -68,15 +76,22 @@ const PembayaranUtang = () => {
     if (selectedItems.length === 0) return toast({ title: 'Pilih faktur terlebih dahulu', variant: 'destructive' });
     if (!metodePembayaran) return toast({ title: 'Pilih metode pembayaran', variant: 'destructive' });
     if (jumlahBayarNum <= 0) return toast({ title: 'Masukkan jumlah yang dibayar', variant: 'destructive' });
+    if (hasMixedSuppliers) {
+      return toast({
+        title: 'Pilih faktur dari satu supplier saja',
+        description: 'Pembayaran utang hanya bisa diproses per supplier.',
+        variant: 'destructive',
+      });
+    }
 
-    const firstTx = utangList.find(u => selectedItems.includes(u.id));
-    if (!firstTx?.supplierId) return;
+    const supplierId = selectedSupplierIds[0];
+    if (!supplierId) return;
 
     try {
       const result = await createTx.mutateAsync({
         type: 'pembayaran_utang',
         date: tanggal,
-        supplierId: firstTx.supplierId,
+        supplierId,
         paid: jumlahBayarNum,
         notes: catatan || `Bayar utang: ${selectedItems.join(', ')}`,
         items: [], // payment transaction — no items
@@ -90,34 +105,106 @@ const PembayaranUtang = () => {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Gagal menyimpan';
       toast({ title: 'Error', description: msg, variant: 'destructive' });
     }
-  }, [selectedItems, metodePembayaran, jumlahBayarNum, utangList, tanggal, catatan, createTx, toast]);
+  }, [selectedItems, metodePembayaran, jumlahBayarNum, hasMixedSuppliers, selectedSupplierIds, tanggal, catatan, createTx, toast]);
 
    const reset = useCallback(() => {
      setSelectedItems([]); setSaved(false); setSavedCount(0); setJumlahBayar(''); setMetodePembayaran(''); setCatatan(''); setSavedTransaction(null); setIsDraftPreviewOpen(false);
    }, []);
 
+  const draftPreviewContent = useMemo(() => (
+    <div className="w-full text-sm space-y-4 p-4">
+      <div className="border-b pb-4">
+        <p className="font-semibold text-lg">Pembayaran Utang (Draft)</p>
+        <p className="text-xs text-muted-foreground">Belum disimpan</p>
+      </div>
+      <div className="space-y-1 text-xs">
+        <div className="flex justify-between">
+          <span>Tanggal Bayar:</span>
+          <span className="font-semibold">{tanggal}</span>
+        </div>
+        <div className="flex justify-between">
+          <span>Metode Pembayaran:</span>
+          <span className="font-semibold">{metodePembayaran || '-'}</span>
+        </div>
+        {catatan && (
+          <div className="flex justify-between">
+            <span>Catatan:</span>
+            <span className="font-semibold">{catatan}</span>
+          </div>
+        )}
+      </div>
+      <div className="border-t pt-4">
+        <p className="text-xs font-semibold text-muted-foreground mb-2">Daftar Faktur Utang</p>
+        <table className="w-full text-xs">
+          <thead className="border-b bg-muted/50">
+            <tr>
+              <th className="text-left py-2">No. Faktur</th>
+              <th className="text-left py-2">Supplier</th>
+              <th className="text-right py-2">Sisa Utang</th>
+            </tr>
+          </thead>
+          <tbody>
+            {utangList.filter(u => selectedItems.includes(u.id)).map(item => (
+              <tr key={item.id} className="border-b">
+                <td className="py-2 font-mono font-semibold">{item.invoiceNumber}</td>
+                <td className="py-2">{item.supplier || '-'}</td>
+                <td className="text-right py-2">{formatCurrency(item.remaining ?? 0)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="space-y-1 text-xs border-t pt-4">
+        <div className="flex justify-between">
+          <span>Total Utang:</span>
+          <span className="font-semibold">{formatCurrency(totalSelected)}</span>
+        </div>
+        <div className="flex justify-between font-semibold text-base border-t pt-2">
+          <span>Jumlah Bayar:</span>
+          <span className="text-primary">{formatCurrency(jumlahBayarNum)}</span>
+        </div>
+      </div>
+    </div>
+  ), [catatan, jumlahBayarNum, metodePembayaran, selectedItems, tanggal, totalSelected, utangList]);
+
   if (saved) {
     return (
-      <MainLayout title="Pembayaran Utang" subtitle="Pembayaran berhasil dicatat">
-        <div className="flex flex-col items-center justify-center py-16 gap-6">
-          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/10">
-            <Check className="h-10 w-10 text-primary" />
+      <>
+        <MainLayout title="Pembayaran Utang" subtitle="Pembayaran berhasil dicatat">
+          <div className="flex flex-col items-center justify-center py-16 gap-6">
+            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/10">
+              <Check className="h-10 w-10 text-primary" />
+            </div>
+            <div className="text-center">
+              <h2 className="text-2xl font-bold">Pembayaran Berhasil</h2>
+              <p className="text-3xl font-bold text-primary mt-3">{formatCurrency(jumlahBayarNum)}</p>
+              <p className="text-sm text-muted-foreground mt-1">{savedCount} faktur utang diselesaikan</p>
+            </div>
+             <div className="flex gap-3">
+               {savedTransaction && (
+                 <Button variant="outline" onClick={() => setIsPreviewOpen(true)}>
+                   <Eye className="mr-2 h-4 w-4" />Preview & Cetak
+                 </Button>
+               )}
+               <Button onClick={reset}>Input Baru</Button>
+             </div>
           </div>
-          <div className="text-center">
-            <h2 className="text-2xl font-bold">Pembayaran Berhasil</h2>
-            <p className="text-3xl font-bold text-primary mt-3">{formatCurrency(jumlahBayarNum)}</p>
-            <p className="text-sm text-muted-foreground mt-1">{savedCount} faktur utang diselesaikan</p>
-          </div>
-           <div className="flex gap-3">
-             {savedTransaction && (
-               <Button variant="outline" onClick={() => setIsPreviewOpen(true)}>
-                 <Eye className="mr-2 h-4 w-4" />Preview & Cetak
-               </Button>
-             )}
-             <Button onClick={reset}>Input Baru</Button>
-           </div>
-        </div>
-      </MainLayout>
+        </MainLayout>
+        {savedTransaction && (
+          <PrintPreviewDialog
+            isOpen={isPreviewOpen}
+            onClose={() => setIsPreviewOpen(false)}
+            title="Bukti Pembayaran Utang"
+            documentId="pembayaran-utang-print"
+            filename={`pembayaran-utang-${new Date().toISOString().slice(0, 10)}`}
+            backendPdf={{ transactionId: savedTransaction.id, documentType: 'document' }}
+          >
+            <div id="pembayaran-utang-print">
+              <PembayaranUtangPrint transaction={savedTransaction} />
+            </div>
+          </PrintPreviewDialog>
+        )}
+      </>
     );
   }
 
@@ -131,19 +218,22 @@ const PembayaranUtang = () => {
                 <CardTitle className="flex items-center gap-2 text-base">
                   <Receipt className="h-4 w-4" />Daftar Utang ke Supplier
                 </CardTitle>
-                <div className="flex gap-2">
-                  <div className="relative w-48">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                    <Input placeholder="Cari..." className="pl-8 text-xs h-8" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-                  </div>
-                  <Select value={filterSupplier} onValueChange={setFilterSupplier}>
-                    <SelectTrigger className="w-40 text-xs h-8"><SelectValue placeholder="Semua" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Semua Supplier</SelectItem>
-                      {suppliers.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
+                 <div className="flex gap-2">
+                   <div className="w-48">
+                     <SearchInput 
+                       placeholder="Cari..." 
+                       value={searchTerm}
+                       onChange={setSearchTerm}
+                     />
+                   </div>
+                   <Select value={filterSupplier} onValueChange={setFilterSupplier}>
+                     <SelectTrigger className="w-40 text-xs h-8"><SelectValue placeholder="Semua" /></SelectTrigger>
+                     <SelectContent>
+                       <SelectItem value="all">Semua Supplier</SelectItem>
+                       {suppliers.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                     </SelectContent>
+                   </Select>
+                 </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -167,7 +257,14 @@ const PembayaranUtang = () => {
                       </TableCell></TableRow>
                     ) : filtered.map(item => (
                       <TableRow key={item.id} className={`text-sm cursor-pointer ${selectedItems.includes(item.id) ? 'bg-primary/5' : ''}`} onClick={() => toggleItem(item.id)}>
-                        <TableCell><Checkbox checked={selectedItems.includes(item.id)} onCheckedChange={() => toggleItem(item.id)} /></TableCell>
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedItems.includes(item.id)}
+                            onCheckedChange={() => toggleItem(item.id)}
+                            onClick={e => e.stopPropagation()}
+                            aria-label={`Pilih faktur ${item.invoiceNumber}`}
+                          />
+                        </TableCell>
                         <TableCell className="font-mono text-xs text-primary font-semibold">{item.invoiceNumber}</TableCell>
                         <TableCell className="font-medium max-w-[140px] truncate">{item.supplier || '-'}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">{item.date}</TableCell>
@@ -211,6 +308,11 @@ const PembayaranUtang = () => {
                 <p className="text-xs text-muted-foreground">Total Dipilih ({selectedItems.length} faktur)</p>
                 <p className="text-xl font-bold text-primary tabular-nums">{formatCurrency(totalSelected)}</p>
               </div>
+              {hasMixedSuppliers && (
+                <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-2.5 text-xs text-destructive">
+                  Pilihan mencampur beberapa supplier. Pilih faktur dari satu supplier saja.
+                </div>
+              )}
               <div className="space-y-1.5">
                 <Label className="text-xs">Jumlah Dibayar (Rp)</Label>
                 <Input type="number" value={jumlahBayar} onChange={e => setJumlahBayar(e.target.value)} placeholder="0" className="text-right text-lg font-bold h-10" />
@@ -229,7 +331,7 @@ const PembayaranUtang = () => {
                 {canCreate('transactions.payable') && (
                   <div className="flex gap-2 pt-1">
                     <Button variant="outline" className="flex-1 h-9 text-sm" onClick={() => setSelectedItems([])}>Batal</Button>
-                    <Button className="flex-1 h-9 text-sm" onClick={handleSave} disabled={selectedItems.length === 0 || createTx.isPending}>
+                    <Button className="flex-1 h-9 text-sm" onClick={handleSave} disabled={selectedItems.length === 0 || hasMixedSuppliers || createTx.isPending}>
                       <Check className="mr-1.5 h-4 w-4" />{createTx.isPending ? 'Menyimpan...' : 'Bayar'}
                     </Button>
                   </div>
@@ -245,137 +347,12 @@ const PembayaranUtang = () => {
         </div>
       </div>
 
-       {savedTransaction && (
-         <PrintPreviewDialog
-           isOpen={isPreviewOpen}
-           onClose={() => setIsPreviewOpen(false)}
-           title="Bukti Pembayaran Utang"
-           documentId="pembayaran-utang-print"
-           filename={`pembayaran-utang-${new Date().toISOString().slice(0, 10)}`}
-         >
-           <div id="pembayaran-utang-print">
-             <PembayaranUtangPrint transaction={savedTransaction} />
-           </div>
-         </PrintPreviewDialog>
-       )}
-
-       {/* Draft Preview Dialog */}
-       <PrintPreviewDialog
+       <DraftPreviewDialog
          isOpen={isDraftPreviewOpen}
          onClose={() => setIsDraftPreviewOpen(false)}
-         title="Preview Pembayaran Utang (Draft)"
-         documentId="pembayaran-utang-draft-print"
-         filename="Pembayaran-Utang-Draft"
-         printContent={
-           <div className="w-full text-sm space-y-4 p-4">
-             <div className="border-b pb-4">
-               <p className="font-semibold text-lg">Pembayaran Utang (Draft)</p>
-               <p className="text-xs text-muted-foreground">Belum disimpan</p>
-             </div>
-             <div className="space-y-1 text-xs">
-               <div className="flex justify-between">
-                 <span>Tanggal Bayar:</span>
-                 <span className="font-semibold">{tanggal}</span>
-               </div>
-               <div className="flex justify-between">
-                 <span>Metode Pembayaran:</span>
-                 <span className="font-semibold">{metodePembayaran || '-'}</span>
-               </div>
-               {catatan && (
-                 <div className="flex justify-between">
-                   <span>Catatan:</span>
-                   <span className="font-semibold">{catatan}</span>
-                 </div>
-               )}
-             </div>
-             <div className="border-t pt-4">
-               <p className="text-xs font-semibold text-muted-foreground mb-2">Daftar Faktur Utang</p>
-               <table className="w-full text-xs">
-                 <thead className="border-b bg-muted/50">
-                   <tr>
-                     <th className="text-left py-2">No. Faktur</th>
-                     <th className="text-left py-2">Supplier</th>
-                     <th className="text-right py-2">Sisa Utang</th>
-                   </tr>
-                 </thead>
-                 <tbody>
-                   {utangList.filter(u => selectedItems.includes(u.id)).map(item => (
-                     <tr key={item.id} className="border-b">
-                       <td className="py-2 font-mono font-semibold">{item.invoiceNumber}</td>
-                       <td className="py-2">{item.supplier || '-'}</td>
-                       <td className="text-right py-2">{formatCurrency(item.remaining ?? 0)}</td>
-                     </tr>
-                   ))}
-                 </tbody>
-               </table>
-             </div>
-             <div className="space-y-1 text-xs border-t pt-4">
-               <div className="flex justify-between">
-                 <span>Total Utang:</span>
-                 <span className="font-semibold">{formatCurrency(totalSelected)}</span>
-               </div>
-               <div className="flex justify-between font-semibold text-base border-t pt-2">
-                 <span>Jumlah Bayar:</span>
-                 <span className="text-primary">{formatCurrency(jumlahBayarNum)}</span>
-               </div>
-             </div>
-           </div>
-         }
-       >
-         <div className="w-full text-sm space-y-4 p-4">
-           <div className="border-b pb-4">
-             <p className="font-semibold text-lg">Pembayaran Utang (Draft)</p>
-             <p className="text-xs text-muted-foreground">Belum disimpan</p>
-           </div>
-           <div className="space-y-1 text-xs">
-             <div className="flex justify-between">
-               <span>Tanggal Bayar:</span>
-               <span className="font-semibold">{tanggal}</span>
-             </div>
-             <div className="flex justify-between">
-               <span>Metode Pembayaran:</span>
-               <span className="font-semibold">{metodePembayaran || '-'}</span>
-             </div>
-             {catatan && (
-               <div className="flex justify-between">
-                 <span>Catatan:</span>
-                 <span className="font-semibold">{catatan}</span>
-               </div>
-             )}
-           </div>
-           <div className="border-t pt-4">
-             <p className="text-xs font-semibold text-muted-foreground mb-2">Daftar Faktur Utang</p>
-             <table className="w-full text-xs">
-               <thead className="border-b bg-muted/50">
-                 <tr>
-                   <th className="text-left py-2">No. Faktur</th>
-                   <th className="text-left py-2">Supplier</th>
-                   <th className="text-right py-2">Sisa Utang</th>
-                 </tr>
-               </thead>
-               <tbody>
-                 {utangList.filter(u => selectedItems.includes(u.id)).map(item => (
-                   <tr key={item.id} className="border-b">
-                     <td className="py-2 font-mono font-semibold">{item.invoiceNumber}</td>
-                     <td className="py-2">{item.supplier || '-'}</td>
-                     <td className="text-right py-2">{formatCurrency(item.remaining ?? 0)}</td>
-                   </tr>
-                 ))}
-               </tbody>
-             </table>
-           </div>
-           <div className="space-y-1 text-xs border-t pt-4">
-             <div className="flex justify-between">
-               <span>Total Utang:</span>
-               <span className="font-semibold">{formatCurrency(totalSelected)}</span>
-             </div>
-             <div className="flex justify-between font-semibold text-base border-t pt-2">
-               <span>Jumlah Bayar:</span>
-               <span className="text-primary">{formatCurrency(jumlahBayarNum)}</span>
-             </div>
-           </div>
-         </div>
-       </PrintPreviewDialog>
+         content={draftPreviewContent}
+         title="Preview Pembayaran Utang"
+       />
      </MainLayout>
    );
  };

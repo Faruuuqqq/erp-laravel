@@ -9,7 +9,7 @@ class Supplier extends Model
 {
     use SoftDeletes;
 
-    protected $fillable = ['name', 'phone', 'email', 'address', 'balance', 'no_rekening'];
+    protected $fillable = ['name', 'phone', 'phone2', 'email', 'address', 'city', 'balance', 'no_rekening'];
 
     protected $casts = ['balance' => 'decimal:2'];
 

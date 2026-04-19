@@ -10,13 +10,29 @@ class SettingSeeder extends Seeder
     public function run(): void
     {
         $settings = [
-            // === TOKO ===
-            ['key' => 'store_name',       'value' => 'TokoSync Retail',     'group' => 'toko',     'type' => 'string'],
-            ['key' => 'store_address',    'value' => 'Jl. Raya Pasar No. 88, Jakarta Selatan', 'group' => 'toko', 'type' => 'string'],
-            ['key' => 'store_phone',      'value' => '021-5550123',          'group' => 'toko',     'type' => 'string'],
-            ['key' => 'store_email',      'value' => 'info@tokosync.local',  'group' => 'toko',     'type' => 'string'],
-            ['key' => 'store_npwp',       'value' => '01.234.567.8-901.000', 'group' => 'toko',     'type' => 'string'],
-            ['key' => 'store_tagline',    'value' => 'Belanja Mudah, Harga Terjangkau', 'group' => 'toko', 'type' => 'string'],
+            // === STORE (PRIMARY KEYS USED BY SETTINGS + PDF) ===
+            ['key' => 'store_name',             'value' => 'TokoSync Retail', 'group' => 'store', 'type' => 'string'],
+            ['key' => 'phone',                  'value' => '021-5550123', 'group' => 'store', 'type' => 'string'],
+            ['key' => 'address',                'value' => 'Jl. Raya Pasar No. 88, Jakarta Selatan', 'group' => 'store', 'type' => 'string'],
+            ['key' => 'email',                  'value' => 'info@tokosync.local', 'group' => 'store', 'type' => 'string'],
+            ['key' => 'npwp',                   'value' => '01.234.567.8-901.000', 'group' => 'store', 'type' => 'string'],
+            ['key' => 'siup',                   'value' => '', 'group' => 'store', 'type' => 'string'],
+
+            // === STORE LEGACY COMPATIBILITY KEYS ===
+            ['key' => 'store_address',          'value' => 'Jl. Raya Pasar No. 88, Jakarta Selatan', 'group' => 'store', 'type' => 'string'],
+            ['key' => 'store_phone',            'value' => '021-5550123', 'group' => 'store', 'type' => 'string'],
+            ['key' => 'store_email',            'value' => 'info@tokosync.local', 'group' => 'store', 'type' => 'string'],
+            ['key' => 'store_npwp',             'value' => '01.234.567.8-901.000', 'group' => 'store', 'type' => 'string'],
+            ['key' => 'store_tagline',          'value' => 'Belanja Mudah, Harga Terjangkau', 'group' => 'store', 'type' => 'string'],
+
+            // === BILLING / KONTRA BON DOCUMENT SETTINGS ===
+            ['key' => 'bank_name',              'value' => '', 'group' => 'store', 'type' => 'string'],
+            ['key' => 'bank_account_number',    'value' => '', 'group' => 'store', 'type' => 'string'],
+            ['key' => 'bank_account_name',      'value' => '', 'group' => 'store', 'type' => 'string'],
+            ['key' => 'billing_due_days',       'value' => 7, 'group' => 'store', 'type' => 'number'],
+            ['key' => 'billing_payment_terms',  'value' => 'Pembayaran maksimal {due_days} hari sejak tanggal terbit dokumen.', 'group' => 'store', 'type' => 'string'],
+            ['key' => 'billing_approver_name',  'value' => 'Finance', 'group' => 'store', 'type' => 'string'],
+            ['key' => 'billing_approver_title', 'value' => 'AR Officer', 'group' => 'store', 'type' => 'string'],
 
             // === INVOICE ===
             ['key' => 'invoice_prefix',   'value' => 'INV',  'group' => 'invoice', 'type' => 'string'],

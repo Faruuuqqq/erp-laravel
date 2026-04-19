@@ -8,10 +8,21 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableFooter,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { useSaldoPiutang } from '@/hooks/api/useInfo';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
+import { exportToExcel } from '@/lib/export';
 
 interface PiutangCustomer {
   id: string;
@@ -27,6 +38,7 @@ const SaldoPiutang = () => {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const { canPrint } = usePermissions();
+  const { toast } = useToast();
 
   const debouncedSearch = useDebouncedValue(search, 400);
   const { data, isLoading } = useSaldoPiutang({
@@ -47,14 +59,44 @@ const SaldoPiutang = () => {
     return true;
   });
 
-  const handleExportPDF = useCallback(() => {
-    const content = `SALDO PIUTANG - TOKOSYNC ERP\nDicetak: ${new Date().toLocaleDateString('id-ID')}\n${'='.repeat(60)}\nTotal Piutang: ${formatCurrency(total)}\nCustomer: ${withDebt.length}\n${'='.repeat(60)}\n${filtered.filter(c => c.balance > 0).map(c => `${c.code}\t${c.name}\t${formatCurrency(c.balance)}\t${c.creditLimit > 0 && c.balance > c.creditLimit ? 'OVER LIMIT' : 'Normal'}`).join('\n')}\n${'='.repeat(60)}\nGRAND TOTAL: ${formatCurrency(total)}`;
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `saldo-piutang-${new Date().toISOString().slice(0, 10)}.txt`; a.click();
-    URL.revokeObjectURL(url);
-  }, [filtered, total, withDebt.length]);
+  const handleExportXLSX = useCallback(() => {
+    try {
+      const data = filtered.map(item => {
+        const sisaLimit = item.creditLimit - item.balance;
+        let status = 'Lunas';
+        if (item.balance > 0) {
+          status = item.creditLimit > 0 && item.balance > item.creditLimit ? 'Melebihi Limit' : 'Piutang';
+        }
+        return {
+          'Kode': item.code,
+          'Nama Customer': item.name,
+          'Telepon': item.phone,
+          'Email': item.email || '-',
+          'Total Piutang': item.balance,
+          'Limit Kredit': item.creditLimit,
+          'Sisa Limit': sisaLimit,
+          'Status': status,
+        };
+      });
+
+      exportToExcel(
+        data,
+        `saldo-piutang-${new Date().toISOString().slice(0, 10)}`,
+        { sheetName: 'Saldo Piutang' }
+      );
+
+      toast({
+        title: 'Sukses',
+        description: 'Data berhasil diekspor ke Excel'
+      });
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: 'Gagal mengekspor data',
+        variant: 'destructive'
+      });
+    }
+  }, [filtered, toast]);
 
   return (
     <MainLayout title="Saldo Piutang" subtitle="Daftar piutang dari customer">
@@ -66,7 +108,7 @@ const SaldoPiutang = () => {
             {canPrint('__owner_only__') && (
               <Button variant="outline" size="sm" onClick={() => window.print()}><Printer className="h-4 w-4 mr-1.5" />Cetak</Button>
             )}
-            <Button variant="outline" size="sm" onClick={handleExportPDF}><Download className="h-4 w-4 mr-1.5" />Export</Button>
+            <Button variant="outline" size="sm" onClick={handleExportXLSX}><Download className="h-4 w-4 mr-1.5" />Export XLSX</Button>
           </>
         }
       />
@@ -95,63 +137,78 @@ const SaldoPiutang = () => {
       </div>
 
       <DataTableContainer>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b bg-muted/40 text-xs text-muted-foreground">
-                {['Kode', 'Nama Customer', 'Telepon', 'Total Piutang', 'Limit Kredit', 'Sisa Limit', 'Status'].map(h => (
-                  <th key={h} className="px-4 py-3 text-left font-semibold whitespace-nowrap">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading ? (
-                Array.from({ length: 5 }).map((_, i) => (
-                  <tr key={i}><td colSpan={7} className="px-4 py-2"><Skeleton className="h-8 w-full" /></td></tr>
-                ))
-              ) : filtered.length === 0 ? (
-                <tr><td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">Tidak ada data yang sesuai.</td></tr>
-              ) : (
-                <>
-                  {filtered.map(c => {
-                    const isOverLimit = c.creditLimit > 0 && c.balance > c.creditLimit;
-                    const sisaLimit = c.creditLimit - c.balance;
-                    return (
-                      <tr key={c.id} className={`border-b transition-colors hover:bg-muted/20 ${isOverLimit ? 'bg-destructive/5' : ''}`}>
-                        <td className="px-4 py-3 font-mono text-xs text-primary">{c.code}</td>
-                        <td className="px-4 py-3">
-                          <div className="font-medium">{c.name}</div>
-                          {c.email && <div className="text-xs text-muted-foreground">{c.email}</div>}
-                        </td>
-                        <td className="px-4 py-3 text-muted-foreground">{c.phone}</td>
-                        <td className="px-4 py-3">
-                          {c.balance > 0 ? <CurrencyCell value={c.balance} color="red" /> : <span className="text-muted-foreground text-xs">—</span>}
-                        </td>
-                        <td className="px-4 py-3"><CurrencyCell value={c.creditLimit} /></td>
-                        <td className="px-4 py-3">
-                          {c.creditLimit > 0 ? <CurrencyCell value={Math.abs(sisaLimit)} color={sisaLimit < 0 ? 'red' : 'green'} /> : <span className="text-xs text-muted-foreground">—</span>}
-                        </td>
-                        <td className="px-4 py-3">
-                          {c.balance === 0
-                            ? <Badge variant="outline" className="text-success border-success text-xs">Lunas</Badge>
-                            : isOverLimit
-                              ? <Badge variant="destructive" className="text-xs">Melebihi Limit</Badge>
-                              : <Badge variant="outline" className="text-warning border-warning text-xs">Piutang</Badge>
-                          }
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  <tr className="bg-muted/40 font-bold border-t-2">
-                    <td colSpan={3} className="px-4 py-3 text-sm">GRAND TOTAL PIUTANG</td>
-                    <td className="px-4 py-3"><CurrencyCell value={total} color="red" /></td>
-                    <td colSpan={3} />
-                  </tr>
-                </>
-              )}
-            </tbody>
-          </table>
-        </div>
+        {isLoading ? (
+          <div className="p-8 space-y-2">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Skeleton key={i} className="h-8 w-full" />
+            ))}
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="p-12 text-center">
+            <TrendingUp className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-50" />
+            <p className="text-muted-foreground">
+              Tidak ada data yang sesuai.
+            </p>
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/40">
+                <TableHead>Kode</TableHead>
+                <TableHead>Nama Customer</TableHead>
+                <TableHead>Telepon</TableHead>
+                <TableHead>Total Piutang</TableHead>
+                <TableHead>Limit Kredit</TableHead>
+                <TableHead>Sisa Limit</TableHead>
+                <TableHead>Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filtered.map(c => {
+                const isOverLimit = c.creditLimit > 0 && c.balance > c.creditLimit;
+                const sisaLimit = c.creditLimit - c.balance;
+                return (
+                  <TableRow
+                    key={c.id}
+                    className={`transition-colors hover:bg-muted/20 ${isOverLimit ? 'bg-destructive/5' : ''}`}
+                  >
+                    <TableCell className="font-mono text-xs text-primary">{c.code}</TableCell>
+                    <TableCell>
+                      <div className="font-medium">{c.name}</div>
+                      {c.email && <div className="text-xs text-muted-foreground">{c.email}</div>}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{c.phone}</TableCell>
+                    <TableCell>
+                      {c.balance > 0 ? <CurrencyCell value={c.balance} color="red" /> : <span className="text-muted-foreground text-xs">—</span>}
+                    </TableCell>
+                    <TableCell><CurrencyCell value={c.creditLimit} /></TableCell>
+                    <TableCell>
+                      {c.creditLimit > 0 ? <CurrencyCell value={Math.abs(sisaLimit)} color={sisaLimit < 0 ? 'red' : 'green'} /> : <span className="text-xs text-muted-foreground">—</span>}
+                    </TableCell>
+                    <TableCell>
+                      {c.balance === 0
+                        ? <Badge variant="outline" className="text-success border-success text-xs">Lunas</Badge>
+                        : isOverLimit
+                          ? <Badge variant="destructive" className="text-xs">Melebihi Limit</Badge>
+                          : <Badge variant="outline" className="text-warning border-warning text-xs">Piutang</Badge>
+                      }
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+
+            <TableFooter>
+              <TableRow className="bg-muted/40">
+                <TableCell colSpan={3} className="font-bold text-sm">
+                  GRAND TOTAL PIUTANG
+                </TableCell>
+                <TableCell><CurrencyCell value={total} color="red" /></TableCell>
+                <TableCell colSpan={3} />
+              </TableRow>
+            </TableFooter>
+          </Table>
+        )}
       </DataTableContainer>
     </MainLayout>
   );

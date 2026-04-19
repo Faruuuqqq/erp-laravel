@@ -1,5 +1,4 @@
 import { useState, useMemo, useCallback } from 'react';
-import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,15 +8,20 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Plus, Trash2, ShoppingCart, Calculator, Eye, CheckCircle2, Search } from 'lucide-react';
+import { Plus, Trash2, ShoppingCart, Calculator, Eye } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useProducts } from '@/hooks/api/useProducts';
 import { useSuppliers } from '@/hooks/api/useSuppliers';
 import { useWarehouses } from '@/hooks/api/useWarehouses';
 import { useCreateTransaction } from '@/hooks/api/useTransactions';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { SearchInput } from '@/components/common';
+import { DraftPreviewDialog } from '@/components/dialogs/DraftPreviewDialog';
 import { PrintPreviewDialog } from '@/components/dialogs/PrintPreviewDialog';
+import { SuccessScreen } from '@/components/layout/SuccessScreen';
 import { FakturPembelian } from '@/components/print/FakturPembelian';
+import { MainLayout } from '@/components/layout/MainLayout';
 import { formatCurrency } from '@/lib/utils';
 import type { Transaction, Product } from '@/types';
 
@@ -66,23 +70,25 @@ const Pembelian = () => {
    const [priceConflict, setPriceConflict] = useState<PriceConflict>({ show: false, existingPrice: 0, newPrice: 0, productName: '' });
    const [pendingAddToCart, setPendingAddToCart] = useState<{ product: Product; qty: number; harga: number } | null>(null);
 
-  const { data: productsData } = useProducts({ per_page: 500 });
-  const { data: suppliersData } = useSuppliers({ perPage: 200 });
-  const { data: warehousesData } = useWarehouses({ per_page: 100 });
+   const { data: productsData } = useProducts({ per_page: 500 });
+   const { data: suppliersData } = useSuppliers({ perPage: 200 });
+   const { data: warehousesData } = useWarehouses({ per_page: 100 });
 
-  // Wrap data arrays in useMemo to stabilize references
-  const products = useMemo(() => productsData?.data ?? [], [productsData?.data]);
-  const suppliers = useMemo(() => suppliersData?.data ?? [], [suppliersData?.data]);
-  const warehouses = useMemo(() => warehousesData?.data ?? [], [warehousesData?.data]);
+   // Wrap data arrays in useMemo to stabilize references
+   const products = useMemo(() => productsData?.data ?? [], [productsData?.data]);
+   const suppliers = useMemo(() => suppliersData?.data ?? [], [suppliersData?.data]);
+   const warehouses = useMemo(() => warehousesData?.data ?? [], [warehousesData?.data]);
 
-  const set = useCallback(<K extends keyof ReturnType<typeof BLANK_STATE>>(key: K, val: ReturnType<typeof BLANK_STATE>[K]) =>
-    setState(p => ({ ...p, [key]: val })), []);
+   const debouncedSearch = useDebouncedValue(state.searchProduct, 300);
 
-  const filteredProducts = useMemo(() =>
-    products.filter(p =>
-      p.name.toLowerCase().includes(state.searchProduct.toLowerCase()) ||
-      (p.code ?? '').toLowerCase().includes(state.searchProduct.toLowerCase())
-    ), [products, state.searchProduct]);
+   const set = useCallback(<K extends keyof ReturnType<typeof BLANK_STATE>>(key: K, val: ReturnType<typeof BLANK_STATE>[K]) =>
+     setState(p => ({ ...p, [key]: val })), []);
+
+   const filteredProducts = useMemo(() =>
+     products.filter(p =>
+       p.name.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+       (p.code ?? '').toLowerCase().includes(debouncedSearch.toLowerCase())
+     ), [products, debouncedSearch]);
 
   const supplier = suppliers.find(s => s.id === state.selectedSupplier);
 
@@ -206,29 +212,94 @@ const Pembelian = () => {
 
   const reset = useCallback(() => { setState(BLANK_STATE()); setSaved(false); }, []);
 
-  if (saved) {
-    return (
-      <MainLayout title="Transaksi Pembelian" subtitle="Transaksi berhasil disimpan">
-        <div className="flex flex-col items-center justify-center py-16 gap-6">
-          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-success/10">
-            <CheckCircle2 className="h-10 w-10 text-success" />
-          </div>
-          <div className="text-center">
-            <h2 className="text-2xl font-bold">Pembelian Berhasil Disimpan</h2>
-            <p className="text-muted-foreground mt-1">No. Faktur: <span className="font-mono font-semibold text-primary">{savedInvoice}</span></p>
-            <p className="text-3xl font-bold text-primary mt-3">{formatCurrency(savedTotal)}</p>
-            {isKredit && <Badge variant="outline" className="mt-2 text-warning border-warning">Dicatat sebagai Utang</Badge>}
-          </div>
-          <div className="flex gap-3">
-            {canPrint('transactions.purchase') && (
-              <Button variant="outline" onClick={() => setIsPreviewOpen(true)}>
-                <Eye className="mr-2 h-4 w-4" />Preview & Cetak
-              </Button>
-            )}
-            <Button onClick={reset}>Pembelian Baru</Button>
-          </div>
+  const draftPreviewContent = useMemo(() => (
+    <div className="w-full text-sm space-y-4 p-4">
+      <div className="border-b pb-4">
+        <p className="font-semibold text-lg">Pembelian (Draft)</p>
+        <p className="text-xs text-muted-foreground">Belum disimpan</p>
+      </div>
+      <div className="space-y-1 text-xs">
+        <div className="flex justify-between">
+          <span>Tanggal:</span>
+          <span className="font-semibold">{state.tanggal}</span>
         </div>
-      </MainLayout>
+        <div className="flex justify-between">
+          <span>Supplier:</span>
+          <span className="font-semibold">{supplier?.name || '-'}</span>
+        </div>
+        {state.catatan && (
+          <div className="flex justify-between">
+            <span>Catatan:</span>
+            <span className="font-semibold">{state.catatan}</span>
+          </div>
+        )}
+      </div>
+      <table className="w-full text-xs">
+        <thead className="border-b bg-muted/50">
+          <tr>
+            <th className="text-left py-2">Produk</th>
+            <th className="text-right py-2">Qty</th>
+            <th className="text-right py-2">Harga</th>
+            <th className="text-right py-2">Subtotal</th>
+          </tr>
+        </thead>
+        <tbody>
+          {state.cart.map(item => (
+            <tr key={item.productId} className="border-b">
+              <td className="py-2">{item.nama}</td>
+              <td className="text-right">{item.qty}</td>
+              <td className="text-right">{formatCurrency(item.harga)}</td>
+              <td className="text-right font-semibold">{formatCurrency(item.subtotal)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="space-y-1 text-xs border-t pt-4">
+        <div className="flex justify-between">
+          <span>Subtotal:</span>
+          <span>{formatCurrency(subtotal)}</span>
+        </div>
+        {parseFloat(state.diskon) > 0 && (
+          <div className="flex justify-between text-warning">
+            <span>Diskon:</span>
+            <span>-{formatCurrency(parseFloat(state.diskon) || 0)}</span>
+          </div>
+        )}
+        <div className="flex justify-between font-semibold text-base border-t pt-2">
+          <span>Total:</span>
+          <span>{formatCurrency(grandTotal)}</span>
+        </div>
+      </div>
+    </div>
+  ), [grandTotal, state.cart, state.catatan, state.diskon, state.tanggal, subtotal, supplier?.name]);
+
+  if (saved && savedTrx) {
+    return (
+      <>
+        <SuccessScreen
+          title="Pembelian Berhasil Disimpan"
+          subtitle="Transaksi berhasil disimpan"
+          invoiceNumber={savedInvoice}
+          total={savedTotal}
+          onPrint={() => setIsPreviewOpen(true)}
+          canPrint={canPrint('transactions.purchase')}
+          onReset={reset}
+          extra={isKredit && <Badge variant="outline" className="mt-2 text-warning border-warning">Dicatat sebagai Utang</Badge>}
+        />
+
+        <PrintPreviewDialog
+          isOpen={isPreviewOpen}
+          onClose={() => setIsPreviewOpen(false)}
+          title="Faktur Pembelian"
+          documentId="faktur-pembelian-print"
+          filename={`Faktur-Pembelian-${savedTrx.invoiceNumber}`}
+          backendPdf={{ transactionId: savedTrx.id, documentType: 'invoice' }}
+        >
+          <div id="faktur-pembelian-print">
+            <FakturPembelian transaction={savedTrx} />
+          </div>
+        </PrintPreviewDialog>
+      </>
     );
   }
 
@@ -277,31 +348,32 @@ const Pembelian = () => {
                 </Select>
               </div>
 
-              {/* Add product */}
-              {canCreate('transactions.purchase') && (
-                <div className="rounded-lg border bg-muted/30 p-3.5">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Tambah Produk</p>
-                  <div className="grid gap-2 md:grid-cols-6">
-                    <div className="md:col-span-3 space-y-1">
-                      <div className="relative">
-                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                        <Input placeholder="Cari produk..." value={state.searchProduct} onChange={e => set('searchProduct', e.target.value)} className="pl-8 text-xs h-8" />
-                      </div>
-                      <Select value={state.selectedProduct} onValueChange={v => {
-                        const p = products.find(p => p.id === v);
-                        setState(prev => ({ ...prev, selectedProduct: v, harga: String(p?.buyPrice ?? '') }));
-                      }}>
-                        <SelectTrigger className="text-xs h-8"><SelectValue placeholder="Pilih produk" /></SelectTrigger>
-                        <SelectContent>
-                          {filteredProducts.map(p => (
-                            <SelectItem key={p.id} value={p.id}>
-                              {p.code && `${p.code} - `}{p.name}
-                              <Badge variant="secondary" className="ml-2 text-[9px] h-3.5 px-1">Stok: {p.stock ?? 0}</Badge>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+               {/* Add product */}
+               {canCreate('transactions.purchase') && (
+                 <div className="rounded-lg border bg-muted/30 p-3.5">
+                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Tambah Produk</p>
+                   <div className="grid gap-2 md:grid-cols-6">
+                     <div className="md:col-span-3 space-y-1">
+                       <SearchInput 
+                         placeholder="Cari produk..." 
+                         value={state.searchProduct}
+                         onChange={(value) => set('searchProduct', value)}
+                       />
+                       <Select value={state.selectedProduct} onValueChange={v => {
+                         const p = products.find(p => p.id === v);
+                         setState(prev => ({ ...prev, selectedProduct: v, harga: String(p?.buyPrice ?? '') }));
+                       }}>
+                         <SelectTrigger className="text-xs h-8"><SelectValue placeholder="Pilih produk" /></SelectTrigger>
+                         <SelectContent>
+                           {filteredProducts.map(p => (
+                             <SelectItem key={p.id} value={p.id}>
+                               {p.code && `${p.code} - `}{p.name}
+                               <Badge variant="secondary" className="ml-2 text-[9px] h-3.5 px-1">Stok: {p.stock ?? 0}</Badge>
+                             </SelectItem>
+                           ))}
+                         </SelectContent>
+                       </Select>
+                     </div>
                     <div className="space-y-1">
                       <Label className="text-xs">Qty</Label>
                       <Input type="number" value={state.qty} onChange={e => set('qty', e.target.value)} className="text-xs h-8" min="1" />
@@ -340,7 +412,7 @@ const Pembelian = () => {
                         <TableCell className="text-right tabular-nums text-xs">{formatCurrency(item.harga)}</TableCell>
                         <TableCell className="text-right font-semibold tabular-nums">{formatCurrency(item.subtotal)}</TableCell>
                         <TableCell>
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:bg-destructive/10" onClick={() => removeItem(idx)}>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:bg-destructive/10" onClick={() => removeItem(idx)} aria-label={`Hapus item ${item.nama}`} title={`Hapus ${item.nama}`}>
                             <Trash2 className="h-3.5 w-3.5" />
                           </Button>
                         </TableCell>
@@ -434,149 +506,37 @@ const Pembelian = () => {
        {/* Print Preview Dialog */}
        {savedTrx && (
          <PrintPreviewDialog
-           isOpen={isPreviewOpen}
-           onClose={() => setIsPreviewOpen(false)}
-           title="Faktur Pembelian"
-           documentId="faktur-pembelian-print"
-           filename={`Faktur-Pembelian-${savedTrx.invoiceNumber}`}
-         >
+            isOpen={isPreviewOpen}
+            onClose={() => setIsPreviewOpen(false)}
+            title="Faktur Pembelian"
+            documentId="faktur-pembelian-print"
+            filename={`Faktur-Pembelian-${savedTrx.invoiceNumber}`}
+            backendPdf={{ transactionId: savedTrx.id, documentType: 'invoice' }}
+          >
            <div id="faktur-pembelian-print">
              <FakturPembelian transaction={savedTrx} />
            </div>
          </PrintPreviewDialog>
        )}
 
-       {/* Draft Preview Dialog */}
-       <PrintPreviewDialog
+       <DraftPreviewDialog
          isOpen={isDraftPreviewOpen}
          onClose={() => setIsDraftPreviewOpen(false)}
-         title="Preview Pembelian (Draft)"
-         documentId="faktur-pembelian-draft-print"
-         filename="Pembelian-Draft"
-         printContent={
-           <div className="w-full text-sm space-y-4 p-4">
-             <div className="border-b pb-4">
-               <p className="font-semibold text-lg">Pembelian (Draft)</p>
-               <p className="text-xs text-muted-foreground">Belum disimpan</p>
-             </div>
-             <div className="space-y-1 text-xs">
-               <div className="flex justify-between">
-                 <span>Tanggal:</span>
-                 <span className="font-semibold">{state.tanggal}</span>
-               </div>
-               <div className="flex justify-between">
-                 <span>Supplier:</span>
-                 <span className="font-semibold">{supplier?.name || '-'}</span>
-               </div>
-               {state.catatan && (
-                 <div className="flex justify-between">
-                   <span>Catatan:</span>
-                   <span className="font-semibold">{state.catatan}</span>
-                 </div>
-               )}
-             </div>
-             <table className="w-full text-xs">
-               <thead className="border-b bg-muted/50">
-                 <tr>
-                   <th className="text-left py-2">Produk</th>
-                   <th className="text-right py-2">Qty</th>
-                   <th className="text-right py-2">Harga</th>
-                   <th className="text-right py-2">Subtotal</th>
-                 </tr>
-               </thead>
-               <tbody>
-                 {state.cart.map(item => (
-                   <tr key={item.productId} className="border-b">
-                     <td className="py-2">{item.nama}</td>
-                     <td className="text-right">{item.qty}</td>
-                     <td className="text-right">{formatCurrency(item.harga)}</td>
-                     <td className="text-right font-semibold">{formatCurrency(item.subtotal)}</td>
-                   </tr>
-                 ))}
-               </tbody>
-             </table>
-             <div className="space-y-1 text-xs border-t pt-4">
-               <div className="flex justify-between">
-                 <span>Subtotal:</span>
-                 <span>{formatCurrency(subtotal)}</span>
-               </div>
-               {parseFloat(state.diskon) > 0 && (
-                 <div className="flex justify-between text-warning">
-                   <span>Diskon:</span>
-                   <span>-{formatCurrency(parseFloat(state.diskon) || 0)}</span>
-                 </div>
-               )}
-               <div className="flex justify-between font-semibold text-base border-t pt-2">
-                 <span>Total:</span>
-                 <span>{formatCurrency(grandTotal)}</span>
-               </div>
-             </div>
-           </div>
-         }
-       >
-         <div className="w-full text-sm space-y-4 p-4">
-           <div className="border-b pb-4">
-             <p className="font-semibold text-lg">Pembelian (Draft)</p>
-             <p className="text-xs text-muted-foreground">Belum disimpan</p>
-           </div>
-           <div className="space-y-1 text-xs">
-             <div className="flex justify-between">
-               <span>Tanggal:</span>
-               <span className="font-semibold">{state.tanggal}</span>
-             </div>
-             <div className="flex justify-between">
-               <span>Supplier:</span>
-               <span className="font-semibold">{supplier?.name || '-'}</span>
-             </div>
-             {state.catatan && (
-               <div className="flex justify-between">
-                 <span>Catatan:</span>
-                 <span className="font-semibold">{state.catatan}</span>
-               </div>
-             )}
-           </div>
-           <table className="w-full text-xs">
-             <thead className="border-b bg-muted/50">
-               <tr>
-                 <th className="text-left py-2">Produk</th>
-                 <th className="text-right py-2">Qty</th>
-                 <th className="text-right py-2">Harga</th>
-                 <th className="text-right py-2">Subtotal</th>
-               </tr>
-             </thead>
-             <tbody>
-               {state.cart.map(item => (
-                 <tr key={item.productId} className="border-b">
-                   <td className="py-2">{item.nama}</td>
-                   <td className="text-right">{item.qty}</td>
-                   <td className="text-right">{formatCurrency(item.harga)}</td>
-                   <td className="text-right font-semibold">{formatCurrency(item.subtotal)}</td>
-                 </tr>
-               ))}
-             </tbody>
-           </table>
-           <div className="space-y-1 text-xs border-t pt-4">
-             <div className="flex justify-between">
-               <span>Subtotal:</span>
-               <span>{formatCurrency(subtotal)}</span>
-             </div>
-             {parseFloat(state.diskon) > 0 && (
-               <div className="flex justify-between text-warning">
-                 <span>Diskon:</span>
-                 <span>-{formatCurrency(parseFloat(state.diskon) || 0)}</span>
-               </div>
-             )}
-             <div className="flex justify-between font-semibold text-base border-t pt-2">
-               <span>Total:</span>
-               <span>{formatCurrency(grandTotal)}</span>
-             </div>
-            </div>
-          </div>
-        </PrintPreviewDialog>
+         content={draftPreviewContent}
+         title="Preview Pembelian"
+       />
 
 
       {/* Price Conflict Dialog */}
-      <AlertDialog open={priceConflict.show} onOpenChange={v => !v && setPriceConflict({ show: false, existingPrice: 0, newPrice: 0, productName: '' })}>
+      <AlertDialog
+        open={priceConflict.show}
+        onOpenChange={v => {
+          if (!v) {
+            setPriceConflict({ show: false, existingPrice: 0, newPrice: 0, productName: '' });
+            setPendingAddToCart(null);
+          }
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Produk dengan Harga Berbeda</AlertDialogTitle>
@@ -596,7 +556,9 @@ const Pembelian = () => {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="flex gap-2">
-            <AlertDialogCancel className="flex-1">Gunakan Harga Lama</AlertDialogCancel>
+            <AlertDialogCancel className="flex-1" onClick={() => handleConfirmPriceConflict(false)}>
+              Gunakan Harga Lama
+            </AlertDialogCancel>
             <AlertDialogAction 
               className="flex-1"
               onClick={() => handleConfirmPriceConflict(true)}

@@ -22,7 +22,6 @@ class WarehouseFactory extends Factory
                 'Jl. Raya Pahlawan No. 100, Bandung',
                 'Jl. Karang Pilang No. 50, Surabaya',
             ]),
-            'total_products' => $this->faker->numberBetween(100, 500),
             'status' => $this->faker->randomElement(['active', 'active', 'active', 'inactive']),
         ];
     }

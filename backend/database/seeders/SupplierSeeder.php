@@ -10,6 +10,7 @@ class SupplierSeeder extends Seeder
     public function run(): void
     {
         $suppliers = [
+            // Existing 13 suppliers
             [
                 'name' => 'PT. Distributor Jaya Abadi',
                 'phone' => '08123456789',
@@ -101,12 +102,83 @@ class SupplierSeeder extends Seeder
                 'address' => 'Jl. Merdeka No. 145, Yogyakarta',
                 'balance' => 950000,
             ],
+            // Additional suppliers for production volume
+            [
+                'name' => 'PT. Kimia Semarang',
+                'phone' => '08229876543',
+                'email' => 'sales@kimiasemarang.com',
+                'address' => 'Jl. Pemuda No. 345, Semarang',
+                'balance' => -1500000,
+            ],
+            [
+                'name' => 'CV. Elektronik Maju',
+                'phone' => '08329876543',
+                'email' => 'order@elektronikmaju.id',
+                'address' => 'Jl. Ahmad Yani No. 234, Surabaya',
+                'balance' => 2100000,
+            ],
+            [
+                'name' => 'PT. Tekstil Sentosa',
+                'phone' => '08429876543',
+                'email' => 'supply@tekstilsentosa.com',
+                'address' => 'Jl. Merdeka No. 456, Yogyakarta',
+                'balance' => -980000,
+            ],
+            [
+                'name' => 'UD. Peralatan Dapur',
+                'phone' => '08529876543',
+                'email' => 'info@peralatandapur.id',
+                'address' => 'Jl. Sudirman No. 234, Jakarta',
+                'balance' => 1200000,
+            ],
+            [
+                'name' => 'CV. Furniture Impor',
+                'phone' => '08629876543',
+                'email' => 'sales@furnitureimpor.com',
+                'address' => 'Jl. Gatot Subroto No. 456, Jakarta',
+                'balance' => -2200000,
+            ],
+            [
+                'name' => 'PT. Kosmetik Beauty',
+                'phone' => '08729876543',
+                'email' => 'order@kosmetikbeauty.co.id',
+                'address' => 'Jl. Asia Afrika No. 345, Jakarta',
+                'balance' => 1800000,
+            ],
+            [
+                'name' => 'UD. Obat & Vitamin',
+                'phone' => '08829876543',
+                'email' => 'supply@obatsehat.id',
+                'address' => 'Jl. Diponegoro No. 456, Bandung',
+                'balance' => -3400000,
+            ],
+            [
+                'name' => 'CV. Minuman Segar',
+                'phone' => '08929876543',
+                'email' => 'sales@minumansegar.com',
+                'address' => 'Jl. Basuki Rahmat No. 567, Surabaya',
+                'balance' => 750000,
+            ],
+            [
+                'name' => 'PT. Bahan Bangunan Jaya',
+                'phone' => '08112345678',
+                'email' => 'info@babunbangunan.com',
+                'address' => 'Jl. Ahmad Yani No. 567, Semarang',
+                'balance' => -2800000,
+            ],
+            [
+                'name' => 'UD. Alat Pancing Murni',
+                'phone' => '08212345678',
+                'email' => 'order@alatpancing.id',
+                'address' => 'Jl. Pemuda No. 678, Jakarta',
+                'balance' => 600000,
+            ],
         ];
 
         foreach ($suppliers as $supplier) {
             Supplier::firstOrCreate(['name' => $supplier['name']], $supplier);
         }
 
-        $this->command->info('Suppliers seeded: ' . count($suppliers) . ' supplier.');
+        $this->command->info('✅ Suppliers seeded: ' . count($suppliers) . ' supplier.');
     }
 }

@@ -22,8 +22,10 @@ interface CreateSupplierRequest {
   name: string;
   code?: string;
   phone?: string;
+  phone2?: string;
   email?: string;
   address?: string;
+  city?: string;
   noRekening?: string;
 }
 
@@ -31,10 +33,29 @@ interface UpdateSupplierRequest {
   name?: string;
   code?: string;
   phone?: string;
+  phone2?: string;
   email?: string;
   address?: string;
+  city?: string;
   noRekening?: string;
 }
+
+const mapSupplierPayloadToBackend = (
+  data: CreateSupplierRequest | UpdateSupplierRequest
+): Record<string, unknown> => {
+  const payload: Record<string, unknown> = {
+    name: data.name,
+    code: data.code,
+    phone: data.phone,
+    phone2: data.phone2,
+    email: data.email,
+    address: data.address,
+    city: data.city,
+    no_rekening: data.noRekening,
+  };
+
+  return Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== undefined));
+};
 
 export const useSuppliers = (params?: SupplierQueryParams) => {
   return useQuery({
@@ -56,7 +77,7 @@ export const useSupplier = (id: string) => {
 export const useCreateSupplier = () => {
    const queryClient = useQueryClient();
    return useMutation({
-     mutationFn: (data: CreateSupplierRequest) => api.post('/suppliers', data),
+     mutationFn: (data: CreateSupplierRequest) => api.post('/suppliers', mapSupplierPayloadToBackend(data)),
      onMutate: async (newSupplier) => {
        // Cancel outgoing refetches
        await queryClient.cancelQueries({ queryKey: supplierKeys.lists() });
@@ -97,7 +118,7 @@ export const useUpdateSupplier = () => {
    const queryClient = useQueryClient();
    return useMutation({
      mutationFn: ({ id, data }: { id: string; data: UpdateSupplierRequest }) =>
-       api.put(`/suppliers/${id}`, data),
+       api.put(`/suppliers/${id}`, mapSupplierPayloadToBackend(data)),
      onMutate: async ({ id, data }) => {
        // Cancel outgoing refetches
        await queryClient.cancelQueries({ queryKey: supplierKeys.detail(id) });

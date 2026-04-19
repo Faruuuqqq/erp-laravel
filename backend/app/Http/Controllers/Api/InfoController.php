@@ -25,7 +25,7 @@ class InfoController extends Controller
             'product_id' => ['required', 'exists:products,id'],
         ]);
 
-        $product   = Product::findOrFail($request->product_id);
+        $product   = Product::with('category')->findOrFail($request->product_id);
         $mutations = StockMutation::where('product_id', $request->product_id)
             ->when($request->from, fn($q) => $q->whereDate('created_at', '>=', $request->from))
             ->when($request->to, fn($q) => $q->whereDate('created_at', '<=', $request->to))
@@ -35,10 +35,15 @@ class InfoController extends Controller
         return response()->json([
             'data' => [
                 'product'   => [
-                    'id'   => (string) $product->id,
-                    'code' => $product->code,
-                    'name' => $product->name,
-                    'unit' => $product->unit,
+                    'id'           => (string) $product->id,
+                    'code'         => $product->code,
+                    'name'         => $product->name,
+                    'unit'         => $product->unit,
+                    'categoryName' => $product->category?->name ?? 'Uncategorized',
+                    'buyPrice'     => (float) $product->buy_price,
+                    'sellPrice'    => (float) $product->sell_price,
+                    'minimumStock' => (int) $product->min_stock,
+                    'currentStock' => (int) $product->stock,
                 ],
                 'mutations' => StockMutationResource::collection($mutations),
             ],

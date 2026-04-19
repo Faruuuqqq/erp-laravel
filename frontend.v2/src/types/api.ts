@@ -65,11 +65,19 @@ export interface Product {
 export interface Customer {
   id: string;
   name: string;
-  phone: string;
-  email?: string;
   address?: string;
-  balance: number;
+  city?: string;
+  phone: string;
+  phone2?: string;
+  email?: string;
   creditLimit: number;
+  discount?: string;
+  warehouse?: string;
+  priceList?: string;
+  area?: string;
+  notes?: string;
+  npwp?: string;
+  balance: number;
   totalTransactions?: number;
   createdAt?: string;
   updatedAt?: string;
@@ -79,22 +87,25 @@ export interface Supplier {
   id: string;
   code?: string;
   name: string;
-  phone?: string;
-  email?: string;
   address?: string;
-  balance?: number;
+  city?: string;
+  phone?: string;
+  phone2?: string;
+  email?: string;
   noRekening?: string;
+  balance?: number;
   totalTransactions?: number;
   createdAt?: string;
 }
 
 export interface Warehouse {
   id: string;
-  code: string;
+  code?: string;
   name: string;
-  address: string;
-  manager: string;
+  address?: string;
+  manager?: string;
   status: 'aktif' | 'nonaktif';
+  totalProducts?: number;
 }
 
 export interface SalesRep {
@@ -103,6 +114,7 @@ export interface SalesRep {
   name: string;
   phone?: string;
   email?: string;
+  address?: string;
   area?: string;
   status?: 'aktif' | 'nonaktif';
   totalSales?: number;
@@ -221,11 +233,19 @@ export interface QueryParams {
 }
 
 export interface StoreSettings {
-  name: string;
+  store_name: string;
   phone: string;
   address: string;
   npwp?: string;
   siup?: string;
+  email?: string;
+  bank_name?: string;
+  bank_account_number?: string;
+  bank_account_name?: string;
+  billing_due_days?: number;
+  billing_payment_terms?: string;
+  billing_approver_name?: string;
+  billing_approver_title?: string;
 }
 
 export interface ApiResponse<T = unknown> {

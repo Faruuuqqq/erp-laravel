@@ -1,23 +1,12 @@
 import { useState, useCallback } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
-import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useRetryableAction } from '@/hooks/useRetryableAction';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
-} from '@/components/ui/dialog';
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table';
-import { Plus, Search, Pencil, Trash2, Building2, Download } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+import { DeleteConfirmDialog } from '@/components/dialogs/DeleteConfirmDialog';
+import { DataTable, FormBuilder, type DataTableColumn, type FormSchema } from '@/components/common';
+import { Plus, Pencil, Trash2, Building2 } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { StatCard } from '@/components/ui/StatCard';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -25,247 +14,384 @@ import { formatCurrency } from '@/lib/utils';
 import { useSuppliers, useCreateSupplier, useUpdateSupplier, useDeleteSupplier } from '@/hooks/api/useSuppliers';
 import type { Supplier as SupplierType } from '@/types';
 
-const BLANK_FORM = { name: '', phone: '', email: '', address: '', noRekening: '' };
+const INITIAL_FORM_VALUES = {
+  name: '',
+  phone: '',
+  phone2: '',
+  email: '',
+  city: '',
+  address: '',
+  noRekening: '',
+};
 
-const Supplier = () => {
-   const { canCreate, canEdit, canDelete } = usePermissions();
-   const { toast } = useToast();
-   const { execute: executeRetryable } = useRetryableAction({ maxRetries: 3, delayMs: 1000 });
-  const [searchTerm, setSearchTerm] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
+const supplierFormSchema: FormSchema = {
+  sections: [
+    {
+      title: 'Informasi Dasar',
+      fieldNames: ['name', 'phone', 'phone2', 'email', 'city'],
+    },
+    {
+      title: 'Alamat & Rekening',
+      fieldNames: ['address', 'noRekening'],
+    },
+  ],
+  fields: [
+    {
+      name: 'name',
+      label: 'Nama Supplier',
+      type: 'text',
+      placeholder: 'Nama lengkap supplier',
+      required: true,
+      minLength: 3,
+      maxLength: 100,
+    },
+    {
+      name: 'phone',
+      label: 'Telepon',
+      type: 'phone',
+      placeholder: '08...',
+    },
+    {
+      name: 'email',
+      label: 'Email',
+      type: 'email',
+      placeholder: 'email@example.com',
+    },
+    {
+      name: 'phone2',
+      label: 'Telepon 2',
+      type: 'phone',
+      placeholder: '08... (opsional)',
+    },
+    {
+      name: 'city',
+      label: 'Kota',
+      type: 'text',
+      placeholder: 'Contoh: Bandung',
+      maxLength: 50,
+    },
+    {
+      name: 'address',
+      label: 'Alamat',
+      type: 'textarea',
+      placeholder: 'Alamat lengkap supplier',
+      maxLength: 500,
+    },
+    {
+      name: 'noRekening',
+      label: 'No. Rekening',
+      type: 'text',
+      placeholder: 'Nomor rekening supplier',
+    },
+  ],
+};
+
+const SupplierPage = () => {
+  const { canCreate, canEdit, canDelete } = usePermissions();
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editItem, setEditItem] = useState<SupplierType | null>(null);
-  const [form, setForm] = useState(BLANK_FORM);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
+  const [formValues, setFormValues] = useState(INITIAL_FORM_VALUES);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { toast } = useToast();
+  const { execute: executeRetryable } = useRetryableAction({ maxRetries: 3, delayMs: 1000 });
 
-  const debouncedSearch = useDebouncedValue(searchTerm, 300);
-  const { data: suppliersData, isLoading } = useSuppliers({ page: currentPage, search: debouncedSearch || undefined, per_page: 20 });
+  const { data, isLoading } = useSuppliers();
   const createMutation = useCreateSupplier();
   const updateMutation = useUpdateSupplier();
   const deleteMutation = useDeleteSupplier();
 
-   const suppliers = suppliersData?.data ?? [];
-   const pagination = suppliersData?.meta;
+  const suppliers = (data?.data ?? []) as SupplierType[];
 
-   const withDebt = suppliers.filter(s => Number(s.balance ?? 0) > 0).length;
-   const totalUtang = formatCurrency(suppliers.reduce((sum, s) => sum + Number(s.balance ?? 0), 0));
+  const withDebt = suppliers.filter(s => Number(s.balance ?? 0) > 0).length;
+  const totalUtang = formatCurrency(suppliers.reduce((sum, s) => sum + Number(s.balance ?? 0), 0));
 
-  const openEdit = useCallback((s: SupplierType) => {
-    setEditItem(s);
-    setForm({ name: s.name, phone: s.phone ?? '', email: s.email ?? '', address: s.address ?? '', noRekening: s.noRekening ?? '' });
+  // Table columns with DataTable built-in features
+  const columns: DataTableColumn<SupplierType>[] = [
+    {
+      key: 'code',
+      header: 'Kode',
+      width: '80px',
+      sortable: false,
+      filterable: false,
+    },
+    {
+      key: 'name',
+      header: 'Nama Supplier',
+      sortable: true,
+      filterable: true,
+      render: (name, supplier) => (
+        <div>
+          <div className="font-medium">{name}</div>
+          <div className="text-xs text-muted-foreground truncate max-w-48">{supplier.address}</div>
+        </div>
+      ),
+    },
+    {
+      key: 'city',
+      header: 'Kota',
+      sortable: false,
+      filterable: true,
+      render: (city) => (
+        <span className="inline-flex rounded-full bg-muted px-2 py-0.5 text-xs font-medium">
+          {city ?? '—'}
+        </span>
+      ),
+    },
+    {
+      key: 'phone',
+      header: 'Telepon',
+      sortable: true,
+      filterable: false,
+      render: (phone) => phone ?? '—',
+    },
+    {
+      key: 'email',
+      header: 'Email',
+      sortable: false,
+      filterable: true,
+      render: (email) => email ?? '—',
+    },
+    {
+      key: 'noRekening',
+      header: 'No. Rekening',
+      sortable: false,
+      filterable: false,
+      render: (noRek) => noRek ?? '—',
+    },
+    {
+      key: 'balance',
+      header: 'Saldo Utang',
+      align: 'right',
+      sortable: true,
+      filterable: false,
+      render: (balance) =>
+        Number(balance ?? 0) > 0 ? (
+          <div className="inline-flex min-w-28 items-center justify-end rounded-md bg-destructive/10 px-2 py-1">
+            <span className="font-semibold tabular-nums text-destructive">{formatCurrency(Number(balance))}</span>
+          </div>
+        ) : (
+          <span className="inline-flex rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700">Lunas</span>
+        ),
+    },
+  ];
+
+  // Table actions
+  const actions = [
+    {
+      label: 'Edit',
+      icon: <Pencil className="h-3.5 w-3.5" />,
+      onClick: (s: SupplierType) => {
+        setEditItem(s);
+        setFormValues({
+          name: s.name,
+          phone: s.phone || '',
+          phone2: s.phone2 || '',
+          email: s.email || '',
+          city: s.city || '',
+          address: s.address || '',
+          noRekening: s.noRekening || '',
+        });
+        setIsAddOpen(true);
+      },
+      show: () => canEdit('suppliers'),
+    },
+    {
+      label: 'Delete',
+      icon: <Trash2 className="h-3.5 w-3.5" />,
+      onClick: (s: SupplierType) => setDeleteConfirm({ id: s.id, name: s.name }),
+      variant: 'destructive' as const,
+      show: () => canDelete('suppliers'),
+    },
+  ];
+
+  // Handle form submission
+  const handleFormSubmit = useCallback(
+    async (values: Record<string, any>) => {
+      setIsSubmitting(true);
+      try {
+        await executeRetryable(
+          async () => {
+            if (editItem) {
+              await updateMutation.mutateAsync({
+                id: editItem.id,
+                data: {
+                  name: values.name,
+                  phone: values.phone,
+                  phone2: values.phone2,
+                  email: values.email,
+                  city: values.city,
+                  address: values.address,
+                  noRekening: values.noRekening,
+                },
+              });
+            } else {
+              await createMutation.mutateAsync({
+                name: values.name,
+                phone: values.phone,
+                phone2: values.phone2,
+                email: values.email,
+                city: values.city,
+                address: values.address,
+                noRekening: values.noRekening,
+              });
+            }
+            setIsAddOpen(false);
+            setEditItem(null);
+            setFormValues(INITIAL_FORM_VALUES);
+          },
+          {
+            title: editItem ? 'Supplier diperbarui' : 'Supplier ditambahkan',
+            description: `${values.name} berhasil ${editItem ? 'diperbarui' : 'ditambahkan'}.`,
+            errorTitle: `Gagal ${editItem ? 'memperbarui' : 'menambahkan'} supplier`,
+          }
+        );
+      } finally {
+        setIsSubmitting(false);
+      }
+    },
+    [editItem, executeRetryable, updateMutation, createMutation]
+  );
+
+  // Handle delete
+  const handleDelete = useCallback(
+    async (id: string, name: string) => {
+      await executeRetryable(
+        () => deleteMutation.mutateAsync(id),
+        {
+          title: 'Supplier dihapus',
+          description: `${name} telah dihapus.`,
+          errorTitle: 'Gagal menghapus supplier',
+        }
+      );
+    },
+    [executeRetryable, deleteMutation]
+  );
+
+  const handleDialogOpenChange = useCallback((open: boolean) => {
+    setIsAddOpen(open);
+
+    if (!open) {
+      setEditItem(null);
+      setFormValues(INITIAL_FORM_VALUES);
+    }
   }, []);
 
-   const handleSave = async () => {
-     if (!form.name.trim()) return;
-     const payload = { name: form.name, phone: form.phone, email: form.email, address: form.address, no_rekening: form.noRekening };
-     await executeRetryable(
-       async () => {
-         if (editItem) {
-           await updateMutation.mutateAsync({ id: editItem.id, data: payload });
-           setEditItem(null);
-         } else {
-           await createMutation.mutateAsync(payload);
-           setIsAddOpen(false);
-         }
-         setForm(BLANK_FORM);
-       },
-       {
-         title: editItem ? 'Supplier diperbarui' : 'Supplier ditambahkan',
-         description: `${form.name} berhasil ${editItem ? 'diperbarui' : 'ditambahkan'}.`,
-         errorTitle: `Gagal ${editItem ? 'memperbarui' : 'menambahkan'} supplier`,
-       }
-     );
-   };
-
-   const handleDelete = async (id: string, name: string) => {
-     await executeRetryable(
-       () => deleteMutation.mutateAsync(id),
-       {
-         title: 'Supplier dihapus',
-         description: `${name} telah dihapus.`,
-         errorTitle: 'Gagal menghapus supplier',
-       }
-     );
-   };
-
-   const handleExport = () => {
-     const rows = [['Kode', 'Nama', 'Telepon', 'Email', 'Alamat', 'Total Utang'],
-       ...suppliers.map(s => [s.code ?? '', s.name, s.phone ?? '', s.email ?? '', s.address ?? '', formatCurrency(Number(s.balance ?? 0))])];
-     const csv = rows.map(r => r.join(',')).join('\n');
-     const blob = new Blob([csv], { type: 'text/csv' });
-     const url = URL.createObjectURL(blob);
-     const a = document.createElement('a'); a.href = url; a.download = 'supplier.csv'; a.click();
-     URL.revokeObjectURL(url);
-   };
+  const isEditMode = Boolean(editItem);
 
   return (
     <MainLayout title="Supplier" subtitle="Kelola data supplier toko Anda">
+      {/* Stats Cards */}
       <div className="mb-5 grid gap-4 sm:grid-cols-3">
-        <StatCard title="Total Supplier" value={`${suppliers.length} Supplier`} icon={<Building2 className="h-5 w-5" />} color="primary" />
-        <StatCard title="Supplier Berutang" value={`${withDebt} Supplier`} icon={<Building2 className="h-5 w-5" />} color="warning" />
-        <StatCard title="Total Utang" value={totalUtang} icon={<Building2 className="h-5 w-5" />} color="destructive" />
+        <StatCard
+          title="Total Supplier"
+          value={`${suppliers.length} Supplier`}
+          icon={<Building2 className="h-5 w-5" />}
+          color="primary"
+        />
+        <StatCard
+          title="Supplier Berutang"
+          value={`${withDebt} Supplier`}
+          icon={<Building2 className="h-5 w-5" />}
+          color="warning"
+        />
+        <StatCard
+          title="Total Utang"
+          value={totalUtang}
+          icon={<Building2 className="h-5 w-5" />}
+          color="destructive"
+        />
       </div>
 
-       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-         <div className="relative w-full sm:w-72">
-           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-           <Input placeholder="Cari supplier..." className="pl-9 h-9" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }} />
-         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={handleExport}>
-            <Download className="mr-1.5 h-4 w-4" />Export CSV
+      {/* Add Supplier Button */}
+      {canCreate('suppliers') && (
+        <div className="mb-4 flex justify-end">
+          <Button
+            size="sm"
+            onClick={() => {
+              setEditItem(null);
+              setFormValues(INITIAL_FORM_VALUES);
+              setIsAddOpen(true);
+            }}
+          >
+            <Plus className="mr-1.5 h-4 w-4" />
+            Tambah Supplier
           </Button>
-          {canCreate('suppliers') && (
-            <Button size="sm" onClick={() => { setForm(BLANK_FORM); setIsAddOpen(true); }}>
-              <Plus className="mr-1.5 h-4 w-4" />Tambah Supplier
-            </Button>
-          )}
         </div>
-      </div>
+      )}
 
+      {/* Advanced DataTable with built-in search, sort, pagination, export */}
       <Card>
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Kode</TableHead>
-                <TableHead>Nama Supplier</TableHead>
-                <TableHead>Telepon</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>No. Rekening</TableHead>
-                <TableHead className="text-right">Saldo Utang</TableHead>
-                {(canEdit('suppliers') || canDelete('suppliers')) && <TableHead className="text-center">Aksi</TableHead>}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
-                <TableRow><TableCell colSpan={(canEdit('suppliers') || canDelete('suppliers')) ? 7 : 6} className="py-10 text-center text-muted-foreground">Memuat data...</TableCell></TableRow>
-              ) : suppliers.length === 0 ? (
-                <TableRow><TableCell colSpan={(canEdit('suppliers') || canDelete('suppliers')) ? 7 : 6} className="py-10 text-center text-muted-foreground">Tidak ada data supplier.</TableCell></TableRow>
-              ) : suppliers.map(s => (
-                <TableRow key={s.id}>
-                  <TableCell className="font-mono text-xs text-primary">{s.code}</TableCell>
-                  <TableCell>
-                    <div className="font-medium">{s.name}</div>
-                    <div className="text-xs text-muted-foreground truncate max-w-48">{s.address}</div>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{s.phone ?? '—'}</TableCell>
-                  <TableCell className="text-muted-foreground text-xs">{s.email ?? '—'}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{s.noRekening ?? '—'}</TableCell>
-                  <TableCell className="text-right">
-                    {Number(s.balance ?? 0) > 0
-                      ? <span className="font-semibold text-destructive">{formatCurrency(Number(s.balance))}</span>
-                      : <Badge variant="outline" className="text-success border-success text-xs">Lunas</Badge>}
-                  </TableCell>
-                  {(canEdit('suppliers') || canDelete('suppliers')) && (
-                    <TableCell>
-                      <div className="flex justify-center gap-1">
-                        {canEdit('suppliers') && (
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(s)}>
-                            <Pencil className="h-3.5 w-3.5" />
-                          </Button>
-                        )}
-                        {canDelete('suppliers') && (
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive">
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Hapus Supplier</AlertDialogTitle>
-                                <AlertDialogDescription>Apakah Anda yakin ingin menghapus <strong>{s.name}</strong>? Tindakan ini tidak dapat dibatalkan.</AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Batal</AlertDialogCancel>
-                                <AlertDialogAction className="bg-destructive hover:bg-destructive/90" onClick={() => handleDelete(s.id, s.name)}>Hapus</AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        )}
-                      </div>
-                    </TableCell>
-                  )}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <DataTable
+            columns={columns}
+            data={suppliers}
+            variant="master"
+            isLoading={isLoading}
+            filterable
+            pagination
+            rowsPerPageOptions={[5, 10, 25, 50]}
+            exportable
+            exportFilename="suppliers"
+            actions={actions}
+            emptyMessage="Tidak ada supplier yang sesuai."
+            searchPlaceholder="Cari nama atau kota..."
+            filterableColumns={['name', 'city', 'email']}
+          />
         </CardContent>
-       </Card>
+      </Card>
 
-       {/* Pagination UI */}
-       {pagination && (
-         <div className="mt-4 flex items-center justify-between rounded-lg border border-border p-4 bg-card">
-           <div className="text-sm text-muted-foreground">
-             Menampilkan {((pagination.current_page - 1) * pagination.per_page) + 1} - {Math.min(pagination.current_page * pagination.per_page, pagination.total)} dari {pagination.total} total
-           </div>
-           <div className="flex items-center gap-2">
-             <Button 
-               variant="outline" 
-               size="sm"
-               disabled={pagination.current_page === 1}
-               onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-             >
-               Sebelumnya
-             </Button>
-             <span className="text-sm text-muted-foreground px-2">
-               Halaman {pagination.current_page} dari {pagination.last_page}
-             </span>
-             <Button 
-               variant="outline" 
-               size="sm"
-               disabled={pagination.current_page === pagination.last_page}
-               onClick={() => setCurrentPage(prev => prev + 1)}
-             >
-               Selanjutnya
-             </Button>
-           </div>
-         </div>
-       )}
-
-      <Dialog open={isAddOpen || !!editItem} onOpenChange={v => {
-        if (!v) { setIsAddOpen(false); setEditItem(null); setForm(BLANK_FORM); }
-      }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{editItem ? 'Edit Supplier' : 'Tambah Supplier Baru'}</DialogTitle>
+      {/* Add/Edit Supplier Dialog with FormBuilder */}
+      <Dialog open={isAddOpen} onOpenChange={handleDialogOpenChange}>
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-[1000px] overflow-hidden p-0 sm:max-h-[92vh]">
+          <DialogHeader className="border-b bg-muted/20 px-5 py-3 pr-12 sm:px-6">
+            <DialogTitle className="flex items-center gap-2 text-base sm:text-lg">
+              <Building2 className="h-4 w-4 text-primary" />
+              {isEditMode ? 'Edit Supplier' : 'Tambah Supplier Baru'}
+            </DialogTitle>
+            <DialogDescription>
+              {isEditMode
+                ? 'Perbarui profil supplier agar informasi kontak dan pembayaran tetap sinkron.'
+                : 'Masukkan data supplier baru untuk mempercepat proses pembelian dan pencatatan utang.'}
+            </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Nama Supplier *</Label>
-              <Input id="name" placeholder="Masukkan nama supplier" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="phone">Telepon</Label>
-              <Input id="phone" placeholder="08xxxxxxxxxx" value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" placeholder="supplier@example.com" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="address">Alamat</Label>
-              <Input id="address" placeholder="Masukkan alamat supplier" value={form.address} onChange={e => setForm(p => ({ ...p, address: e.target.value }))} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="noRekening">No. Rekening</Label>
-              <Input id="noRekening" placeholder="Masukkan nomor rekening" value={form.noRekening} onChange={e => setForm(p => ({ ...p, noRekening: e.target.value }))} />
-            </div>
-          </div>
-          <div className="flex justify-end gap-2 pt-4">
-            <Button variant="outline" onClick={() => {
-              setIsAddOpen(false);
-              setEditItem(null);
-              setForm(BLANK_FORM);
-            }}>Batal</Button>
-            <Button onClick={handleSave} disabled={createMutation.isPending || updateMutation.isPending}>
-              {createMutation.isPending || updateMutation.isPending ? 'Menyimpan...' : 'Simpan'}
-            </Button>
+          <div className="max-h-[calc(92vh-5rem)] overflow-y-auto px-4 py-3 sm:px-5 sm:py-4">
+            <FormBuilder
+              schema={supplierFormSchema}
+              values={formValues}
+              onChange={setFormValues}
+              onSubmit={handleFormSubmit}
+              isSubmitting={isSubmitting}
+              layout="grid"
+              columns={2}
+              density="compact"
+              stickyActions
+              submitLabel={isEditMode ? 'Perbarui' : 'Tambah'}
+              showReset={false}
+              className="space-y-4"
+            />
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      {deleteConfirm && (
+        <DeleteConfirmDialog
+          itemName={deleteConfirm.name}
+          itemType="supplier"
+          itemId={deleteConfirm.id}
+          isDeleting={deleteMutation.isPending}
+          onConfirm={async () => {
+            await handleDelete(deleteConfirm.id, deleteConfirm.name);
+            setDeleteConfirm(null);
+          }}
+          onOpenChange={(open) => {
+            if (!open) setDeleteConfirm(null);
+          }}
+        />
+      )}
     </MainLayout>
   );
 };
 
-export default Supplier;
+export default SupplierPage;

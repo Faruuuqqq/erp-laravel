@@ -11,17 +11,21 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Search, History, Eye, EyeOff, FileDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { History, Eye, EyeOff, FileDown, ChevronLeft, ChevronRight, ArrowUp, ArrowDown } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useTransactions, useToggleHideTransaction } from '@/hooks/api/useTransactions';
 import { useCustomers } from '@/hooks/api/useCustomers';
-import { usePdfExport } from '@/hooks/usePdfExport';
+import { usePermissions } from '@/hooks/usePermissions';
+import { useLazyPdfExport } from '@/hooks/useLazyPdfExport';
+import { DateRangeFilter } from '@/components/common';
+import { exportTransactionsToXlsx, getFilenameWithDate } from '@/lib/xlsx-export';
 import { formatCurrency } from '@/lib/utils';
 import type { Transaction } from '@/types';
 
 const HistoriPenjualan = () => {
   const { toast } = useToast();
-  const { exportToPdf } = usePdfExport();
+  const { canHideTransactions } = usePermissions();
+  const { exportToPdf } = useLazyPdfExport();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCustomer, setFilterCustomer] = useState('all');
   const [filterType, setFilterType] = useState('all');
@@ -29,10 +33,13 @@ const HistoriPenjualan = () => {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [page, setPage] = useState(1);
+  const [sortBy, setSortBy] = useState<'tanggal' | 'no_invoice' | 'total'>('tanggal');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [selectedTrx, setSelectedTrx] = useState<Transaction | null>(null);
   const [showLunasOnly, setShowLunasOnly] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [isExportingXlsx, setIsExportingXlsx] = useState(false);
 
   const toggleHideMutation = useToggleHideTransaction();
 
@@ -45,6 +52,8 @@ const HistoriPenjualan = () => {
     to: dateTo || undefined,
     page,
     perPage: 15,
+    sort_by: sortBy,
+    sort_direction: sortDirection,
   });
   const { data: kreditData, isLoading: l2 } = useTransactions({
     type: 'penjualan_kredit',
@@ -53,6 +62,8 @@ const HistoriPenjualan = () => {
     to: dateTo || undefined,
     page,
     perPage: 15,
+    sort_by: sortBy,
+    sort_direction: sortDirection,
   });
 
   const { data: customersData } = useCustomers({ per_page: 200 });
@@ -60,7 +71,7 @@ const HistoriPenjualan = () => {
 
   const tunai = filterType !== 'kredit' ? (tunaiData?.data ?? []) : [];
   const kredit = filterType !== 'tunai' ? (kreditData?.data ?? []) : [];
-  const allTrx = [...tunai, ...kredit].sort((a, b) => b.date.localeCompare(a.date));
+  const allTrx = [...tunai, ...kredit];
   const isLoading = l1 || l2;
 
   const filtered = allTrx
@@ -76,11 +87,28 @@ const HistoriPenjualan = () => {
   const totalNilai = filtered.reduce((s, t) => s + t.total, 0);
   const totalKredit = allTrx.filter(t => (t.remaining ?? 0) > 0).length;
 
-  const handleToggleHide = useCallback(async (id: string) => {
+  const toggleSort = (field: 'tanggal' | 'no_invoice' | 'total') => {
+    if (sortBy === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const SortIcon = ({ field }: { field: 'tanggal' | 'no_invoice' | 'total' }) => {
+    if (sortBy !== field) return null;
+    return sortDirection === 'asc' ? <ArrowUp className="h-3 w-3 ml-1" /> : <ArrowDown className="h-3 w-3 ml-1" />;
+  };
+
+  const handleToggleHide = useCallback(async (id: string, currentlyHidden: boolean) => {
     setTogglingId(id);
     try {
       await toggleHideMutation.mutateAsync(id);
-      toast({ title: 'Berhasil', description: 'Status transaksi diperbarui' });
+      toast({ 
+        title: 'Berhasil', 
+        description: currentlyHidden ? 'Transaksi ditampilkan kembali' : 'Transaksi disembunyikan' 
+      });
     } catch {
       toast({ title: 'Error', description: 'Gagal mengubah status transaksi', variant: 'destructive' });
     } finally {
@@ -154,6 +182,47 @@ const HistoriPenjualan = () => {
     }
   }, [filtered, totalNilai, dateFrom, dateTo, exportToPdf, toast]);
 
+  const handleExportXlsx = useCallback(async () => {
+    setIsExportingXlsx(true);
+    try {
+      const dataForExport = filtered.map(t => ({
+        'No. Faktur': t.invoiceNumber,
+        'Tanggal': t.date,
+        'Customer': t.customer || 'Walk-in',
+        'Tipe': t.type === 'penjualan_kredit' ? 'Kredit' : 'Tunai',
+        'Total': t.total,
+        'Terbayar': t.paid,
+        'Sisa': t.remaining ?? 0,
+        'Status': (t.remaining ?? 0) === 0 ? 'Lunas' : 'Piutang',
+      }));
+
+      exportTransactionsToXlsx(
+        dataForExport,
+        ['No. Faktur', 'Tanggal', 'Customer', 'Tipe', 'Total', 'Terbayar', 'Sisa', 'Status'],
+        {
+          filename: `HistoriPenjualan_${getFilenameWithDate('')}`,
+          sheetName: 'Histori Penjualan',
+          currencyColumns: [4, 5, 6],
+          rightAlignColumns: [4, 5, 6],
+        }
+      );
+
+      toast({
+        title: 'Export berhasil',
+        description: `${filtered.length} transaksi diekspor ke XLSX`,
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Gagal export XLSX',
+        variant: 'destructive',
+      });
+      console.error(error);
+    } finally {
+      setIsExportingXlsx(false);
+    }
+  }, [filtered, toast]);
+
   return (
     <MainLayout title="Histori Penjualan" subtitle="Riwayat transaksi penjualan tunai dan kredit">
       <div className="mb-4 grid gap-3 md:grid-cols-3">
@@ -169,38 +238,47 @@ const HistoriPenjualan = () => {
         ))}
       </div>
 
-      <div className="mb-4 flex flex-col sm:flex-row gap-2 items-start sm:items-center justify-between">
-        <div className="flex gap-2 flex-wrap">
-          <div className="relative w-56">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-            <Input placeholder="Cari faktur..." className="pl-8 text-xs h-8" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setPage(1); }} />
-          </div>
-          <Input type="date" className="text-xs h-8 w-36" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setPage(1); }} />
-          <Input type="date" className="text-xs h-8 w-36" value={dateTo} onChange={e => { setDateTo(e.target.value); setPage(1); }} />
-          <Select value={filterType} onValueChange={v => { setFilterType(v); setPage(1); }}>
-            <SelectTrigger className="w-36 text-xs h-8"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Tunai + Kredit</SelectItem>
-              <SelectItem value="tunai">Tunai</SelectItem>
-              <SelectItem value="kredit">Kredit</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={filterCustomer} onValueChange={v => { setFilterCustomer(v); setPage(1); }}>
-            <SelectTrigger className="w-44 text-xs h-8"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Semua Customer</SelectItem>
-              {customers.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5">
-            <Switch id="show-lunas" checked={showLunasOnly} onCheckedChange={setShowLunasOnly} />
-            <Label htmlFor="show-lunas" className="text-xs text-muted-foreground cursor-pointer">Lunas saja</Label>
-          </div>
-          <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={handleExport} disabled={isExporting}><FileDown className="h-3.5 w-3.5" />{isExporting ? 'Generating...' : 'Export PDF'}</Button>
-        </div>
-      </div>
+       <div className="mb-4 flex flex-col sm:flex-row gap-2 items-start sm:items-center justify-between">
+         <div className="flex gap-2 flex-wrap">
+           <div className="relative w-56">
+             <Input placeholder="Cari faktur..." className="pl-2 text-xs h-8 w-56" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setPage(1); }} />
+           </div>
+           <DateRangeFilter
+             dateFrom={dateFrom}
+             dateTo={dateTo}
+             onDateFromChange={(d) => { setDateFrom(d); setPage(1); }}
+             onDateToChange={(d) => { setDateTo(d); setPage(1); }}
+             onReset={() => { setDateFrom(''); setDateTo(''); setPage(1); }}
+             label="Periode"
+             hideReset={false}
+           />
+           <Select value={filterType} onValueChange={v => { setFilterType(v); setPage(1); }}>
+             <SelectTrigger className="w-36 text-xs h-8"><SelectValue /></SelectTrigger>
+             <SelectContent>
+               <SelectItem value="all">Tunai + Kredit</SelectItem>
+               <SelectItem value="tunai">Tunai</SelectItem>
+               <SelectItem value="kredit">Kredit</SelectItem>
+             </SelectContent>
+           </Select>
+           <Select value={filterCustomer} onValueChange={v => { setFilterCustomer(v); setPage(1); }}>
+             <SelectTrigger className="w-44 text-xs h-8"><SelectValue /></SelectTrigger>
+             <SelectContent>
+               <SelectItem value="all">Semua Customer</SelectItem>
+               {customers.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+             </SelectContent>
+           </Select>
+         </div>
+         <div className="flex items-center gap-3">
+           <div className="flex items-center gap-1.5">
+             <Switch id="show-lunas" checked={showLunasOnly} onCheckedChange={setShowLunasOnly} />
+             <Label htmlFor="show-lunas" className="text-xs text-muted-foreground cursor-pointer">Lunas saja</Label>
+           </div>
+           <div className="flex gap-1.5">
+             <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={handleExportXlsx} disabled={isExportingXlsx}><FileDown className="h-3.5 w-3.5" />{isExportingXlsx ? 'Generating...' : 'Export XLSX'}</Button>
+             <Button variant="outline" className="h-8 text-xs gap-1.5" onClick={handleExport} disabled={isExporting}><FileDown className="h-3.5 w-3.5" />{isExporting ? 'Generating...' : 'Export PDF'}</Button>
+           </div>
+         </div>
+       </div>
 
       <Card>
         <CardContent className="p-0">
@@ -214,21 +292,27 @@ const HistoriPenjualan = () => {
             </Tabs>
           </div>
           <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/50">
-                  <TableHead className="w-8 text-xs">#</TableHead>
-                  <TableHead className="text-xs">No. Faktur</TableHead>
-                  <TableHead className="text-xs">Tanggal</TableHead>
-                  <TableHead className="text-xs">Customer</TableHead>
-                  <TableHead className="text-xs">Tipe</TableHead>
-                  <TableHead className="text-xs text-right">Total</TableHead>
-                  <TableHead className="text-xs text-right">Terbayar</TableHead>
-                  <TableHead className="text-xs text-right">Sisa</TableHead>
-                  <TableHead className="text-xs">Status</TableHead>
-                  <TableHead className="w-16" />
-                </TableRow>
-              </TableHeader>
+             <Table>
+               <TableHeader>
+                 <TableRow className="bg-muted/50">
+                   <TableHead className="w-8 text-xs">#</TableHead>
+                   <TableHead className="text-xs cursor-pointer hover:bg-muted/50" onClick={() => toggleSort('no_invoice')}>
+                     <div className="flex items-center">No. Faktur <SortIcon field="no_invoice" /></div>
+                   </TableHead>
+                   <TableHead className="text-xs cursor-pointer hover:bg-muted/50" onClick={() => toggleSort('tanggal')}>
+                     <div className="flex items-center">Tanggal <SortIcon field="tanggal" /></div>
+                   </TableHead>
+                   <TableHead className="text-xs">Customer</TableHead>
+                   <TableHead className="text-xs">Tipe</TableHead>
+                   <TableHead className="text-xs text-right cursor-pointer hover:bg-muted/50" onClick={() => toggleSort('total')}>
+                     <div className="flex items-center justify-end">Total <SortIcon field="total" /></div>
+                   </TableHead>
+                   <TableHead className="text-xs text-right">Terbayar</TableHead>
+                   <TableHead className="text-xs text-right">Sisa</TableHead>
+                   <TableHead className="text-xs">Status</TableHead>
+                   <TableHead className="w-16" />
+                 </TableRow>
+               </TableHeader>
               <TableBody>
                 {isLoading ? (
                   Array.from({ length: 5 }).map((_, i) => <TableRow key={i}><TableCell colSpan={10}><Skeleton className="h-8 w-full" /></TableCell></TableRow>)
@@ -257,21 +341,23 @@ const HistoriPenjualan = () => {
                           ? <Badge variant="default" className="text-xs">Lunas</Badge>
                           : <Badge variant="destructive" className="text-xs">Piutang</Badge>}
                       </TableCell>
-                      <TableCell>
-                        <div className="flex gap-0.5">
-                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setSelectedTrx(t)}><Eye className="h-3.5 w-3.5" /></Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                            title={t.isHidden ? 'Tampilkan' : 'Sembunyikan'}
-                            onClick={() => handleToggleHide(t.id)}
-                            disabled={togglingId === t.id}
-                          >
-                            {t.isHidden ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
-                          </Button>
-                        </div>
-                      </TableCell>
+                       <TableCell>
+                         <div className="flex gap-0.5">
+                           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setSelectedTrx(t)}><Eye className="h-3.5 w-3.5" /></Button>
+                           {canHideTransactions() && (
+                             <Button
+                               variant="ghost"
+                               size="icon"
+                               className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                               title={t.isHidden ? 'Tampilkan' : 'Sembunyikan'}
+                               onClick={() => handleToggleHide(t.id, t.isHidden ?? false)}
+                               disabled={togglingId === t.id}
+                             >
+                               {t.isHidden ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                             </Button>
+                           )}
+                         </div>
+                       </TableCell>
                     </TableRow>
                   );
                 })}

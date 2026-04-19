@@ -45,7 +45,7 @@ class ProductController extends Controller
 
     public function store(StoreProductRequest $request): JsonResponse
     {
-        $category = Category::where('name', $request->category)->firstOrCreate(['name' => $request->category]);
+        $category = Category::where('name', $request->category)->first();
 
         $product = Product::create([
             'code'         => $request->code,

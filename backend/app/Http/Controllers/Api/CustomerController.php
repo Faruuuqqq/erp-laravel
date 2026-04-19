@@ -21,9 +21,17 @@ class CustomerController extends Controller
         $data = $request->validate([
             'name'    => ['required', 'string', 'min:2', 'max:100'],
             'phone'   => ['nullable', 'string', 'max:20'],
+            'phone2'  => ['nullable', 'string', 'max:20'],
             'email'   => ['nullable', 'email'],
             'address' => ['nullable', 'string'],
+            'city'    => ['nullable', 'string', 'max:50'],
             'credit_limit' => ['nullable', 'numeric', 'min:0'],
+            'discount'  => ['nullable', 'string', 'max:50'],
+            'warehouse' => ['nullable', 'string', 'max:50'],
+            'price_list' => ['nullable', 'string', 'max:50'],
+            'daerah'    => ['nullable', 'string', 'max:50'],
+            'keterangan' => ['nullable', 'string', 'max:255'],
+            'npwp'      => ['nullable', 'string', 'max:20'],
         ], [
             'name.required' => 'Nama customer wajib diisi.',
         ]);
@@ -43,9 +51,17 @@ class CustomerController extends Controller
         $data = $request->validate([
             'name'    => ['sometimes', 'required', 'string', 'min:2', 'max:100'],
             'phone'   => ['nullable', 'string', 'max:20'],
+            'phone2'  => ['nullable', 'string', 'max:20'],
             'email'   => ['nullable', 'email'],
             'address' => ['nullable', 'string'],
+            'city'    => ['nullable', 'string', 'max:50'],
             'credit_limit' => ['nullable', 'numeric', 'min:0'],
+            'discount'  => ['nullable', 'string', 'max:50'],
+            'warehouse' => ['nullable', 'string', 'max:50'],
+            'price_list' => ['nullable', 'string', 'max:50'],
+            'daerah'    => ['nullable', 'string', 'max:50'],
+            'keterangan' => ['nullable', 'string', 'max:255'],
+            'npwp'      => ['nullable', 'string', 'max:20'],
         ]);
         $customer->update($data);
         return response()->json(['data' => new CustomerResource($customer->fresh()), 'message' => 'Customer berhasil diperbarui.']);

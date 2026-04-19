@@ -10,10 +10,9 @@ interface WarehouseParams {
 }
 
 interface CreateUpdateWarehouseRequest {
-  code: string;
   name: string;
-  address: string;
-  manager: string;
+  address?: string;
+  manager?: string;
   status: 'aktif' | 'nonaktif';
 }
 
@@ -47,8 +46,12 @@ const transformListToFrontend = (response: PaginatedResponse<Warehouse>): Pagina
 export const warehouseKeys = {
   all: ['warehouses'] as const,
   lists: () => [...warehouseKeys.all, 'list'] as const,
-  list: (filters?: WarehouseParams) =>
-    [...warehouseKeys.lists(), { page: filters?.page ?? 1, per_page: filters?.per_page ?? 20, search: filters?.search ?? '', status: filters?.status }] as const,
+  list: (filters?: WarehouseParams) => {
+    const key = [...warehouseKeys.lists(), { page: filters?.page ?? 1, per_page: filters?.per_page ?? 20 }];
+    if (filters?.search) key.push({ search: filters.search });
+    if (filters?.status) key.push({ status: filters.status });
+    return key as const;
+  },
   details: () => [...warehouseKeys.all, 'detail'] as const,
   detail: (id: string) => [...warehouseKeys.details(), id] as const,
 };

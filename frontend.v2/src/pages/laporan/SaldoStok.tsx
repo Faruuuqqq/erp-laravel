@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { PageHeader, DataTableContainer, CurrencyCell } from '@/components/ui/DataComponents';
 import { StatCard } from '@/components/ui/StatCard';
@@ -13,8 +13,9 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePrint } from '@/contexts/usePrint';
 import { SaldoStokPrint } from '@/components/print/SaldoStokPrint';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useToast } from '@/hooks/use-toast';
-import { formatCurrency } from '@/lib/utils';
+import { exportToExcel } from '@/lib/export';
 
 interface StockItem {
   id: string;
@@ -33,39 +34,83 @@ const SaldoStok = () => {
   const [search, setSearch] = useState('');
   const [katFilter, setKatFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [minStock, setMinStock] = useState('');
+  const [maxStock, setMaxStock] = useState('');
+  const [minValue, setMinValue] = useState('');
+  const [maxValue, setMaxValue] = useState('');
   const [isPrinting, setIsPrinting] = useState(false);
+  const [page, setPage] = useState(1);
+  const perPage = 25;
   const { toast } = useToast();
   const { canPrint } = usePermissions();
   const { user } = useAuth();
   const { printDocument } = usePrint();
 
+  // Debounce search with 400ms delay
+  const debouncedSearch = useDebouncedValue(search, 400);
+
   const { data, isLoading } = useStockReport();
-  const items = (data?.data?.items as StockItem[]) ?? [];
+  const items = useMemo(() => (data?.data?.items as StockItem[]) ?? [], [data?.data?.items]);
   const totalValue = data?.data?.totalValue ?? 0;
 
-  const categories = Array.from(new Set((items as StockItem[]).map(p => p.category).filter(Boolean)));
+  const categories = useMemo(() => Array.from(new Set((items as StockItem[]).map(p => p.category).filter(Boolean))), [items]);
 
   const totalNilai = totalValue;
-  const totalUnit = (items as StockItem[]).reduce((s, p) => s + (p.stock || 0), 0);
-  const lowStockItems = (items as StockItem[]).filter(p => p.stock <= 0);
-  const totalNilaiJual = (items as StockItem[]).reduce((s, p) => s + (p.stock || 0) * (p.sellPrice || 0), 0);
+  const totalUnit = useMemo(() => (items as StockItem[]).reduce((s, p) => s + (p.stock || 0), 0), [items]);
+  const lowStockItems = useMemo(() => (items as StockItem[]).filter(p => p.stock <= 0), [items]);
+  const totalNilaiJual = useMemo(() => (items as StockItem[]).reduce((s, p) => s + (p.stock || 0) * (p.sellPrice || 0), 0), [items]);
 
-  const filtered = (items as StockItem[]).filter(p => {
-    const matchSearch = p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.code.toLowerCase().includes(search.toLowerCase());
-    const matchKat = katFilter === 'all' || p.category === katFilter;
-    const matchStatus = statusFilter === 'all' ||
-      (statusFilter === 'rendah' && p.stock <= 0) ||
-      (statusFilter === 'aman' && p.stock > 0);
-    return matchSearch && matchKat && matchStatus;
-  });
+  // Apply filters with advanced options
+  const filtered = useMemo(() => {
+    const result = (items as StockItem[]).filter(p => {
+      const matchSearch = p.name.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+        p.code.toLowerCase().includes(debouncedSearch.toLowerCase());
+      const matchKat = katFilter === 'all' || p.category === katFilter;
+      const matchStatus = statusFilter === 'all' ||
+        (statusFilter === 'rendah' && p.stock <= 0) ||
+        (statusFilter === 'aman' && p.stock > 0);
+
+      // Advanced stock range filter
+      const minStockVal = minStock ? parseInt(minStock) : 0;
+      const maxStockVal = maxStock ? parseInt(maxStock) : Infinity;
+      const matchStockRange = p.stock >= minStockVal && p.stock <= maxStockVal;
+
+      // Advanced value range filter
+      const minValueVal = minValue ? parseInt(minValue) : 0;
+      const maxValueVal = maxValue ? parseInt(maxValue) : Infinity;
+      const matchValueRange = (p.stockValue || 0) >= minValueVal && (p.stockValue || 0) <= maxValueVal;
+
+      return matchSearch && matchKat && matchStatus && matchStockRange && matchValueRange;
+    });
+    return result;
+  }, [items, debouncedSearch, katFilter, statusFilter, minStock, maxStock, minValue, maxValue]);
+
+  // Paginate
+  const totalPages = Math.ceil(filtered.length / perPage);
+  const paginatedItems = filtered.slice((page - 1) * perPage, page * perPage);
+
+  // Reset page when filters change
+  const handleFilterChange = useCallback(() => {
+    setPage(1);
+  }, []);
+
+  const handleClearFilters = useCallback(() => {
+    setSearch('');
+    setKatFilter('all');
+    setStatusFilter('all');
+    setMinStock('');
+    setMaxStock('');
+    setMinValue('');
+    setMaxValue('');
+    setPage(1);
+  }, []);
 
   const handlePrint = useCallback(() => {
     printDocument(
       <SaldoStokPrint
         printedBy={user?.name}
         filterKategori={katFilter !== 'all' ? katFilter : undefined}
-        items={filtered.map(p => ({
+        items={paginatedItems.map(p => ({
           kode: p.code ?? '',
           nama: p.name ?? '',
           kategori: p.category ?? '',
@@ -77,7 +122,7 @@ const SaldoStok = () => {
         }))}
       />
     );
-  }, [printDocument, user?.name, katFilter, filtered]);
+  }, [printDocument, user?.name, katFilter, paginatedItems]);
 
   const handleExportPDF = async () => {
     try {
@@ -95,6 +140,28 @@ const SaldoStok = () => {
     }
   };
 
+  const handleExportXLSX = useCallback(() => {
+    try {
+      exportToExcel(
+        filtered.map(p => ({
+          'Kode Produk': p.code,
+          'Nama Produk': p.name,
+          'Kategori': p.category || '-',
+          'Stok': p.stock,
+          'Satuan': p.unit || 'pcs',
+          'Harga Beli': p.buyPrice || 0,
+          'Harga Jual': p.sellPrice || 0,
+          'Nilai Persediaan': p.stockValue || 0,
+        })),
+        `saldo-stok-${new Date().toISOString().slice(0, 10)}`,
+        { sheetName: 'Saldo Stok' }
+      );
+      toast({ title: 'Sukses', description: 'Data saldo stok berhasil diekspor ke Excel' });
+    } catch (err: unknown) {
+      toast({ title: 'Error', description: 'Gagal mengekspor data', variant: 'destructive' });
+    }
+  }, [filtered, toast]);
+
   return (
     <MainLayout title="Saldo Stok" subtitle="Total stok dan nilai persediaan (Owner only)">
       <PageHeader
@@ -110,6 +177,9 @@ const SaldoStok = () => {
                 <Button variant="outline" size="sm" onClick={handleExportPDF} disabled={isPrinting}>
                   <Download className="h-4 w-4 mr-1.5" />{isPrinting ? 'Generating...' : 'Export PDF'}
                 </Button>
+                <Button variant="outline" size="sm" onClick={handleExportXLSX} disabled={isPrinting}>
+                  <Download className="h-4 w-4 mr-1.5" />Export XLSX
+                </Button>
               </>
             )}
           </>
@@ -123,27 +193,110 @@ const SaldoStok = () => {
         <StatCard title="Stok Rendah" value={`${lowStockItems.length} Produk`} icon={<AlertTriangle className="h-5 w-5" />} color={lowStockItems.length > 0 ? 'warning' : 'success'} />
       </div>
 
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="relative flex-1 max-w-72">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Cari produk..." className="pl-9 h-9" value={search} onChange={e => setSearch(e.target.value)} />
+      <div className="mb-4 space-y-3">
+        {/* Primary Filters */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="relative flex-1 max-w-72">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Cari produk..."
+              className="pl-9 h-9"
+              value={search}
+              onChange={e => {
+                setSearch(e.target.value);
+                handleFilterChange();
+              }}
+            />
+          </div>
+          <Select value={katFilter} onValueChange={(value) => {
+            setKatFilter(value);
+            handleFilterChange();
+          }}>
+            <SelectTrigger className="w-48 h-9"><SelectValue placeholder="Kategori" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Semua Kategori</SelectItem>
+              {categories.map((c: string) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={statusFilter} onValueChange={(value) => {
+            setStatusFilter(value);
+            handleFilterChange();
+          }}>
+            <SelectTrigger className="w-40 h-9"><SelectValue placeholder="Status" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Semua Status</SelectItem>
+              <SelectItem value="rendah">Stok Rendah</SelectItem>
+              <SelectItem value="aman">Aman</SelectItem>
+            </SelectContent>
+          </Select>
+          <span className="text-sm text-muted-foreground shrink-0">{filtered.length} produk</span>
         </div>
-        <Select value={katFilter} onValueChange={setKatFilter}>
-          <SelectTrigger className="w-48 h-9"><SelectValue placeholder="Kategori" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Semua Kategori</SelectItem>
-            {categories.map((c: string) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-40 h-9"><SelectValue placeholder="Status" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Semua Status</SelectItem>
-            <SelectItem value="rendah">Stok Rendah</SelectItem>
-            <SelectItem value="aman">Aman</SelectItem>
-          </SelectContent>
-        </Select>
-        <span className="text-sm text-muted-foreground shrink-0">{filtered.length} produk</span>
+
+        {/* Advanced Filters */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <div className="flex gap-2 items-end flex-1">
+            <div className="flex-1 max-w-32">
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Min Stok</label>
+              <Input
+                type="number"
+                placeholder="0"
+                className="h-8 text-sm"
+                value={minStock}
+                onChange={e => {
+                  setMinStock(e.target.value);
+                  handleFilterChange();
+                }}
+              />
+            </div>
+            <div className="flex-1 max-w-32">
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Max Stok</label>
+              <Input
+                type="number"
+                placeholder="999"
+                className="h-8 text-sm"
+                value={maxStock}
+                onChange={e => {
+                  setMaxStock(e.target.value);
+                  handleFilterChange();
+                }}
+              />
+            </div>
+            <div className="flex-1 max-w-32">
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Min Nilai</label>
+              <Input
+                type="number"
+                placeholder="0"
+                className="h-8 text-sm"
+                value={minValue}
+                onChange={e => {
+                  setMinValue(e.target.value);
+                  handleFilterChange();
+                }}
+              />
+            </div>
+            <div className="flex-1 max-w-32">
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Max Nilai</label>
+              <Input
+                type="number"
+                placeholder="999999"
+                className="h-8 text-sm"
+                value={maxValue}
+                onChange={e => {
+                  setMaxValue(e.target.value);
+                  handleFilterChange();
+                }}
+              />
+            </div>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleClearFilters}
+            className="text-xs"
+          >
+            Reset Filter
+          </Button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -160,11 +313,11 @@ const SaldoStok = () => {
                 </tr>
               </thead>
               <tbody>
-                {filtered.length === 0 ? (
+                {paginatedItems.length === 0 ? (
                   <tr><td colSpan={9} className="px-4 py-10 text-center text-muted-foreground">Tidak ada data yang sesuai.</td></tr>
                 ) : (
                   <>
-                    {filtered.map((p: StockItem) => {
+                    {paginatedItems.map((p: StockItem) => {
                       const pct = Math.min(100, Math.round(((p.stock || 0) / (10 * 3)) * 100));
                       const isLow = (p.stock || 0) <= 0;
                       return (
@@ -195,13 +348,40 @@ const SaldoStok = () => {
                     })}
                     <tr className="bg-muted/40 font-bold border-t-2">
                       <td colSpan={7} className="px-4 py-3 text-sm">TOTAL NILAI PERSEDIAAN</td>
-                      <td className="px-4 py-3"><CurrencyCell value={totalNilai} /></td>
+                      <td className="px-4 py-3"><CurrencyCell value={filtered.reduce((s, p) => s + (p.stockValue || 0), 0)} /></td>
                       <td />
                     </tr>
                   </>
                 )}
               </tbody>
             </table>
+          </div>
+
+          {/* Pagination */}
+          <div className="mt-4 flex items-center justify-between gap-4">
+            <p className="text-xs text-muted-foreground">
+              Halaman {page} dari {totalPages} • Total {filtered.length} data
+            </p>
+            {totalPages > 1 && (
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage(page - 1)}
+                  disabled={page === 1}
+                >
+                  ← Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage(page + 1)}
+                  disabled={page === totalPages}
+                >
+                  Next →
+                </Button>
+              </div>
+            )}
           </div>
         </DataTableContainer>
       )}

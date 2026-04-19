@@ -10,8 +10,8 @@ class Customer extends Model
     use SoftDeletes;
 
     protected $fillable = [
-        'name', 'phone', 'email', 'address', 'balance', 'credit_limit',
-        'price_list', 'daerah', 'npwp'
+        'name', 'phone', 'phone2', 'email', 'address', 'city', 'balance', 'credit_limit',
+        'discount', 'warehouse', 'price_list', 'daerah', 'keterangan', 'npwp'
     ];
 
     protected $casts = ['balance' => 'decimal:2', 'credit_limit' => 'decimal:2'];

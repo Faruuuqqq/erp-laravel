@@ -88,6 +88,12 @@ export const usePermissions = () => {
    */
   const canViewHiddenTransactions = (): boolean => isOwner;
 
+  /**
+   * Check if the user can hide/unhide transactions.
+   * Only owner can toggle visibility — this is a business rule, not a permission.
+   */
+  const canHideTransactions = (): boolean => isOwner;
+
   return {
     hasPermission,
     canView,
@@ -97,6 +103,7 @@ export const usePermissions = () => {
     canPrint,
     canWrite,
     canViewHiddenTransactions,
+    canHideTransactions,
     isOwner,
   };
 };

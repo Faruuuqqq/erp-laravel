@@ -33,6 +33,9 @@ class DatabaseSeeder extends Seeder
 
             // 5. Ledger keuangan (butuh transaksi ada dulu)
             FinancialLedgerSeeder::class,
+
+            // 6. Biaya operasional
+            ExpenseSeeder::class,
         ]);
 
         $this->command->newLine();

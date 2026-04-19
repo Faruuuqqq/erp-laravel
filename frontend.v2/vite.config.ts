@@ -17,4 +17,19 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Split heavy libraries into separate chunks
+          'recharts': ['recharts'],
+          'jspdf': ['jspdf', 'html2canvas'],
+          'tanstack-query': ['@tanstack/react-query'],
+          'zustand': ['zustand'],
+          'radix-ui': ['@radix-ui/react-dialog', '@radix-ui/react-select', '@radix-ui/react-slot'],
+        },
+      },
+    },
+    chunkSizeWarningLimit: 600,
+  },
 }));

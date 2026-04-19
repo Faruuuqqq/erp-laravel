@@ -30,6 +30,7 @@ class SalesRepController extends Controller
             'phone'   => ['nullable', 'string', 'max:20'],
             'email'   => ['nullable', 'email'],
             'address' => ['nullable', 'string'],
+            'area'    => ['nullable', 'string', 'max:100'],
             'status'  => ['nullable', 'in:active,inactive'],
         ]);
         $rep = SalesRep::create($data);
@@ -48,6 +49,7 @@ class SalesRepController extends Controller
             'phone'   => ['nullable', 'string', 'max:20'],
             'email'   => ['nullable', 'email'],
             'address' => ['nullable', 'string'],
+            'area'    => ['nullable', 'string', 'max:100'],
             'status'  => ['nullable', 'in:active,inactive'],
         ]);
         $sale->update($data);

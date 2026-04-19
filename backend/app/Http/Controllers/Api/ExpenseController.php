@@ -27,7 +27,21 @@ class ExpenseController extends Controller
             $query->whereDate('date', '<=', $request->to);
         }
 
-        $expenses = $query->latest('date')->paginate($request->perPage ?? 25);
+        // Handle sorting
+        $sortBy = $request->sort_by ?? 'date';
+        $sortDirection = $request->sort_direction ?? 'desc';
+
+        // Map frontend field names to database columns
+        $sortMap = [
+            'tanggal' => 'date',
+            'kategori' => 'category',
+            'jumlah' => 'amount',
+        ];
+
+        $column = $sortMap[$sortBy] ?? 'date';
+        $query->orderBy($column, $sortDirection);
+
+        $expenses = $query->paginate($request->perPage ?? 25);
 
         return ExpenseResource::collection($expenses);
     }

@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo } from 'react';
+import * as XLSX from 'xlsx';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { PageHeader, DataTableContainer, CurrencyCell, StatusBadge } from '@/components/ui/DataComponents';
 import { StatCard } from '@/components/ui/StatCard';
@@ -10,7 +11,8 @@ import { usePrint } from '@/contexts/usePrint';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLaporanHarian } from '@/hooks/api/useInfo';
-import { usePdfExport } from '@/hooks/usePdfExport';
+import { useLazyPdfExport } from '@/hooks/useLazyPdfExport';
+import { useToast } from '@/hooks/use-toast';
 import { LaporanHarianPrint } from '@/components/print/LaporanHarianPrint';
 import { formatCurrency } from '@/lib/utils';
 import type { Transaction } from '@/types';
@@ -46,7 +48,8 @@ const LaporanHarian = () => {
   const { isOwner, canPrint } = usePermissions();
   const { user } = useAuth();
   const { printDocument } = usePrint();
-  const { exportToPdf } = usePdfExport();
+  const { exportToPdf } = useLazyPdfExport();
+  const { toast } = useToast();
 
   const { data, isLoading } = useLaporanHarian(selectedDate);
   const report = data?.data as DailyReport | undefined;
@@ -142,6 +145,37 @@ const LaporanHarian = () => {
               </tr>
             </tfoot>
           </table>
+
+          ${displayExp.length > 0 ? `
+            <div style="margin-top: 20px; padding-top: 12px; padding-bottom: 12px; border-bottom: 2px solid #333;">
+              <h3 style="margin: 0; font-size: 13px; font-weight: bold;">Daftar Biaya Operasional</h3>
+            </div>
+
+            <table style="width: 100%; border-collapse: collapse;">
+              <thead>
+                <tr style="border-bottom: 2px solid #333;">
+                  <th style="padding: 8px; text-align: left; font-weight: bold;">Kategori</th>
+                  <th style="padding: 8px; text-align: left; font-weight: bold;">Deskripsi</th>
+                  <th style="padding: 8px; text-align: right; font-weight: bold;">Jumlah</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${displayExp.map(e => `
+                  <tr style="border-bottom: 1px solid #ddd;">
+                    <td style="padding: 8px; text-align: left; font-size: 11px;">${e.category}</td>
+                    <td style="padding: 8px; text-align: left; font-size: 11px;">${e.description}</td>
+                    <td style="padding: 8px; text-align: right;">${formatCurrency(e.amount)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+              <tfoot>
+                <tr style="border-top: 2px solid #333; font-weight: bold; background-color: #f5f5f5;">
+                  <td colspan="2" style="padding: 8px; text-align: right;">TOTAL BIAYA:</td>
+                  <td style="padding: 8px; text-align: right;">${formatCurrency(displayExp.reduce((s, e) => s + e.amount, 0))}</td>
+                </tr>
+              </tfoot>
+            </table>
+          ` : ''}
         </div>
       `;
 
@@ -165,7 +199,65 @@ const LaporanHarian = () => {
     } finally {
       setIsExporting(false);
     }
-  }, [selectedDate, summary, displayTx, exportToPdf]);
+  }, [selectedDate, summary, displayTx, displayExp, exportToPdf]);
+
+  const handleExportXLSX = useCallback(() => {
+    try {
+      const wb = XLSX.utils.book_new();
+
+      // Sheet 1: Summary (Ringkasan)
+      const summaryData = [
+        { Metrik: 'Total Penjualan Tunai', Nilai: summary.penjualanTunai },
+        { Metrik: 'Total Penjualan Kredit', Nilai: summary.penjualanKredit },
+        { Metrik: 'Total Penjualan', Nilai: summary.totalPenjualan },
+        { Metrik: 'Total Pembelian', Nilai: summary.totalPembelian },
+        { Metrik: 'Biaya Operasional', Nilai: summary.totalBiaya },
+        { Metrik: 'Kas Bersih', Nilai: summary.kasBersih },
+      ];
+      const ws1 = XLSX.utils.json_to_sheet(summaryData);
+      XLSX.utils.book_append_sheet(wb, ws1, 'Ringkasan');
+
+      // Sheet 2: Transactions
+      const txData = displayTx.map(tx => {
+        const txStatus = tx.remaining === 0 ? 'Lunas' : (tx.paid ?? 0) > 0 ? 'Sebagian' : 'Kredit';
+        return {
+          'No. Faktur': tx.invoiceNumber,
+          'Tipe Transaksi': TIPE_LABELS[tx.type] ?? tx.type,
+          'Customer / Supplier': tx.customer || tx.supplier || '-',
+          'Total': tx.total,
+          'Bayar': tx.paid || 0,
+          'Sisa': tx.total - (tx.paid ?? 0),
+          'Status': txStatus,
+        };
+      });
+      const ws2 = XLSX.utils.json_to_sheet(txData);
+      XLSX.utils.book_append_sheet(wb, ws2, 'Transaksi');
+
+      // Sheet 3: Expenses (if exist)
+      if (displayExp.length > 0) {
+        const expData = displayExp.map(e => ({
+          'Kategori': e.category,
+          'Deskripsi': e.description,
+          'Jumlah': e.amount,
+        }));
+        const ws3 = XLSX.utils.json_to_sheet(expData);
+        XLSX.utils.book_append_sheet(wb, ws3, 'Biaya');
+      }
+
+      XLSX.writeFile(wb, `laporan-harian-${selectedDate}.xlsx`);
+
+      toast({
+        title: 'Sukses',
+        description: 'Data berhasil diekspor ke Excel'
+      });
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: 'Gagal mengekspor data',
+        variant: 'destructive'
+      });
+    }
+  }, [selectedDate, summary, displayTx, displayExp, toast]);
 
   return (
     <MainLayout title="Laporan Harian" subtitle="Ringkasan transaksi harian">
@@ -187,6 +279,7 @@ const LaporanHarian = () => {
             {canPrint('__owner_only__') && (
               <Button variant="outline" size="sm" onClick={handlePrint}><Printer className="h-4 w-4 mr-1.5" />Cetak</Button>
             )}
+            <Button variant="outline" size="sm" onClick={handleExportXLSX}><Download className="h-4 w-4 mr-1.5" />Export XLSX</Button>
             <Button variant="outline" size="sm" onClick={handleExportPDF} disabled={isExporting}><Download className="h-4 w-4 mr-1.5" />{isExporting ? 'Generating...' : 'Export PDF'}</Button>
           </>
         }
