@@ -46,11 +46,16 @@ Route::middleware(['auth:sanctum', 'throttle:60,1'])->group(function () {
 
     // ── Master Data (Admin & Owner) ───────────────────────────────────────────
     Route::apiResource('categories', CategoryController::class);
+    Route::post('products/import', [ProductController::class, 'import']);
     Route::apiResource('products', ProductController::class);
     Route::patch('products/{product}/stock', [ProductController::class, 'updateStock']);
+    Route::post('suppliers/import', [SupplierController::class, 'import']);
     Route::apiResource('suppliers', SupplierController::class);
+    Route::post('customers/import', [CustomerController::class, 'import']);
     Route::apiResource('customers', CustomerController::class);
+    Route::post('warehouses/import', [WarehouseController::class, 'import']);
     Route::apiResource('warehouses', WarehouseController::class);
+    Route::post('sales/import', [SalesRepController::class, 'import']);
     Route::apiResource('sales', SalesRepController::class);
     Route::apiResource('expenses', ExpenseController::class);
 

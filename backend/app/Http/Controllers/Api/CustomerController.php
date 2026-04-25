@@ -72,4 +72,59 @@ class CustomerController extends Controller
         $customer->delete();
         return response()->json(['message' => 'Customer berhasil dihapus.']);
     }
+
+    public function import(Request $request): JsonResponse
+    {
+        $request->validate([
+            'rows' => ['required', 'array'],
+            'rows.*.name' => ['required', 'string', 'max:100'],
+        ]);
+
+        $rows = $request->input('rows');
+        $imported = 0;
+        $skipped = 0;
+        $errors = [];
+
+        // Get existing names to skip duplicates efficiently
+        $existingNames = Customer::pluck('name')->map(fn($name) => strtolower(trim($name)))->toArray();
+
+        foreach ($rows as $index => $row) {
+            $name = strtolower(trim($row['name']));
+            
+            if (in_array($name, $existingNames)) {
+                $skipped++;
+                continue;
+            }
+
+            try {
+                Customer::create([
+                    'name' => $row['name'],
+                    'phone' => $row['phone'] ?? null,
+                    'phone2' => $row['phone2'] ?? null,
+                    'email' => $row['email'] ?? null,
+                    'address' => $row['address'] ?? null,
+                    'city' => $row['city'] ?? null,
+                    'credit_limit' => isset($row['creditLimit']) && is_numeric($row['creditLimit']) ? $row['creditLimit'] : (isset($row['credit_limit']) && is_numeric($row['credit_limit']) ? $row['credit_limit'] : 0),
+                    'discount' => $row['discount'] ?? null,
+                    'warehouse' => $row['warehouse'] ?? null,
+                    'price_list' => $row['priceList'] ?? $row['price_list'] ?? null,
+                    'daerah' => $row['area'] ?? $row['daerah'] ?? null,
+                    'keterangan' => $row['notes'] ?? $row['keterangan'] ?? null,
+                    'npwp' => $row['npwp'] ?? null,
+                ]);
+                $imported++;
+                $existingNames[] = $name; // Add to avoid duplicates within the same import
+            } catch (\Exception $e) {
+                $skipped++;
+                $errors[] = "Baris " . ($index + 1) . ": " . $e->getMessage();
+            }
+        }
+
+        return response()->json([
+            'message' => "Import selesai. $imported berhasil, $skipped dilewati.",
+            'imported' => $imported,
+            'skipped' => $skipped,
+            'errors' => $errors
+        ]);
+    }
 }

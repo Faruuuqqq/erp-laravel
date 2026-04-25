@@ -4,9 +4,10 @@ import { useRetryableAction } from '@/hooks/useRetryableAction';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { DeleteConfirmDialog } from '@/components/dialogs/DeleteConfirmDialog';
+import { ImportDataDialog, type ImportColumnDef } from '@/components/dialogs/ImportDataDialog';
 import { DataTable, FormBuilder, type DataTableColumn, type FormSchema } from '@/components/common';
 
-import { Plus, Pencil, Trash2, Phone, MapPin, AlertCircle, Users } from 'lucide-react';
+import { Plus, Pencil, Trash2, Phone, MapPin, AlertCircle, Users, Upload } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { StatCard } from '@/components/ui/StatCard';
 import { useToast } from '@/hooks/use-toast';
@@ -143,6 +144,7 @@ const customerFormSchema: FormSchema = {
 const CustomerPage = () => {
   const { canCreate, canEdit, canDelete } = usePermissions();
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
   const [editItem, setEditItem] = useState<Customer | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
   const [formValues, setFormValues] = useState(INITIAL_FORM_VALUES);
@@ -281,6 +283,22 @@ const CustomerPage = () => {
     },
   ];
 
+  const importColumns: ImportColumnDef[] = [
+    { key: 'name', label: 'Nama', required: true },
+    { key: 'phone', label: 'Telepon', aliases: ['hp', 'no hp', 'phone1'] },
+    { key: 'phone2', label: 'Telepon 2', aliases: ['hp2', 'no hp2'] },
+    { key: 'email', label: 'Email' },
+    { key: 'city', label: 'Kota', aliases: ['kota'] },
+    { key: 'address', label: 'Alamat', aliases: ['alamat lengkap'] },
+    { key: 'creditLimit', label: 'Limit Kredit', aliases: ['limit', 'credit limit', 'credit_limit'] },
+    { key: 'discount', label: 'Diskon', aliases: ['diskon'] },
+    { key: 'warehouse', label: 'Gudang', aliases: ['gudang'] },
+    { key: 'priceList', label: 'Price List', aliases: ['price list', 'pricelist', 'kategori harga'] },
+    { key: 'area', label: 'Daerah', aliases: ['daerah', 'area'] },
+    { key: 'npwp', label: 'NPWP', aliases: ['npwp'] },
+    { key: 'notes', label: 'Keterangan', aliases: ['keterangan', 'catatan'] },
+  ];
+
   // Handle form submission
   const handleFormSubmit = useCallback(
     async (values: Record<string, any>) => {
@@ -393,7 +411,11 @@ const CustomerPage = () => {
 
       {/* Add Customer Button */}
       {canCreate('customers') && (
-        <div className="mb-4 flex justify-end">
+        <div className="mb-4 flex justify-end gap-2">
+          <Button variant="outline" size="sm" onClick={() => setIsImportOpen(true)}>
+            <Upload className="mr-1.5 h-4 w-4" />
+            Import
+          </Button>
           <Button
             size="sm"
             onClick={() => {
@@ -478,6 +500,14 @@ const CustomerPage = () => {
           }}
         />
       )}
+
+      <ImportDataDialog
+        open={isImportOpen}
+        onOpenChange={setIsImportOpen}
+        resource="customers"
+        title="Customer"
+        columns={importColumns}
+      />
     </MainLayout>
   );
 };

@@ -4,9 +4,10 @@ import { useRetryableAction } from '@/hooks/useRetryableAction';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { DeleteConfirmDialog } from '@/components/dialogs/DeleteConfirmDialog';
+import { ImportDataDialog, type ImportColumnDef } from '@/components/dialogs/ImportDataDialog';
 import { DataTable, FormBuilder, type DataTableColumn, type FormSchema } from '@/components/common';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Pencil, Trash2, Package, AlertTriangle } from 'lucide-react';
+import { Plus, Pencil, Trash2, Package, AlertTriangle, Upload } from 'lucide-react';
 import { StatCard } from '@/components/ui/StatCard';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
@@ -125,6 +126,7 @@ const productFormSchema: FormSchema = {
 const ProdukPage = () => {
   const { canCreate, canEdit, canDelete } = usePermissions();
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
   const [editItem, setEditItem] = useState<Product | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
   const [formValues, setFormValues] = useState(INITIAL_FORM_VALUES);
@@ -143,7 +145,7 @@ const ProdukPage = () => {
   const deleteMutation = useDeleteProduct();
 
   const products = (productsData?.data ?? []) as Product[];
-  const categories = useMemo(() => categoriesData?.data ?? [], [categoriesData?.data]);
+  const categories = useMemo(() => categoriesData ?? [], [categoriesData]);
   const warehouses = useMemo(() => warehousesData?.data ?? [], [warehousesData?.data]);
 
   // Efficient lookup using Map
@@ -306,6 +308,18 @@ const ProdukPage = () => {
     },
   ];
 
+  const importColumns: ImportColumnDef[] = [
+    { key: 'code', label: 'Kode', required: true, aliases: ['kode produk', 'code'] },
+    { key: 'name', label: 'Nama Produk', required: true, aliases: ['nama', 'produk'] },
+    { key: 'category', label: 'Kategori', required: true, aliases: ['kategori produk'] },
+    { key: 'buyPrice', label: 'Harga Beli', aliases: ['harga beli', 'buy price', 'buy_price'] },
+    { key: 'sellPrice', label: 'Harga Jual', aliases: ['harga jual', 'sell price', 'sell_price'] },
+    { key: 'stock', label: 'Stok', aliases: ['stok awal', 'qty', 'quantity'] },
+    { key: 'minStock', label: 'Min. Stok', aliases: ['min stok', 'minimum stock', 'min_stock'] },
+    { key: 'unit', label: 'Satuan', aliases: ['satuan', 'uom'] },
+    { key: 'warehouse', label: 'Gudang', aliases: ['gudang', 'warehouse'] },
+  ];
+
   // Handle form submission
   const handleFormSubmit = useCallback(
     async (values: Record<string, any>) => {
@@ -432,17 +446,23 @@ const ProdukPage = () => {
           </Select>
         </div>
         {canCreate('products') && (
-          <Button
-            size="sm"
-            onClick={() => {
-              setEditItem(null);
-              setFormValues(INITIAL_FORM_VALUES);
-              setIsAddOpen(true);
-            }}
-          >
-            <Plus className="mr-1.5 h-4 w-4" />
-            Tambah Produk
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => setIsImportOpen(true)}>
+              <Upload className="mr-1.5 h-4 w-4" />
+              Import
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => {
+                setEditItem(null);
+                setFormValues(INITIAL_FORM_VALUES);
+                setIsAddOpen(true);
+              }}
+            >
+              <Plus className="mr-1.5 h-4 w-4" />
+              Tambah Produk
+            </Button>
+          </div>
         )}
       </div>
 
@@ -516,6 +536,14 @@ const ProdukPage = () => {
           }}
         />
       )}
+
+      <ImportDataDialog
+        open={isImportOpen}
+        onOpenChange={setIsImportOpen}
+        resource="products"
+        title="Produk"
+        columns={importColumns}
+      />
     </MainLayout>
   );
 };

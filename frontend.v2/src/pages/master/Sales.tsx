@@ -4,8 +4,9 @@ import { useRetryableAction } from '@/hooks/useRetryableAction';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { DeleteConfirmDialog } from '@/components/dialogs/DeleteConfirmDialog';
+import { ImportDataDialog, type ImportColumnDef } from '@/components/dialogs/ImportDataDialog';
 import { DataTable, FormBuilder, type DataTableColumn, type FormSchema } from '@/components/common';
-import { Plus, Pencil, Trash2, TrendingUp } from 'lucide-react';
+import { Plus, Pencil, Trash2, TrendingUp, Upload } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { StatCard } from '@/components/ui/StatCard';
 import { useToast } from '@/hooks/use-toast';
@@ -86,6 +87,7 @@ const salesFormSchema: FormSchema = {
 const SalesPage = () => {
   const { canCreate, canEdit, canDelete } = usePermissions();
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
   const [editItem, setEditItem] = useState<SalesRep | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
   const [formValues, setFormValues] = useState(INITIAL_FORM_VALUES);
@@ -199,6 +201,15 @@ const SalesPage = () => {
     },
   ];
 
+  const importColumns: ImportColumnDef[] = [
+    { key: 'name', label: 'Nama Sales', required: true, aliases: ['nama'] },
+    { key: 'phone', label: 'Telepon', aliases: ['hp', 'no hp'] },
+    { key: 'email', label: 'Email' },
+    { key: 'area', label: 'Area Kerja', aliases: ['area'] },
+    { key: 'address', label: 'Alamat', aliases: ['alamat lengkap'] },
+    { key: 'status', label: 'Status', aliases: ['status'] },
+  ];
+
   // Handle form submission
   const handleFormSubmit = useCallback(
     async (values: Record<string, any>) => {
@@ -297,7 +308,11 @@ const SalesPage = () => {
 
       {/* Add Sales Button */}
       {canCreate('sales_reps') && (
-        <div className="mb-4 flex justify-end">
+        <div className="mb-4 flex justify-end gap-2">
+          <Button variant="outline" size="sm" onClick={() => setIsImportOpen(true)}>
+            <Upload className="mr-1.5 h-4 w-4" />
+            Import
+          </Button>
           <Button
             size="sm"
             onClick={() => {
@@ -382,6 +397,14 @@ const SalesPage = () => {
           }}
         />
       )}
+
+      <ImportDataDialog
+        open={isImportOpen}
+        onOpenChange={setIsImportOpen}
+        resource="sales"
+        title="Sales"
+        columns={importColumns}
+      />
     </MainLayout>
   );
 };

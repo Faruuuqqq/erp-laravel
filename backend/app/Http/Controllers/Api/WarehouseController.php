@@ -55,4 +55,48 @@ class WarehouseController extends Controller
         $warehouse->delete();
         return response()->json(['message' => 'Gudang berhasil dihapus.']);
     }
+
+    public function import(Request $request): JsonResponse
+    {
+        $request->validate([
+            'rows' => ['required', 'array'],
+            'rows.*.name' => ['required', 'string', 'max:100'],
+        ]);
+
+        $rows = $request->input('rows');
+        $imported = 0;
+        $skipped = 0;
+        $errors = [];
+
+        $existingNames = Warehouse::pluck('name')->map(fn($name) => strtolower(trim($name)))->toArray();
+
+        foreach ($rows as $index => $row) {
+            $name = strtolower(trim($row['name']));
+            
+            if (in_array($name, $existingNames)) {
+                $skipped++;
+                continue;
+            }
+
+            try {
+                Warehouse::create([
+                    'name' => $row['name'],
+                    'address' => $row['address'] ?? null,
+                    'status' => in_array(strtolower($row['status'] ?? ''), ['active', 'inactive']) ? strtolower($row['status']) : 'active',
+                ]);
+                $imported++;
+                $existingNames[] = $name;
+            } catch (\Exception $e) {
+                $skipped++;
+                $errors[] = "Baris " . ($index + 1) . ": " . $e->getMessage();
+            }
+        }
+
+        return response()->json([
+            'message' => "Import selesai. $imported berhasil, $skipped dilewati.",
+            'imported' => $imported,
+            'skipped' => $skipped,
+            'errors' => $errors
+        ]);
+    }
 }

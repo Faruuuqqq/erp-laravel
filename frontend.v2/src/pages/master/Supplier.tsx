@@ -4,8 +4,9 @@ import { useRetryableAction } from '@/hooks/useRetryableAction';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { DeleteConfirmDialog } from '@/components/dialogs/DeleteConfirmDialog';
+import { ImportDataDialog, type ImportColumnDef } from '@/components/dialogs/ImportDataDialog';
 import { DataTable, FormBuilder, type DataTableColumn, type FormSchema } from '@/components/common';
-import { Plus, Pencil, Trash2, Building2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Building2, Upload } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { StatCard } from '@/components/ui/StatCard';
 import { useToast } from '@/hooks/use-toast';
@@ -89,6 +90,7 @@ const supplierFormSchema: FormSchema = {
 const SupplierPage = () => {
   const { canCreate, canEdit, canDelete } = usePermissions();
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
   const [editItem, setEditItem] = useState<SupplierType | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
   const [formValues, setFormValues] = useState(INITIAL_FORM_VALUES);
@@ -205,6 +207,16 @@ const SupplierPage = () => {
     },
   ];
 
+  const importColumns: ImportColumnDef[] = [
+    { key: 'name', label: 'Nama Supplier', required: true, aliases: ['nama', 'supplier'] },
+    { key: 'phone', label: 'Telepon', aliases: ['hp', 'no hp'] },
+    { key: 'phone2', label: 'Telepon 2', aliases: ['hp2', 'no hp2'] },
+    { key: 'email', label: 'Email' },
+    { key: 'city', label: 'Kota', aliases: ['kota'] },
+    { key: 'address', label: 'Alamat', aliases: ['alamat lengkap'] },
+    { key: 'noRekening', label: 'No. Rekening', aliases: ['rekening', 'no rekening', 'no_rekening'] },
+  ];
+
   // Handle form submission
   const handleFormSubmit = useCallback(
     async (values: Record<string, any>) => {
@@ -305,7 +317,11 @@ const SupplierPage = () => {
 
       {/* Add Supplier Button */}
       {canCreate('suppliers') && (
-        <div className="mb-4 flex justify-end">
+        <div className="mb-4 flex justify-end gap-2">
+          <Button variant="outline" size="sm" onClick={() => setIsImportOpen(true)}>
+            <Upload className="mr-1.5 h-4 w-4" />
+            Import
+          </Button>
           <Button
             size="sm"
             onClick={() => {
@@ -390,6 +406,14 @@ const SupplierPage = () => {
           }}
         />
       )}
+
+      <ImportDataDialog
+        open={isImportOpen}
+        onOpenChange={setIsImportOpen}
+        resource="suppliers"
+        title="Supplier"
+        columns={importColumns}
+      />
     </MainLayout>
   );
 };

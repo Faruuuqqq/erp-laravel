@@ -24,6 +24,7 @@ interface CreateUpdateSalesRepRequest {
   phone?: string;
   email?: string;
   area?: string;
+  address?: string;
   status?: 'aktif' | 'nonaktif';
 }
 

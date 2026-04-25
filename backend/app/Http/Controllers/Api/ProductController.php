@@ -129,4 +129,81 @@ class ProductController extends Controller
             'message' => 'Stok berhasil diperbarui.',
         ]);
     }
+
+    public function import(Request $request): JsonResponse
+    {
+        $request->validate([
+            'rows' => ['required', 'array'],
+            'rows.*.code' => ['required', 'string'],
+            'rows.*.name' => ['required', 'string', 'max:100'],
+            'rows.*.category' => ['required', 'string'],
+        ]);
+
+        $rows = $request->input('rows');
+        $imported = 0;
+        $skipped = 0;
+        $errors = [];
+
+        $existingCodes = Product::pluck('code')->map(fn($code) => strtolower(trim($code)))->toArray();
+        $categories = Category::pluck('id', 'name')->mapWithKeys(fn($id, $name) => [strtolower(trim($name)) => $id])->toArray();
+        
+        // Prepare warehouse map if needed
+        $warehouses = \App\Models\Warehouse::pluck('id', 'name')->mapWithKeys(fn($id, $name) => [strtolower(trim($name)) => $id])->toArray();
+
+        foreach ($rows as $index => $row) {
+            $code = strtolower(trim($row['code']));
+            
+            if (in_array($code, $existingCodes)) {
+                $skipped++;
+                continue;
+            }
+
+            try {
+                // Resolve Category
+                $categoryName = trim($row['category']);
+                $categoryNameLower = strtolower($categoryName);
+                
+                if (isset($categories[$categoryNameLower])) {
+                    $categoryId = $categories[$categoryNameLower];
+                } else {
+                    $category = Category::create(['name' => $categoryName]);
+                    $categoryId = $category->id;
+                    $categories[$categoryNameLower] = $categoryId;
+                }
+
+                // Resolve Warehouse if provided
+                $warehouseId = null;
+                if (!empty($row['warehouse'])) {
+                    $whNameLower = strtolower(trim($row['warehouse']));
+                    if (isset($warehouses[$whNameLower])) {
+                        $warehouseId = $warehouses[$whNameLower];
+                    }
+                }
+
+                Product::create([
+                    'code' => $row['code'],
+                    'name' => $row['name'],
+                    'category_id' => $categoryId,
+                    'buy_price' => isset($row['buyPrice']) && is_numeric($row['buyPrice']) ? $row['buyPrice'] : (isset($row['buy_price']) && is_numeric($row['buy_price']) ? $row['buy_price'] : 0),
+                    'sell_price' => isset($row['sellPrice']) && is_numeric($row['sellPrice']) ? $row['sellPrice'] : (isset($row['sell_price']) && is_numeric($row['sell_price']) ? $row['sell_price'] : 0),
+                    'stock' => is_numeric($row['stock'] ?? null) ? $row['stock'] : 0,
+                    'min_stock' => isset($row['minStock']) && is_numeric($row['minStock']) ? $row['minStock'] : (isset($row['min_stock']) && is_numeric($row['min_stock']) ? $row['min_stock'] : 0),
+                    'unit' => $row['unit'] ?? 'Pcs',
+                    'warehouse_id' => $warehouseId,
+                ]);
+                $imported++;
+                $existingCodes[] = $code;
+            } catch (\Exception $e) {
+                $skipped++;
+                $errors[] = "Baris " . ($index + 1) . ": " . $e->getMessage();
+            }
+        }
+
+        return response()->json([
+            'message' => "Import selesai. $imported berhasil, $skipped dilewati.",
+            'imported' => $imported,
+            'skipped' => $skipped,
+            'errors' => $errors
+        ]);
+    }
 }
