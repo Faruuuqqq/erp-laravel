@@ -284,19 +284,19 @@ const CustomerPage = () => {
   ];
 
   const importColumns: ImportColumnDef[] = [
-    { key: 'name', label: 'Nama', required: true },
-    { key: 'phone', label: 'Telepon', aliases: ['hp', 'no hp', 'phone1'] },
-    { key: 'phone2', label: 'Telepon 2', aliases: ['hp2', 'no hp2'] },
-    { key: 'email', label: 'Email' },
-    { key: 'city', label: 'Kota', aliases: ['kota'] },
-    { key: 'address', label: 'Alamat', aliases: ['alamat lengkap'] },
-    { key: 'creditLimit', label: 'Limit Kredit', aliases: ['limit', 'credit limit', 'credit_limit'] },
-    { key: 'discount', label: 'Diskon', aliases: ['diskon'] },
-    { key: 'warehouse', label: 'Gudang', aliases: ['gudang'] },
-    { key: 'priceList', label: 'Price List', aliases: ['price list', 'pricelist', 'kategori harga'] },
-    { key: 'area', label: 'Daerah', aliases: ['daerah', 'area'] },
-    { key: 'npwp', label: 'NPWP', aliases: ['npwp'] },
-    { key: 'notes', label: 'Keterangan', aliases: ['keterangan', 'catatan'] },
+  { key: 'name',        label: 'Nama',         required: true },
+  { key: 'phone',       label: 'Telepon',       aliases: ['hp', 'no hp', 'phone1'] },
+  { key: 'phone2',      label: 'Telepon 2',     aliases: ['hp2', 'no hp2'] },
+  { key: 'email',       label: 'Email' },
+  { key: 'city',        label: 'Kota',          aliases: ['kota'] },
+  { key: 'address',     label: 'Alamat',        aliases: ['alamat lengkap'] },
+  { key: 'creditLimit', label: 'Limit Kredit',  type: 'number', aliases: ['limit', 'credit limit', 'credit_limit'] },
+  { key: 'discount',    label: 'Diskon',        type: 'number', aliases: ['diskon'] },
+  { key: 'warehouse',   label: 'Gudang',        aliases: ['gudang'] },
+  { key: 'priceList',   label: 'Price List',    aliases: ['price list', 'pricelist', 'kategori harga'] },
+  { key: 'area',        label: 'Daerah',        aliases: ['daerah', 'area'] },
+  { key: 'npwp',        label: 'NPWP',          aliases: ['npwp'] },
+  { key: 'notes',       label: 'Keterangan',    aliases: ['keterangan', 'catatan'] },
   ];
 
   // Handle form submission

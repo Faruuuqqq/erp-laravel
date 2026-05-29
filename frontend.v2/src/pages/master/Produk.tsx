@@ -309,15 +309,15 @@ const ProdukPage = () => {
   ];
 
   const importColumns: ImportColumnDef[] = [
-    { key: 'code', label: 'Kode', required: true, aliases: ['kode produk', 'code'] },
-    { key: 'name', label: 'Nama Produk', required: true, aliases: ['nama', 'produk'] },
-    { key: 'category', label: 'Kategori', required: true, aliases: ['kategori produk'] },
-    { key: 'buyPrice', label: 'Harga Beli', aliases: ['harga beli', 'buy price', 'buy_price'] },
-    { key: 'sellPrice', label: 'Harga Jual', aliases: ['harga jual', 'sell price', 'sell_price'] },
-    { key: 'stock', label: 'Stok', aliases: ['stok awal', 'qty', 'quantity'] },
-    { key: 'minStock', label: 'Min. Stok', aliases: ['min stok', 'minimum stock', 'min_stock'] },
-    { key: 'unit', label: 'Satuan', aliases: ['satuan', 'uom'] },
-    { key: 'warehouse', label: 'Gudang', aliases: ['gudang', 'warehouse'] },
+  { key: 'code',      label: 'Kode',        required: true, aliases: ['kode produk', 'code'] },
+  { key: 'name',      label: 'Nama Produk', required: true, aliases: ['nama', 'produk'] },
+  { key: 'category',  label: 'Kategori',    required: true, aliases: ['kategori produk'] },
+  { key: 'buyPrice',  label: 'Harga Beli',  type: 'number', aliases: ['harga beli', 'buy price', 'buy_price'] },
+  { key: 'sellPrice', label: 'Harga Jual',  type: 'number', aliases: ['harga jual', 'sell price', 'sell_price'] },
+  { key: 'stock',     label: 'Stok',        type: 'number', aliases: ['stok awal', 'qty', 'quantity'] },
+  { key: 'minStock',  label: 'Min. Stok',   type: 'number', aliases: ['min stok', 'minimum stock', 'min_stock'] },
+  { key: 'unit',      label: 'Satuan',      aliases: ['satuan', 'uom'] },
+  { key: 'warehouse', label: 'Gudang',      aliases: ['gudang', 'warehouse'] },
   ];
 
   // Handle form submission
