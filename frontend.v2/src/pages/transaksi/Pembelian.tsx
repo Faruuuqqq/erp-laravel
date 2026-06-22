@@ -199,11 +199,12 @@ const Pembelian = () => {
         notes: state.catatan,
         items: state.cart.map(i => ({ productId: i.productId, quantity: i.qty, price: i.harga, discount: 0 })),
       });
-      setSavedInvoice((result as Transaction).invoiceNumber ?? '');
+      const responseData = (result as { data: Transaction }).data;
+      setSavedInvoice(responseData.invoiceNumber ?? '');
       setSavedTotal(grandTotal);
-      setSavedTrx(result as Transaction);
+      setSavedTrx(responseData);
       setSaved(true);
-      toast({ title: 'Pembelian berhasil disimpan', description: (result as Transaction).invoiceNumber });
+      toast({ title: 'Pembelian berhasil disimpan', description: responseData.invoiceNumber });
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Gagal menyimpan';
       toast({ title: 'Error', description: msg, variant: 'destructive' });
@@ -282,7 +283,7 @@ const Pembelian = () => {
           invoiceNumber={savedInvoice}
           total={savedTotal}
           onPrint={() => setIsPreviewOpen(true)}
-          canPrint={canPrint('transactions.purchase')}
+          canPrint={canPrint('transactions.pembelian') || canPrint('transactions.purchase')}
           onReset={reset}
           extra={isKredit && <Badge variant="outline" className="mt-2 text-warning border-warning">Dicatat sebagai Utang</Badge>}
         />
@@ -480,15 +481,9 @@ const Pembelian = () => {
                  <Input value={state.catatan} onChange={e => set('catatan', e.target.value)} placeholder="Catatan..." className="text-xs h-8" />
                </div>
 
-               {state.cart.length > 0 && (
+               {state.cart.length > 0 && !savedTrx && (
                  <Button variant="outline" className="w-full h-8 text-xs" onClick={() => setIsDraftPreviewOpen(true)}>
                    <Eye className="mr-1.5 h-3.5 w-3.5" />Lihat Preview
-                 </Button>
-               )}
-
-               {canPrint('transactions.pembelian') && savedTrx && (
-                 <Button variant="outline" className="w-full h-8 text-xs" onClick={() => setIsPreviewOpen(true)}>
-                   <Eye className="mr-1.5 h-3.5 w-3.5" />Preview & Cetak
                  </Button>
                )}
 
@@ -502,22 +497,6 @@ const Pembelian = () => {
           </Card>
         </div>
       </div>
-
-       {/* Print Preview Dialog */}
-       {savedTrx && (
-         <PrintPreviewDialog
-            isOpen={isPreviewOpen}
-            onClose={() => setIsPreviewOpen(false)}
-            title="Faktur Pembelian"
-            documentId="faktur-pembelian-print"
-            filename={`Faktur-Pembelian-${savedTrx.invoiceNumber}`}
-            backendPdf={{ transactionId: savedTrx.id, documentType: 'invoice' }}
-          >
-           <div id="faktur-pembelian-print">
-             <FakturPembelian transaction={savedTrx} />
-           </div>
-         </PrintPreviewDialog>
-       )}
 
        <DraftPreviewDialog
          isOpen={isDraftPreviewOpen}
