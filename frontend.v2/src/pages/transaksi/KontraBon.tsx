@@ -18,6 +18,7 @@ import { SearchInput } from '@/components/common';
 import { PrintPreviewDialog } from '@/components/dialogs/PrintPreviewDialog';
 import { KontraBonPrint } from '@/components/print/KontraBonPrint';
 import { formatCurrency } from '@/lib/utils';
+import { extractErrorMessage } from '@/lib/api';
 import type { Transaction } from '@/types';
 
 const KontraBon = () => {
@@ -70,12 +71,6 @@ const KontraBon = () => {
 
   const printableGroups = useMemo(
     () => filteredGrouped.filter(([cid]) => cid !== 'unknown'),
-    [filteredGrouped]
-  );
-
-  // Memoize default expanded items - recompute only when filteredGrouped changes
-  const defaultExpanded = useMemo(
-    () => filteredGrouped.map(([cid]) => cid),
     [filteredGrouped]
   );
 
@@ -132,9 +127,7 @@ const KontraBon = () => {
       });
       toast({ title: `PDF kontra bon ${group.name} berhasil diunduh` });
     } catch (err: unknown) {
-      const message = (err as { response?: { data?: { message?: string } }; message?: string })?.response?.data?.message
-        ?? (err as { message?: string })?.message
-        ?? 'Gagal mengunduh PDF kontra bon';
+      const message = extractErrorMessage(err) || 'Gagal mengunduh PDF kontra bon';
       toast({ title: 'Error', description: message, variant: 'destructive' });
     }
   }, [buildFilename, downloadKontraBonPdf, toast]);
@@ -165,9 +158,7 @@ const KontraBon = () => {
         toast({ title: `Berhasil mengunduh ${printableGroups.length} PDF kontra bon` });
       }
     } catch (err: unknown) {
-      const message = (err as { response?: { data?: { message?: string } }; message?: string })?.response?.data?.message
-        ?? (err as { message?: string })?.message
-        ?? 'Gagal mengunduh semua PDF kontra bon';
+      const message = extractErrorMessage(err) || 'Gagal mengunduh semua PDF kontra bon';
       toast({ title: 'Error', description: message, variant: 'destructive' });
     } finally {
       setIsDownloading(false);
@@ -242,7 +233,7 @@ const KontraBon = () => {
               <p>{allPiutang.length === 0 ? 'Tidak ada piutang outstanding' : 'Tidak ada hasil pencarian'}</p>
             </div>
            ) : (
-             <Accordion type="multiple" defaultValue={defaultExpanded} className="w-full space-y-2">
+             <Accordion type="multiple" className="w-full space-y-2">
               {filteredGrouped.map(([cid, group]) => {
                 const totalCustomer = group.items.reduce((s, t) => s + (t.remaining ?? 0), 0);
                 const customerData = customers.find(c => c.id === cid);
