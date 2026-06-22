@@ -14,15 +14,14 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { useProducts } from '@/hooks/api/useProducts';
 import { useCustomers } from '@/hooks/api/useCustomers';
 import { useSalesReps } from '@/hooks/api/useSalesReps';
-import { useCreateTransaction } from '@/hooks/api/useTransactions';
+import { useCreateTransaction, useDownloadTransactionPdf } from '@/hooks/api/useTransactions';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { SearchInput } from '@/components/common';
 import { formatCurrency } from '@/lib/utils';
 import { DraftPreviewDialog } from '@/components/dialogs/DraftPreviewDialog';
-import { PrintPreviewDialog } from '@/components/dialogs/PrintPreviewDialog';
 import { SuccessScreen } from '@/components/layout/SuccessScreen';
-import { FakturPenjualan } from '@/components/print/FakturPenjualan';
 import { MainLayout } from '@/components/layout/MainLayout';
+import { extractErrorMessage } from '@/lib/api';
 import type { Transaction } from '@/types';
 
 interface CartItem {
@@ -52,33 +51,54 @@ const BLANK = () => ({
 const PenjualanTunai = () => {
   const { toast } = useToast();
   const { canCreate, canPrint } = usePermissions();
+
+  const downloadPdfMutation = useDownloadTransactionPdf();
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+  const [savedTrx, setSavedTrx] = useState<Transaction | null>(null);
+
+  const handleDownloadPdf = async () => {
+    if (!savedTrx) return;
+    try {
+      setIsDownloadingPdf(true);
+      await downloadPdfMutation.mutateAsync({
+        transactionId: savedTrx.id,
+        filename: `${savedTrx.invoiceNumber ?? 'dokumen'}.pdf`,
+        documentType: 'invoice',
+      });
+      toast({ title: 'Berhasil', description: 'Nota berhasil diunduh' });
+    } catch (err) {
+      toast({ title: 'Gagal Download', description: extractErrorMessage(err), variant: 'destructive' });
+      console.error('PDF download error:', err);
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+  };
+
   const createTx = useCreateTransaction();
 
-   const [state, setState] = useState(BLANK());
-   const [saved, setSaved] = useState(false);
-   const [savedTrx, setSavedTrx] = useState<Transaction | null>(null);
-   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-   const [isDraftPreviewOpen, setIsDraftPreviewOpen] = useState(false);
+  const [state, setState] = useState(BLANK());
+  const [saved, setSaved] = useState(false);
+  const [isDraftPreviewOpen, setIsDraftPreviewOpen] = useState(false);
 
-   const { data: productsData } = useProducts({ perPage: 500 });
-   const { data: customersData } = useCustomers({ perPage: 500 });
-   const { data: salesData } = useSalesReps({ perPage: 100 });
+  const { data: productsData } = useProducts({ perPage: 500 });
+  const { data: customersData } = useCustomers({ perPage: 500 });
+  const { data: salesData } = useSalesReps({ perPage: 100 });
 
-   // Wrap data arrays in useMemo to stabilize references
-   const products = useMemo(() => productsData?.data ?? [], [productsData?.data]);
-   const customers = useMemo(() => customersData?.data ?? [], [customersData?.data]);
-   const salesReps = useMemo(() => salesData?.data ?? [], [salesData?.data]);
+  // Wrap data arrays in useMemo to stabilize references
+  const products = useMemo(() => productsData?.data ?? [], [productsData?.data]);
+  const customers = useMemo(() => customersData?.data ?? [], [customersData?.data]);
+  const salesReps = useMemo(() => salesData?.data ?? [], [salesData?.data]);
 
-   const set = useCallback(<K extends keyof ReturnType<typeof BLANK>>(key: K, val: ReturnType<typeof BLANK>[K]) =>
-     setState(p => ({ ...p, [key]: val })), []);
+  const set = useCallback(<K extends keyof ReturnType<typeof BLANK>>(key: K, val: ReturnType<typeof BLANK>[K]) =>
+    setState(p => ({ ...p, [key]: val })), []);
 
-   const debouncedSearch = useDebouncedValue(state.searchProduct, 300);
+  const debouncedSearch = useDebouncedValue(state.searchProduct, 300);
 
-   const filteredProducts = useMemo(() =>
-     products.filter(p =>
-       p.name.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-       (p.code ?? '').toLowerCase().includes(debouncedSearch.toLowerCase())
-     ), [products, debouncedSearch]);
+  const filteredProducts = useMemo(() =>
+    products.filter(p =>
+      p.name.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+      (p.code ?? '').toLowerCase().includes(debouncedSearch.toLowerCase())
+    ), [products, debouncedSearch]);
 
   const addToCart = useCallback(() => {
     const product = products.find(p => p.id === state.selectedProduct);
@@ -112,131 +132,118 @@ const PenjualanTunai = () => {
   const pembayaranKurang = state.bayar !== '' && bayarNum < grandTotal;
   const kembalian = bayarNum - grandTotal;
 
-    const handleSave = useCallback(async () => {
-      if (state.cart.length === 0) return toast({ title: 'Keranjang masih kosong', variant: 'destructive' });
-      if (bayarNum <= 0) return toast({ title: 'Masukkan jumlah bayar', variant: 'destructive' });
-      if (bayarNum < grandTotal) return toast({ title: 'Pembayaran kurang dari total belanja', variant: 'destructive' });
-      try {
-        const result = await createTx.mutateAsync({
-          type: 'penjualan_tunai',
-          date: state.tanggal,
-          customerId: (state.selectedCustomer && state.selectedCustomer !== 'walk-in') ? state.selectedCustomer : null,
-          salesId: state.selectedSales || null,
-          discount: diskonTotalNum,
-          paid: bayarNum,
-          notes: state.catatan,
-          items: state.cart.map(i => ({ productId: i.productId, quantity: i.qty, price: i.harga, discount: i.diskon })),
-        });
-        setSavedTrx(result as Transaction);
-        setSaved(true);
-        toast({ title: 'Transaksi berhasil disimpan', description: (result as Transaction).invoiceNumber });
-      } catch (err: unknown) {
-        const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Gagal menyimpan';
-        toast({ title: 'Error', description: msg, variant: 'destructive' });
-      }
-    }, [state, bayarNum, createTx, diskonTotalNum, grandTotal, toast]);
+  const handleSave = useCallback(async () => {
+    if (state.cart.length === 0) return toast({ title: 'Keranjang masih kosong', variant: 'destructive' });
+    if (bayarNum <= 0) return toast({ title: 'Masukkan jumlah bayar', variant: 'destructive' });
+    if (bayarNum < grandTotal) return toast({ title: 'Pembayaran kurang dari total belanja', variant: 'destructive' });
+    try {
+      const result = await createTx.mutateAsync({
+        type: 'penjualan_tunai',
+        date: state.tanggal,
+        customerId: (state.selectedCustomer && state.selectedCustomer !== 'walk-in') ? state.selectedCustomer : null,
+        salesId: state.selectedSales || null,
+        discount: diskonTotalNum,
+        paid: bayarNum,
+        notes: state.catatan,
+        items: state.cart.map(i => ({ productId: i.productId, quantity: i.qty, price: i.harga, discount: i.diskon })),
+      });
+      const responseData = (result as { data: Transaction }).data;
+      setSavedTrx(responseData);
+      setSaved(true);
+      toast({ title: 'Transaksi berhasil disimpan', description: responseData.invoiceNumber });
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Gagal menyimpan';
+      toast({ title: 'Error', description: msg, variant: 'destructive' });
+    }
+  }, [state, bayarNum, createTx, diskonTotalNum, grandTotal, toast]);
 
-   const reset = useCallback(() => { setState(BLANK()); setSaved(false); setSavedTrx(null); setIsPreviewOpen(false); }, []);
+  const reset = useCallback(() => { setState(BLANK()); setSaved(false); setSavedTrx(null); setIsDraftPreviewOpen(false); }, []);
 
-   const draftPreviewContent = useMemo(() => (
-     <div className="w-full text-sm space-y-4 p-4">
-       <div className="border-b pb-4">
-         <p className="font-semibold text-lg">Penjualan Tunai (Draft)</p>
-         <p className="text-xs text-muted-foreground">Belum disimpan</p>
-       </div>
-       <div className="space-y-1 text-xs">
-         <div className="flex justify-between">
-           <span>Tanggal:</span>
-           <span className="font-semibold">{state.tanggal}</span>
-         </div>
-         {state.catatan && (
-           <div className="flex justify-between">
-             <span>Catatan:</span>
-             <span className="font-semibold">{state.catatan}</span>
-           </div>
-         )}
-       </div>
-       <table className="w-full text-xs">
-         <thead className="border-b bg-muted/50">
-           <tr>
-             <th className="text-left py-2">Produk</th>
-             <th className="text-right py-2">Qty</th>
-             <th className="text-right py-2">Harga</th>
-             <th className="text-right py-2">Diskon</th>
-             <th className="text-right py-2">Subtotal</th>
-           </tr>
-         </thead>
-         <tbody>
-           {state.cart.map(item => (
-             <tr key={item.productId} className="border-b">
-               <td className="py-2">{item.nama}</td>
-               <td className="text-right">{item.qty}</td>
-               <td className="text-right">{formatCurrency(item.harga)}</td>
-               <td className="text-right">{item.diskon}%</td>
-               <td className="text-right font-semibold">{formatCurrency(item.subtotal)}</td>
-             </tr>
-           ))}
-         </tbody>
-       </table>
-       <div className="space-y-1 text-xs border-t pt-4">
-         <div className="flex justify-between">
-           <span>Subtotal:</span>
-           <span>{formatCurrency(subtotal)}</span>
-         </div>
-         {diskonTotalNum > 0 && (
-           <div className="flex justify-between text-warning">
-             <span>Diskon:</span>
-             <span>-{formatCurrency(diskonTotalNum)}</span>
-           </div>
-         )}
-         <div className="flex justify-between font-semibold text-base border-t pt-2">
-           <span>Total:</span>
-           <span>{formatCurrency(grandTotal)}</span>
-         </div>
-         {bayarNum > 0 && (
-           <>
-             <div className="flex justify-between">
-               <span>Dibayar:</span>
-               <span>{formatCurrency(bayarNum)}</span>
-             </div>
-             <div className={`flex justify-between ${kembalian >= 0 ? 'text-success' : 'text-destructive'}`}>
-               <span>{kembalian >= 0 ? 'Kembalian' : 'Kurang'}:</span>
-               <span className="font-semibold">{formatCurrency(Math.abs(kembalian))}</span>
-             </div>
-           </>
-         )}
-       </div>
-     </div>
-   ), [bayarNum, diskonTotalNum, grandTotal, kembalian, state.cart, state.catatan, state.tanggal, subtotal]);
+  const draftPreviewContent = useMemo(() => (
+    <div className="w-full text-sm space-y-4 p-4">
+      <div className="border-b pb-4">
+        <p className="font-semibold text-lg">Penjualan Tunai (Draft)</p>
+        <p className="text-xs text-muted-foreground">Belum disimpan</p>
+      </div>
+      <div className="space-y-1 text-xs">
+        <div className="flex justify-between">
+          <span>Tanggal:</span>
+          <span className="font-semibold">{state.tanggal}</span>
+        </div>
+        {state.catatan && (
+          <div className="flex justify-between">
+            <span>Catatan:</span>
+            <span className="font-semibold">{state.catatan}</span>
+          </div>
+        )}
+      </div>
+      <table className="w-full text-xs">
+        <thead className="border-b bg-muted/50">
+          <tr>
+            <th className="text-left py-2">Produk</th>
+            <th className="text-right py-2">Qty</th>
+            <th className="text-right py-2">Harga</th>
+            <th className="text-right py-2">Diskon</th>
+            <th className="text-right py-2">Subtotal</th>
+          </tr>
+        </thead>
+        <tbody>
+          {state.cart.map(item => (
+            <tr key={item.productId} className="border-b">
+              <td className="py-2">{item.nama}</td>
+              <td className="text-right">{item.qty}</td>
+              <td className="text-right">{formatCurrency(item.harga)}</td>
+              <td className="text-right">{item.diskon}%</td>
+              <td className="text-right font-semibold">{formatCurrency(item.subtotal)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="space-y-1 text-xs border-t pt-4">
+        <div className="flex justify-between">
+          <span>Subtotal:</span>
+          <span>{formatCurrency(subtotal)}</span>
+        </div>
+        {diskonTotalNum > 0 && (
+          <div className="flex justify-between text-warning">
+            <span>Diskon:</span>
+            <span>-{formatCurrency(diskonTotalNum)}</span>
+          </div>
+        )}
+        <div className="flex justify-between font-semibold text-base border-t pt-2">
+          <span>Total:</span>
+          <span>{formatCurrency(grandTotal)}</span>
+        </div>
+        {bayarNum > 0 && (
+          <>
+            <div className="flex justify-between">
+              <span>Dibayar:</span>
+              <span>{formatCurrency(bayarNum)}</span>
+            </div>
+            <div className={`flex justify-between ${kembalian >= 0 ? 'text-success' : 'text-destructive'}`}>
+              <span>{kembalian >= 0 ? 'Kembalian' : 'Kurang'}:</span>
+              <span className="font-semibold">{formatCurrency(Math.abs(kembalian))}</span>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  ), [bayarNum, diskonTotalNum, grandTotal, kembalian, state.cart, state.catatan, state.tanggal, subtotal]);
 
-   if (saved && savedTrx) {
-     return (
-       <>
-         <SuccessScreen
-           title="Transaksi Berhasil"
-           invoiceNumber={savedTrx.invoiceNumber}
-           total={savedTrx.total}
-           onPrint={() => setIsPreviewOpen(true)}
-           canPrint={canPrint('transactions.cash_sale')}
-           onReset={reset}
-           extra={kembalian > 0 && <p className="text-muted-foreground mt-1">Kembalian: <span className="font-semibold text-success">{formatCurrency(kembalian)}</span></p>}
-         />
-
-         <PrintPreviewDialog
-           isOpen={isPreviewOpen}
-           onClose={() => setIsPreviewOpen(false)}
-           title="Faktur Penjualan Tunai"
-           documentId="faktur-penjualan-tunai-print"
-           filename={`faktur-penjualan-tunai-${savedTrx.invoiceNumber}`}
-           backendPdf={{ transactionId: savedTrx.id, documentType: 'invoice' }}
-         >
-           <div id="faktur-penjualan-tunai-print">
-             <FakturPenjualan transaction={savedTrx} />
-           </div>
-         </PrintPreviewDialog>
-       </>
-     );
-   }
+  if (saved && savedTrx) {
+    return (
+      <SuccessScreen
+        title="Transaksi Berhasil"
+        invoiceNumber={savedTrx.invoiceNumber}
+        total={savedTrx.total}
+        onDownloadPdf={handleDownloadPdf}
+        isDownloadingPdf={isDownloadingPdf}
+        canPrint={canPrint('transactions.cash_sale')}
+        onReset={reset}
+        extra={kembalian > 0 && <p className="text-muted-foreground mt-1">Kembalian: <span className="font-semibold text-success">{formatCurrency(kembalian)}</span></p>}
+      />
+    );
+  }
 
   return (
     <MainLayout title="Penjualan Tunai" subtitle="Buat transaksi penjualan tunai">
@@ -396,28 +403,11 @@ const PenjualanTunai = () => {
                     </Button>
                   </div>
                 )}
-                {savedTrx && canPrint('transactions.cash_sale') && (
-                  <Button variant="outline" className="w-full h-8 text-xs" onClick={() => setIsPreviewOpen(true)}><Eye className="mr-1.5 h-3.5 w-3.5" />Preview & Cetak</Button>
-                )}
+                
             </CardContent>
           </Card>
         </div>
       </div>
-
-       {savedTrx && (
-         <PrintPreviewDialog
-            isOpen={isPreviewOpen}
-            onClose={() => setIsPreviewOpen(false)}
-            title="Faktur Penjualan Tunai"
-            documentId="faktur-penjualan-tunai-print"
-            filename={`faktur-penjualan-tunai-${savedTrx.invoiceNumber}`}
-            backendPdf={{ transactionId: savedTrx.id, documentType: 'invoice' }}
-          >
-           <div id="faktur-penjualan-tunai-print">
-             <FakturPenjualan transaction={savedTrx} />
-           </div>
-         </PrintPreviewDialog>
-       )}
 
        <DraftPreviewDialog
          isOpen={isDraftPreviewOpen}

@@ -15,15 +15,14 @@ import { useProducts } from '@/hooks/api/useProducts';
 import { useCustomers } from '@/hooks/api/useCustomers';
 import { useSalesReps } from '@/hooks/api/useSalesReps';
 import { useWarehouses } from '@/hooks/api/useWarehouses';
-import { useCreateTransaction } from '@/hooks/api/useTransactions';
+import { useCreateTransaction, useDownloadTransactionPdf } from '@/hooks/api/useTransactions';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { SearchInput } from '@/components/common';
 import { DraftPreviewDialog } from '@/components/dialogs/DraftPreviewDialog';
-import { PrintPreviewDialog } from '@/components/dialogs/PrintPreviewDialog';
 import { SuccessScreen } from '@/components/layout/SuccessScreen';
-import { FakturPenjualan } from '@/components/print/FakturPenjualan';
 import { formatCurrency } from '@/lib/utils';
 import { MainLayout } from '@/components/layout/MainLayout';
+import { extractErrorMessage } from '@/lib/api';
 import type { Transaction } from '@/types';
 
 interface CartItem {
@@ -55,13 +54,34 @@ const BLANK = () => ({
 const PenjualanKredit = () => {
   const { toast } = useToast();
   const { canCreate, canPrint } = usePermissions();
+
+  const downloadPdfMutation = useDownloadTransactionPdf();
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+
+  const handleDownloadPdf = async () => {
+    if (!savedTrx) return;
+    try {
+      setIsDownloadingPdf(true);
+      await downloadPdfMutation.mutateAsync({
+        transactionId: savedTrx.id,
+        filename: `${savedTrx.invoiceNumber ?? 'dokumen'}.pdf`,
+        documentType: 'invoice',
+      });
+      toast({ title: 'Berhasil', description: 'Nota berhasil diunduh' });
+    } catch (err) {
+      toast({ title: 'Gagal Download', description: extractErrorMessage(err), variant: 'destructive' });
+      console.error('PDF download error:', err);
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+  };
+
   const createTx = useCreateTransaction();
 
-   const [state, setState] = useState(BLANK());
-   const [saved, setSaved] = useState(false);
-   const [savedTrx, setSavedTrx] = useState<Transaction | null>(null);
-   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-   const [isDraftPreviewOpen, setIsDraftPreviewOpen] = useState(false);
+  const [state, setState] = useState(BLANK());
+  const [saved, setSaved] = useState(false);
+  const [savedTrx, setSavedTrx] = useState<Transaction | null>(null);
+  const [isDraftPreviewOpen, setIsDraftPreviewOpen] = useState(false);
 
   // Data hooks
   const { data: productsData } = useProducts({ perPage: 500 });
@@ -69,25 +89,25 @@ const PenjualanKredit = () => {
   const { data: salesData } = useSalesReps({ perPage: 100 });
   const { data: warehousesData } = useWarehouses({ perPage: 100 });
 
-   // Memoized data
-   const products = useMemo(() => productsData?.data ?? [], [productsData?.data]);
-   const customers = useMemo(() => customersData?.data ?? [], [customersData?.data]);
-   const salesReps = useMemo(() => salesData?.data ?? [], [salesData?.data]);
-   const warehouses = useMemo(() => warehousesData?.data ?? [], [warehousesData?.data]);
+  // Memoized data
+  const products = useMemo(() => productsData?.data ?? [], [productsData?.data]);
+  const customers = useMemo(() => customersData?.data ?? [], [customersData?.data]);
+  const salesReps = useMemo(() => salesData?.data ?? [], [salesData?.data]);
+  const warehouses = useMemo(() => warehousesData?.data ?? [], [warehousesData?.data]);
 
-   // Helper set callback
-   const set = useCallback(<K extends keyof ReturnType<typeof BLANK>>(key: K, val: ReturnType<typeof BLANK>[K]) =>
-     setState(p => ({ ...p, [key]: val })), []);
+  // Helper set callback
+  const set = useCallback(<K extends keyof ReturnType<typeof BLANK>>(key: K, val: ReturnType<typeof BLANK>[K]) =>
+    setState(p => ({ ...p, [key]: val })), []);
 
-   // Debounce product search
-   const debouncedSearch = useDebouncedValue(state.searchProduct, 300);
+  // Debounce product search
+  const debouncedSearch = useDebouncedValue(state.searchProduct, 300);
 
-   // Filtered products
-   const filteredProducts = useMemo(() =>
-     products.filter(p =>
-       p.name.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-       (p.code ?? '').toLowerCase().includes(debouncedSearch.toLowerCase())
-     ), [products, debouncedSearch]);
+  // Filtered products
+  const filteredProducts = useMemo(() =>
+    products.filter(p =>
+      p.name.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+      (p.code ?? '').toLowerCase().includes(debouncedSearch.toLowerCase())
+    ), [products, debouncedSearch]);
 
   // Memoized customer
   const customer = useMemo(() => customers.find(c => c.id === state.selectedCustomer), [customers, state.selectedCustomer]);
@@ -146,121 +166,109 @@ const PenjualanKredit = () => {
         notes: state.catatan,
         items: state.cart.map(i => ({ productId: i.productId, quantity: i.qty, price: i.harga, discount: i.diskon })),
       });
-      setSavedTrx(result as Transaction);
+      const responseData = (result as { data: Transaction }).data;
+      setSavedTrx(responseData);
       setSaved(true);
-      toast({ title: 'Penjualan kredit berhasil disimpan', description: (result as Transaction).invoiceNumber });
+      toast({ title: 'Transaksi berhasil disimpan', description: responseData.invoiceNumber });
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Gagal menyimpan';
       toast({ title: 'Error', description: msg, variant: 'destructive' });
     }
   }, [state, diskonTotalNum, dpNum, grandTotal, isDpOverTotal, createTx, toast]);
 
-   // Reset handler
-    const reset = useCallback(() => { setState(BLANK()); setSaved(false); setSavedTrx(null); setIsPreviewOpen(false); setIsDraftPreviewOpen(false); }, []);
+  // Reset handler
+  const reset = useCallback(() => { setState(BLANK()); setSaved(false); setSavedTrx(null); setIsDraftPreviewOpen(false); }, []);
 
-    // Memoized draft preview content
-    const draftPreviewContent = useMemo(() => (
-      <div className="w-full text-sm space-y-4 p-4">
-        <div className="border-b pb-4">
-          <p className="font-semibold text-lg">Penjualan Kredit (Draft)</p>
-          <p className="text-xs text-muted-foreground">Belum disimpan</p>
+  // Memoized draft preview content
+  const draftPreviewContent = useMemo(() => (
+    <div className="w-full text-sm space-y-4 p-4">
+      <div className="border-b pb-4">
+        <p className="font-semibold text-lg">Penjualan Kredit (Draft)</p>
+        <p className="text-xs text-muted-foreground">Belum disimpan</p>
+      </div>
+      <div className="space-y-1 text-xs">
+        <div className="flex justify-between">
+          <span>Tanggal:</span>
+          <span className="font-semibold">{state.tanggal}</span>
         </div>
-        <div className="space-y-1 text-xs">
-          <div className="flex justify-between">
-            <span>Tanggal:</span>
-            <span className="font-semibold">{state.tanggal}</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Customer:</span>
-            <span className="font-semibold">{customer?.name || '-'}</span>
-          </div>
-          {state.catatan && (
-            <div className="flex justify-between">
-              <span>Catatan:</span>
-              <span className="font-semibold">{state.catatan}</span>
-            </div>
-          )}
+        <div className="flex justify-between">
+          <span>Customer:</span>
+          <span className="font-semibold">{customer?.name || '-'}</span>
         </div>
-        <table className="w-full text-xs">
-          <thead className="border-b bg-muted/50">
-            <tr>
-              <th className="text-left py-2">Produk</th>
-              <th className="text-right py-2">Qty</th>
-              <th className="text-right py-2">Harga</th>
-              <th className="text-right py-2">Diskon</th>
-              <th className="text-right py-2">Subtotal</th>
+        {state.catatan && (
+          <div className="flex justify-between">
+            <span>Catatan:</span>
+            <span className="font-semibold">{state.catatan}</span>
+          </div>
+        )}
+      </div>
+      <table className="w-full text-xs">
+        <thead className="border-b bg-muted/50">
+          <tr>
+            <th className="text-left py-2">Produk</th>
+            <th className="text-right py-2">Qty</th>
+            <th className="text-right py-2">Harga</th>
+            <th className="text-right py-2">Diskon</th>
+            <th className="text-right py-2">Subtotal</th>
+          </tr>
+        </thead>
+        <tbody>
+          {state.cart.map(item => (
+            <tr key={item.productId} className="border-b">
+              <td className="py-2">{item.nama}</td>
+              <td className="text-right">{item.qty}</td>
+              <td className="text-right">{formatCurrency(item.harga)}</td>
+              <td className="text-right">{item.diskon}%</td>
+              <td className="text-right font-semibold">{formatCurrency(item.subtotal)}</td>
             </tr>
-          </thead>
-          <tbody>
-            {state.cart.map(item => (
-              <tr key={item.productId} className="border-b">
-                <td className="py-2">{item.nama}</td>
-                <td className="text-right">{item.qty}</td>
-                <td className="text-right">{formatCurrency(item.harga)}</td>
-                <td className="text-right">{item.diskon}%</td>
-                <td className="text-right font-semibold">{formatCurrency(item.subtotal)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <div className="space-y-1 text-xs border-t pt-4">
-          <div className="flex justify-between">
-            <span>Subtotal:</span>
-            <span>{formatCurrency(subtotal)}</span>
+          ))}
+        </tbody>
+      </table>
+      <div className="space-y-1 text-xs border-t pt-4">
+        <div className="flex justify-between">
+          <span>Subtotal:</span>
+          <span>{formatCurrency(subtotal)}</span>
+        </div>
+        {diskonTotalNum > 0 && (
+          <div className="flex justify-between text-warning">
+            <span>Diskon:</span>
+            <span>-{formatCurrency(diskonTotalNum)}</span>
           </div>
-          {diskonTotalNum > 0 && (
-            <div className="flex justify-between text-warning">
-              <span>Diskon:</span>
-              <span>-{formatCurrency(diskonTotalNum)}</span>
-            </div>
-          )}
-          <div className="flex justify-between font-semibold text-base border-t pt-2">
-            <span>Total:</span>
-            <span>{formatCurrency(grandTotal)}</span>
+        )}
+        <div className="flex justify-between font-semibold text-base border-t pt-2">
+          <span>Total:</span>
+          <span>{formatCurrency(grandTotal)}</span>
+        </div>
+        {dpNum > 0 && (
+          <div className="flex justify-between text-success">
+            <span>DP:</span>
+            <span>{formatCurrency(dpNum)}</span>
           </div>
-          {dpNum > 0 && (
-            <div className="flex justify-between text-success">
-              <span>DP:</span>
-              <span>{formatCurrency(dpNum)}</span>
-            </div>
-          )}
-          <div className={`flex justify-between font-semibold ${isOverLimit ? 'text-destructive' : 'text-warning'}`}>
-            <span>Sisa Piutang:</span>
-            <span>{formatCurrency(sisaPiutang)}</span>
-          </div>
+        )}
+        <div className={`flex justify-between font-semibold ${isOverLimit ? 'text-destructive' : 'text-warning'}`}>
+          <span>Sisa Piutang:</span>
+          <span>{formatCurrency(sisaPiutang)}</span>
         </div>
       </div>
-    ), [state.tanggal, customer?.name, state.catatan, state.cart, subtotal, diskonTotalNum, grandTotal, dpNum, sisaPiutang, isOverLimit]);
+    </div>
+  ), [state.tanggal, customer?.name, state.catatan, state.cart, subtotal, diskonTotalNum, grandTotal, dpNum, sisaPiutang, isOverLimit]);
 
-if (saved && savedTrx) {
-      return (
-        <>
-          <SuccessScreen
-            title="Penjualan Kredit Berhasil"
-            invoiceNumber={savedTrx.invoiceNumber}
-            invoiceLabel="No. Faktur"
-            total={savedTrx.remaining ?? 0}
-            totalLabel="Total Piutang Ditambahkan"
-            iconColor="success"
-            onPrint={() => setIsPreviewOpen(true)}
-            canPrint={canPrint('transactions.credit_sale')}
-            onReset={reset}
-          />
-          <PrintPreviewDialog
-            isOpen={isPreviewOpen}
-            onClose={() => setIsPreviewOpen(false)}
-            title="Faktur Penjualan Kredit"
-            documentId="faktur-penjualan-kredit-print"
-            filename={`faktur-penjualan-kredit-${savedTrx.invoiceNumber}`}
-            backendPdf={{ transactionId: savedTrx.id, documentType: 'invoice' }}
-          >
-            <div id="faktur-penjualan-kredit-print">
-              <FakturPenjualan transaction={savedTrx} />
-            </div>
-          </PrintPreviewDialog>
-        </>
-      );
-    }
+  if (saved && savedTrx) {
+    return (
+      <SuccessScreen
+        title="Transaksi Kredit Berhasil"
+        invoiceNumber={savedTrx.invoiceNumber}
+        subTitle="Sisa Tagihan"
+        total={savedTrx.remaining ?? 0}
+        totalLabel="Total Piutang Ditambahkan"
+        iconColor="success"
+        onDownloadPdf={handleDownloadPdf}
+        isDownloadingPdf={isDownloadingPdf}
+        canPrint={canPrint('transactions.credit_sale')}
+        onReset={reset}
+      />
+    );
+  }
 
   return (
     <MainLayout title="Penjualan Kredit" subtitle="Buat transaksi penjualan dengan pembayaran kredit">
@@ -451,9 +459,7 @@ if (saved && savedTrx) {
                     </Button>
                   </div>
                 )}
-                {savedTrx && canPrint('transactions.credit_sale') && (
-                  <Button variant="outline" className="w-full h-8 text-xs" onClick={() => setIsPreviewOpen(true)}><Eye className="mr-1.5 h-3.5 w-3.5" />Preview & Cetak</Button>
-                )}
+                
             </CardContent>
           </Card>
         </div>
