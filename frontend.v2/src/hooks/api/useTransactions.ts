@@ -114,23 +114,36 @@ export const useDownloadTransactionPdf = () => {
           : documentType === 'receipt'
             ? 'receipt'
             : 'document';
-      const response = await apiClient.getClient().get<Blob>(
-        `/transactions/${transactionId}/print/${endpoint}`,
-        {
-          params: { download: 1, filename },
-          responseType: 'blob',
-        }
-      );
+      try {
+        const response = await apiClient.getClient().get<Blob>(
+          `/transactions/${transactionId}/print/${endpoint}`,
+          {
+            params: { download: 1, filename },
+            responseType: 'blob',
+          }
+        );
 
-      const blob = response.data;
-      const objectUrl = window.URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = objectUrl;
-      anchor.download = filename.toLowerCase().endsWith('.pdf') ? filename : `${filename}.pdf`;
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      window.URL.revokeObjectURL(objectUrl);
+        const blob = response.data;
+        const objectUrl = window.URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = objectUrl;
+        anchor.download = filename.toLowerCase().endsWith('.pdf') ? filename : `${filename}.pdf`;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        window.URL.revokeObjectURL(objectUrl);
+      } catch (err: unknown) {
+        const error = err as { response?: { data?: Blob | string } };
+        if (error.response?.data instanceof Blob) {
+          const text = await error.response.data.text();
+          try {
+            error.response.data = JSON.parse(text);
+          } catch (e) {
+            // keep as blob if not JSON
+          }
+        }
+        throw error;
+      }
     },
   });
 };
@@ -138,29 +151,42 @@ export const useDownloadTransactionPdf = () => {
 export const useDownloadKontraBonPdf = () => {
   return useMutation({
     mutationFn: async ({ customerId, transactionIds, filename, interestRate }: DownloadKontraBonPdfPayload) => {
-      const response = await apiClient.getClient().post<Blob>(
-        '/kontra-bon/print',
-        {
-          customer_id: customerId,
-          transaction_ids: transactionIds,
-          interest_rate: interestRate ?? 0,
-          download: true,
-          filename,
-        },
-        {
-          responseType: 'blob',
-        }
-      );
+      try {
+        const response = await apiClient.getClient().post<Blob>(
+          '/kontra-bon/print',
+          {
+            customer_id: customerId,
+            transaction_ids: transactionIds,
+            interest_rate: interestRate ?? 0,
+            download: true,
+            filename,
+          },
+          {
+            responseType: 'blob',
+          }
+        );
 
-      const blob = response.data;
-      const objectUrl = window.URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = objectUrl;
-      anchor.download = filename.toLowerCase().endsWith('.pdf') ? filename : `${filename}.pdf`;
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      window.URL.revokeObjectURL(objectUrl);
+        const blob = response.data;
+        const objectUrl = window.URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = objectUrl;
+        anchor.download = filename.toLowerCase().endsWith('.pdf') ? filename : `${filename}.pdf`;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        window.URL.revokeObjectURL(objectUrl);
+      } catch (err: unknown) {
+        const error = err as { response?: { data?: Blob | string } };
+        if (error.response?.data instanceof Blob) {
+          const text = await error.response.data.text();
+          try {
+            error.response.data = JSON.parse(text);
+          } catch (e) {
+            // keep as blob if not JSON
+          }
+        }
+        throw error;
+      }
     },
   });
 };

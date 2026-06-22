@@ -146,14 +146,6 @@ export const PrintPreviewDialog = ({
             Tutup
           </Button>
           <Button
-            variant="outline"
-            onClick={handlePrint}
-            className="h-9 text-sm"
-          >
-            <Printer className="mr-1.5 h-4 w-4" />
-            Cetak
-          </Button>
-          <Button
             onClick={handleExportPdf}
             disabled={isExporting || !customFilename.trim()}
             className="h-9 text-sm"

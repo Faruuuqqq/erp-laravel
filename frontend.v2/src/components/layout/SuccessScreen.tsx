@@ -1,7 +1,7 @@
 import { ReactNode } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
-import { Eye, CheckCircle2 } from 'lucide-react';
+import { FileDown, CheckCircle2, Loader2 } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 
 interface SuccessScreenProps {
@@ -10,9 +10,10 @@ interface SuccessScreenProps {
   iconColor?: 'success' | 'warning' | 'primary';
   invoiceNumber?: string;
   invoiceLabel?: string;
-  total: number;
+  total?: number;
   totalLabel?: string;
-  onPrint?: () => void;
+  onDownloadPdf?: () => void;
+  isDownloadingPdf?: boolean;
   onReset: () => void;
   canPrint?: boolean;
   extra?: ReactNode;
@@ -26,7 +27,8 @@ export const SuccessScreen = ({
   invoiceLabel = 'No. Faktur',
   total,
   totalLabel = 'Total',
-  onPrint,
+  onDownloadPdf,
+  isDownloadingPdf,
   onReset,
   canPrint,
   extra,
@@ -58,16 +60,27 @@ export const SuccessScreen = ({
               {invoiceLabel}: <span className="font-mono font-semibold text-primary">{invoiceNumber}</span>
             </p>
           )}
-          <p className={`text-3xl font-bold ${textColor} mt-3`}>
-            {total > 999 ? formatCurrency(total) : total}
-          </p>
+          {total !== undefined && (
+            <p className={`text-3xl font-bold ${textColor} mt-3`}>
+              {total > 999 ? formatCurrency(total) : total}
+            </p>
+          )}
           {extra}
         </div>
         <div className="flex gap-3">
-          {canPrint && onPrint && (
-            <Button variant="outline" onClick={onPrint}>
-              <Eye className="mr-2 h-4 w-4" />
-              Preview & Cetak
+          {canPrint && onDownloadPdf && (
+            <Button variant="outline" onClick={onDownloadPdf} disabled={isDownloadingPdf}>
+              {isDownloadingPdf ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Mengunduh...
+                </>
+              ) : (
+                <>
+                  <FileDown className="mr-2 h-4 w-4" />
+                  Unduh PDF
+                </>
+              )}
             </Button>
           )}
           <Button onClick={onReset}>Transaksi Baru</Button>
