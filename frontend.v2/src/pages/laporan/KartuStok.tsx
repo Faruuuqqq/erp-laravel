@@ -1,7 +1,10 @@
-import { useState, useMemo, useCallback } from 'react';
+import { Fragment, useState, useMemo, useCallback } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { PageHeader, DataTableContainer } from '@/components/ui/DataComponents';
 import { useProducts } from '@/hooks/api/useProducts';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import {
   Select,
   SelectContent,
@@ -9,10 +12,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Package, ArrowUp, ArrowDown, Printer, Download } from 'lucide-react';
+import {
+  Package,
+  ArrowUp,
+  ArrowDown,
+  Printer,
+  Download,
+  Search,
+  ChevronDown,
+  ChevronRight,
+} from 'lucide-react';
 import { StatCard } from '@/components/ui/StatCard';
 import {
   Table,
@@ -31,6 +40,7 @@ import { KartuStokPrint } from '@/components/print/KartuStokPrint';
 import { resolveDirection } from '@/constants/stockDirection';
 import { useToast } from '@/components/ui/use-toast';
 import { exportToExcel, formatDateRange } from '@/lib/export';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import type {
   StockMutationResponse,
   QueryParams,
@@ -64,25 +74,18 @@ interface PrintEntry {
   saldo: number;
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
+// ─── Expanded Detail Component ────────────────────────────────────────────────
 
-const KartuStok = () => {
+interface ProductDetailProps {
+  product: ApiProduct;
+}
+
+const ProductDetail = ({ product }: ProductDetailProps) => {
   const { toast } = useToast();
   const { printDocument } = usePrint();
 
-  const [selectedProduct, setSelectedProduct] = useState('');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
-
-  const { data: productsData } = useProducts({ per_page: 999 });
-  const products = useMemo(
-    () => productsData?.data ?? [],
-    [productsData?.data]
-  );
-  const product = useMemo(
-    () => products.find(p => p.id === selectedProduct),
-    [products, selectedProduct]
-  );
 
   // Validate date range
   const isDateRangeValid = useMemo(() => {
@@ -94,12 +97,12 @@ const KartuStok = () => {
     }
   }, [fromDate, toDate]);
 
-  // Fetch stock mutations
-  const { data: mutationsData, isLoading, isError, error } = useQuery({
-    queryKey: ['stock-mutations', selectedProduct, fromDate, toDate],
+  // Fetch stock mutations for this product
+  const { data: mutationsData, isLoading, isError } = useQuery({
+    queryKey: ['stock-mutations', product.id, fromDate, toDate],
     queryFn: async () => {
       const params: QueryParams = {
-        product_id: selectedProduct,
+        product_id: product.id,
         from: fromDate || undefined,
         to: toDate || undefined,
       };
@@ -120,21 +123,9 @@ const KartuStok = () => {
         throw new Error(message);
       }
     },
-    enabled: !!selectedProduct && isDateRangeValid,
+    enabled: isDateRangeValid,
     retry: 2,
   });
-
-  // Show error toast
-  if (isError && error instanceof Error) {
-    const errorMsg = error.message || 'Gagal memuat data kartu stok';
-    if (selectedProduct) {
-      toast({
-        title: 'Error',
-        description: errorMsg,
-        variant: 'destructive',
-      });
-    }
-  }
 
   // Extract data
   const raw = useMemo(
@@ -199,8 +190,6 @@ const KartuStok = () => {
 
   // Handle print
   const handlePrint = useCallback(async () => {
-    if (!product) return;
-
     try {
       printDocument(
         <KartuStokPrint
@@ -230,8 +219,6 @@ const KartuStok = () => {
 
   // Handle XLSX export
   const handleExportXLSX = useCallback(() => {
-    if (!product) return;
-
     try {
       const filename = `kartu-stok-${product.code}-${formatDateRange(fromDate || 'all', toDate || 'all')}`;
       exportToExcel(
@@ -263,156 +250,89 @@ const KartuStok = () => {
     }
   }, [product, printEntries, fromDate, toDate, toast]);
 
-  // Render
   return (
-    <MainLayout
-      title="Kartu Stok"
-      subtitle="Histori pergerakan stok per produk"
-    >
-      <PageHeader
-        title="Kartu Stok"
-        description="Audit trail lengkap pergerakan stok per produk"
-        actions={
-          <div className="flex gap-2">
-            <Button
-              onClick={handlePrint}
-              disabled={!selectedProduct}
-              size="sm"
-              variant="outline"
-              className="gap-2"
-            >
-              <Printer className="h-4 w-4" />
-              Cetak
-            </Button>
-            <Button
-              onClick={handleExportXLSX}
-              disabled={!selectedProduct}
-              size="sm"
-              variant="outline"
-              className="gap-2"
-            >
-              <Download className="h-4 w-4" />
-              Export
-            </Button>
+    <div className="px-4 pb-5 pt-3 space-y-4 bg-muted/10 border-t border-dashed">
+      {/* Header: Product info + Date filters + Actions */}
+      <div className="flex flex-wrap items-end gap-3 justify-between">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 shrink-0">
+            <Package className="h-5 w-5 text-primary" />
           </div>
-        }
-      />
+          <div className="min-w-0">
+            <p className="font-bold text-sm truncate">{product.name}</p>
+            <p className="text-xs text-muted-foreground">
+              {product.code} &middot; {product.categoryName ?? product.category}
+              <span className="mx-2">|</span>
+              Beli: {formatCurrency(Number(product.buyPrice ?? 0))}
+              <span className="mx-1">&middot;</span>
+              Jual: {formatCurrency(Number(product.sellPrice ?? 0))}
+            </p>
+          </div>
+        </div>
 
-      {/* Filters */}
-      <div className="mb-5 flex flex-wrap gap-3 items-end">
-        <div className="flex-1 min-w-48">
-          <label className="text-sm font-medium text-foreground mb-1.5 block">
-            Pilih Produk
-          </label>
-          <Select value={selectedProduct} onValueChange={setSelectedProduct}>
-            <SelectTrigger className="w-full max-w-md">
-              <SelectValue placeholder="Pilih produk" />
-            </SelectTrigger>
-            <SelectContent>
-              {products.map((p: ApiProduct) => (
-                <SelectItem key={p.id} value={p.id}>
-                  <span className="font-mono text-xs text-muted-foreground mr-2">
-                    {p.code}
-                  </span>
-                  {p.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <label className="text-sm font-medium text-foreground mb-1.5 block">
-            Dari
-          </label>
-          <Input
-            type="date"
-            className="h-9"
-            value={fromDate}
-            onChange={e => setFromDate(e.target.value)}
-          />
-        </div>
-        <div>
-          <label className="text-sm font-medium text-foreground mb-1.5 block">
-            Sampai
-          </label>
-          <Input
-            type="date"
-            className="h-9"
-            value={toDate}
-            onChange={e => setToDate(e.target.value)}
-          />
+        <div className="flex items-end gap-2 flex-wrap">
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1 block">
+              Dari
+            </label>
+            <Input
+              type="date"
+              className="h-8 text-xs w-36"
+              value={fromDate}
+              onChange={e => setFromDate(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1 block">
+              Sampai
+            </label>
+            <Input
+              type="date"
+              className="h-8 text-xs w-36"
+              value={toDate}
+              onChange={e => setToDate(e.target.value)}
+            />
+          </div>
+          <Button
+            onClick={handlePrint}
+            size="sm"
+            variant="outline"
+            className="gap-1.5 h-8 text-xs"
+          >
+            <Printer className="h-3.5 w-3.5" />
+            Cetak
+          </Button>
+          <Button
+            onClick={handleExportXLSX}
+            size="sm"
+            variant="outline"
+            className="gap-1.5 h-8 text-xs"
+          >
+            <Download className="h-3.5 w-3.5" />
+            Export
+          </Button>
         </div>
       </div>
 
       {/* Date validation warning */}
       {!isDateRangeValid && (
-        <div className="mb-4 p-3 bg-destructive/10 border border-destructive/30 rounded text-sm text-destructive">
+        <div className="p-2 bg-destructive/10 border border-destructive/30 rounded text-xs text-destructive">
           Tanggal mulai harus lebih awal atau sama dengan tanggal akhir
         </div>
       )}
 
-      {/* Product Info Card */}
-      {product && (
-        <div className="mb-5 rounded-xl border bg-card p-4 flex items-center gap-4">
-          <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10 shrink-0">
-            <Package className="h-7 w-7 text-primary" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="font-bold text-base truncate">{product.name}</p>
-            <p className="text-sm text-muted-foreground">
-              {product.code} &middot; {product.categoryName}
-            </p>
-            <div className="flex items-center gap-3 mt-1.5">
-              <span className="text-xs text-muted-foreground">
-                Harga Beli:{' '}
-                <span className="font-medium text-foreground">
-                  {formatCurrency(Number(product.buyPrice))}
-                </span>
-              </span>
-              <span className="text-xs text-muted-foreground">
-                Harga Jual:{' '}
-                <span className="font-medium text-foreground">
-                  {formatCurrency(Number(product.sellPrice))}
-                </span>
-              </span>
-            </div>
-          </div>
-          <div className="text-right shrink-0">
-            <p
-              className={`text-3xl font-bold tabular-nums ${
-                Number(product.stock) <=
-                Number(product.minimumStock ?? 0)
-                  ? 'text-destructive'
-                  : 'text-primary'
-              }`}
-            >
-              {product.stock}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {product.unit} tersisa (stok saat ini)
-            </p>
-            {Number(product.stock) <=
-              Number(product.minimumStock ?? 0) && (
-              <Badge variant="destructive" className="mt-1 text-xs">
-                Stok Rendah
-              </Badge>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* Stat Cards */}
-      <div className="mb-5 grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-3">
         <StatCard
           title="Total Masuk"
-          value={`${totalMasuk} ${product?.unit ?? ''}`}
-          icon={<ArrowUp className="h-5 w-5" />}
+          value={`${totalMasuk} ${product.unit ?? ''}`}
+          icon={<ArrowUp className="h-4 w-4" />}
           color="success"
         />
         <StatCard
           title="Total Keluar"
-          value={`${totalKeluar} ${product?.unit ?? ''}`}
-          icon={<ArrowDown className="h-5 w-5" />}
+          value={`${totalKeluar} ${product.unit ?? ''}`}
+          icon={<ArrowDown className="h-4 w-4" />}
           color="destructive"
         />
         <StatCard
@@ -421,37 +341,26 @@ const KartuStok = () => {
               ? 'Saldo Akhir Periode'
               : 'Saldo Awal Periode'
           }
-          value={`${saldoAkhirPeriode} ${product?.unit ?? ''}`}
-          icon={<Package className="h-5 w-5" />}
+          value={`${saldoAkhirPeriode} ${product.unit ?? ''}`}
+          icon={<Package className="h-4 w-4" />}
           color="primary"
         />
       </div>
 
-      {/* Movement Table */}
-      <DataTableContainer>
-        {!selectedProduct ? (
-          <div className="p-12 text-center">
-            <Package className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-50" />
-            <p className="text-muted-foreground">
-              Pilih produk untuk melihat kartu stok.
-            </p>
-          </div>
-        ) : isLoading ? (
-          <div className="p-12 text-center text-muted-foreground">
-            Memuat data...
-          </div>
-        ) : isError && !isDateRangeValid ? (
-          <div className="p-12 text-center text-destructive">
-            Periksa tanggal yang dipilih
+      {/* Mutation Table */}
+      <div className="rounded-lg border overflow-hidden">
+        {isLoading ? (
+          <div className="p-8 text-center text-sm text-muted-foreground">
+            Memuat data pergerakan stok...
           </div>
         ) : isError ? (
-          <div className="p-12 text-center text-destructive">
+          <div className="p-8 text-center text-sm text-destructive">
             Gagal memuat data kartu stok
           </div>
         ) : mutations.length === 0 ? (
-          <div className="p-12 text-center">
-            <Package className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-50" />
-            <p className="text-muted-foreground">
+          <div className="p-8 text-center">
+            <Package className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-50" />
+            <p className="text-sm text-muted-foreground">
               Belum ada data pergerakan stok untuk produk ini.
             </p>
           </div>
@@ -459,13 +368,13 @@ const KartuStok = () => {
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/40">
-                <TableHead className="w-12">#</TableHead>
-                <TableHead>Tanggal</TableHead>
-                <TableHead>Keterangan</TableHead>
-                <TableHead>No. Referensi</TableHead>
-                <TableHead>Masuk</TableHead>
-                <TableHead>Keluar</TableHead>
-                <TableHead>Saldo</TableHead>
+                <TableHead className="w-10 text-xs">#</TableHead>
+                <TableHead className="text-xs">Tanggal</TableHead>
+                <TableHead className="text-xs">Keterangan</TableHead>
+                <TableHead className="text-xs">No. Referensi</TableHead>
+                <TableHead className="text-xs">Masuk</TableHead>
+                <TableHead className="text-xs">Keluar</TableHead>
+                <TableHead className="text-xs">Saldo</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -476,9 +385,7 @@ const KartuStok = () => {
                 </TableCell>
                 <TableCell className="text-muted-foreground whitespace-nowrap text-xs">
                   {fromDate
-                    ? new Date(fromDate).toLocaleDateString(
-                        'id-ID'
-                      )
+                    ? new Date(fromDate).toLocaleDateString('id-ID')
                     : '—'}
                 </TableCell>
                 <TableCell className="text-muted-foreground text-xs" colSpan={2}>
@@ -486,7 +393,7 @@ const KartuStok = () => {
                 </TableCell>
                 <TableCell />
                 <TableCell />
-                <TableCell className="font-bold tabular-nums text-base">
+                <TableCell className="font-bold tabular-nums">
                   {openingStock}
                 </TableCell>
               </TableRow>
@@ -500,12 +407,10 @@ const KartuStok = () => {
                   <TableCell className="text-muted-foreground text-xs">
                     {i + 1}
                   </TableCell>
-                  <TableCell className="text-muted-foreground whitespace-nowrap">
-                    {new Date(m.createdAt).toLocaleDateString(
-                      'id-ID'
-                    )}
+                  <TableCell className="text-muted-foreground whitespace-nowrap text-xs">
+                    {new Date(m.createdAt).toLocaleDateString('id-ID')}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="text-xs">
                     {m.notes ?? m.type}
                   </TableCell>
                   <TableCell className="font-mono text-xs text-primary">
@@ -527,7 +432,7 @@ const KartuStok = () => {
                       </span>
                     )}
                   </TableCell>
-                  <TableCell className="font-bold tabular-nums text-base">
+                  <TableCell className="font-bold tabular-nums">
                     {m._runningBalance}
                   </TableCell>
                 </TableRow>
@@ -537,27 +442,259 @@ const KartuStok = () => {
             {/* Summary row in footer */}
             <TableFooter>
               <TableRow className="bg-muted/40">
-                <TableCell colSpan={4} className="font-bold text-sm">
+                <TableCell colSpan={4} className="font-bold text-xs">
                   RINGKASAN PERIODE
                 </TableCell>
                 <TableCell>
-                  <span className="text-success font-bold">
+                  <span className="text-success font-bold text-xs">
                     +{totalMasuk}
                   </span>
                 </TableCell>
                 <TableCell>
-                  <span className="text-destructive font-bold">
+                  <span className="text-destructive font-bold text-xs">
                     -{totalKeluar}
                   </span>
                 </TableCell>
-                <TableCell className="font-bold text-base text-primary">
+                <TableCell className="font-bold text-sm text-primary">
                   {saldoAkhirPeriode}
                 </TableCell>
               </TableRow>
             </TableFooter>
           </Table>
         )}
-      </DataTableContainer>
+      </div>
+    </div>
+  );
+};
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+
+const PER_PAGE = 25;
+
+const KartuStok = () => {
+  const [search, setSearch] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [expandedProductId, setExpandedProductId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+
+  const debouncedSearch = useDebouncedValue(search, 400);
+
+  const { data: productsData, isLoading } = useProducts({ per_page: 999 });
+  const products = useMemo(
+    () => productsData?.data ?? [],
+    [productsData?.data]
+  );
+
+  // Extract unique categories
+  const categories = useMemo(
+    () => Array.from(new Set(products.map(p => p.categoryName ?? p.category).filter(Boolean))) as string[],
+    [products]
+  );
+
+  // Apply filters
+  const filtered = useMemo(() => {
+    return products.filter(p => {
+      const matchSearch =
+        !debouncedSearch ||
+        p.name.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+        (p.code ?? '').toLowerCase().includes(debouncedSearch.toLowerCase());
+      const cat = p.categoryName ?? p.category;
+      const matchCategory = categoryFilter === 'all' || cat === categoryFilter;
+      return matchSearch && matchCategory;
+    });
+  }, [products, debouncedSearch, categoryFilter]);
+
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
+  const paginatedItems = useMemo(
+    () => filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE),
+    [filtered, page]
+  );
+
+  // Reset page when filters change
+  const handleSearchChange = useCallback((value: string) => {
+    setSearch(value);
+    setPage(1);
+  }, []);
+
+  const handleCategoryChange = useCallback((value: string) => {
+    setCategoryFilter(value);
+    setPage(1);
+  }, []);
+
+  // Toggle expand
+  const handleRowClick = useCallback((productId: string) => {
+    setExpandedProductId(prev => (prev === productId ? null : productId));
+  }, []);
+
+  return (
+    <MainLayout
+      title="Kartu Stok"
+      subtitle="Histori pergerakan stok per produk"
+    >
+      <PageHeader
+        title="Kartu Stok"
+        description="Audit trail lengkap pergerakan stok per produk — klik produk untuk melihat detail"
+      />
+
+      {/* Filters */}
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="relative flex-1 max-w-72">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Cari produk..."
+            className="pl-9 h-9"
+            value={search}
+            onChange={e => handleSearchChange(e.target.value)}
+          />
+        </div>
+        <Select value={categoryFilter} onValueChange={handleCategoryChange}>
+          <SelectTrigger className="w-48 h-9">
+            <SelectValue placeholder="Kategori" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Semua Kategori</SelectItem>
+            {categories.map(c => (
+              <SelectItem key={c} value={c}>{c}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <span className="text-sm text-muted-foreground shrink-0">
+          {filtered.length} produk
+        </span>
+      </div>
+
+      {/* Product List Table */}
+      {isLoading ? (
+        <div className="py-12 text-center text-muted-foreground">
+          Memuat data produk...
+        </div>
+      ) : (
+        <DataTableContainer>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-muted/40 text-xs text-muted-foreground">
+                  <th className="px-3 py-3 text-left font-semibold w-8" />
+                  <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Kode</th>
+                  <th className="px-3 py-3 text-left font-semibold">Nama Produk</th>
+                  <th className="px-3 py-3 text-left font-semibold">Kategori</th>
+                  <th className="px-3 py-3 text-right font-semibold">Stok</th>
+                  <th className="px-3 py-3 text-left font-semibold">Satuan</th>
+                  <th className="px-3 py-3 text-left font-semibold">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {paginatedItems.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
+                      <Package className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                      <p>Tidak ada produk yang sesuai.</p>
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedItems.map((p: ApiProduct) => {
+                    const isExpanded = expandedProductId === p.id;
+                    const isLowStock =
+                      Number(p.stock ?? 0) <= Number(p.minimumStock ?? p.minStock ?? 0);
+
+                    return (
+                      <Fragment key={p.id}>
+                        <tr
+                          className={`border-b transition-colors cursor-pointer select-none ${
+                            isExpanded
+                              ? 'bg-primary/5 border-primary/20'
+                              : 'hover:bg-muted/20'
+                          } ${isLowStock && !isExpanded ? 'bg-warning/5' : ''}`}
+                          onClick={() => handleRowClick(p.id)}
+                        >
+                          <td className="px-3 py-3 text-muted-foreground">
+                            {isExpanded ? (
+                              <ChevronDown className="h-4 w-4 text-primary" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4" />
+                            )}
+                          </td>
+                          <td className="px-3 py-3 font-mono text-xs text-primary whitespace-nowrap">
+                            {p.code}
+                          </td>
+                          <td className="px-3 py-3">
+                            <span className="font-medium">{p.name}</span>
+                          </td>
+                          <td className="px-3 py-3">
+                            <Badge variant="secondary" className="text-xs">
+                              {p.categoryName ?? p.category ?? '-'}
+                            </Badge>
+                          </td>
+                          <td className="px-3 py-3 text-right">
+                            <span
+                              className={`font-bold tabular-nums ${
+                                isLowStock ? 'text-destructive' : ''
+                              }`}
+                            >
+                              {p.stock ?? 0}
+                            </span>
+                          </td>
+                          <td className="px-3 py-3 text-muted-foreground text-xs">
+                            {p.unit ?? 'pcs'}
+                          </td>
+                          <td className="px-3 py-3">
+                            {isLowStock ? (
+                              <Badge variant="destructive" className="text-xs">
+                                Stok Rendah
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-success border-success text-xs">
+                                Aman
+                              </Badge>
+                            )}
+                          </td>
+                        </tr>
+
+                        {/* Expanded detail row */}
+                        {isExpanded && (
+                          <tr className="border-b border-primary/20">
+                            <td colSpan={7} className="p-0">
+                              <ProductDetail product={p} />
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          <div className="mt-4 flex items-center justify-between gap-4 px-1">
+            <p className="text-xs text-muted-foreground">
+              Halaman {page} dari {totalPages} &bull; Total {filtered.length} produk
+            </p>
+            {totalPages > 1 && (
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage(page - 1)}
+                  disabled={page === 1}
+                >
+                  &larr; Sebelumnya
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage(page + 1)}
+                  disabled={page === totalPages}
+                >
+                  Berikutnya &rarr;
+                </Button>
+              </div>
+            )}
+          </div>
+        </DataTableContainer>
+      )}
     </MainLayout>
   );
 };
