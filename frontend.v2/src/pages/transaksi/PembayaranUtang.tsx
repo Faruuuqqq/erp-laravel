@@ -6,19 +6,19 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { Receipt, Check, Eye, AlertCircle } from 'lucide-react';
+import { Receipt, Check, Eye } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useSuppliers } from '@/hooks/api/useSuppliers';
-import { useTransactions, useCreateTransaction } from '@/hooks/api/useTransactions';
+import { useTransactions, useCreateTransaction, useDownloadTransactionPdf } from '@/hooks/api/useTransactions';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { SearchInput } from '@/components/common';
 import { DraftPreviewDialog } from '@/components/dialogs/DraftPreviewDialog';
 import { PrintPreviewDialog } from '@/components/dialogs/PrintPreviewDialog';
 import { PembayaranUtangPrint } from '@/components/print/PembayaranUtangPrint';
 import { formatCurrency } from '@/lib/utils';
+import { extractErrorMessage } from '@/lib/api';
 import type { Transaction } from '@/types';
 
 const PembayaranUtang = () => {
@@ -32,11 +32,32 @@ const PembayaranUtang = () => {
   const [jumlahBayar, setJumlahBayar] = useState('');
   const [catatan, setCatatan] = useState('');
   const [tanggal] = useState(new Date().toISOString().split('T')[0]);
-   const [saved, setSaved] = useState(false);
-   const [savedCount, setSavedCount] = useState(0);
-   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-   const [isDraftPreviewOpen, setIsDraftPreviewOpen] = useState(false);
-   const [savedTransaction, setSavedTransaction] = useState<Transaction | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [savedCount, setSavedCount] = useState(0);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [isDraftPreviewOpen, setIsDraftPreviewOpen] = useState(false);
+  const [savedTransaction, setSavedTransaction] = useState<Transaction | null>(null);
+
+  const downloadPdfMutation = useDownloadTransactionPdf();
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+
+  const handleDownloadPdf = async () => {
+    if (!savedTransaction) return;
+    try {
+      setIsDownloadingPdf(true);
+      await downloadPdfMutation.mutateAsync({
+        transactionId: savedTransaction.id,
+        filename: `${savedTransaction.invoiceNumber ?? 'dokumen'}.pdf`,
+        documentType: 'document',
+      });
+      toast({ title: 'Berhasil', description: 'Dokumen berhasil diunduh' });
+    } catch (err) {
+      toast({ title: 'Gagal Download', description: extractErrorMessage(err), variant: 'destructive' });
+      console.error('PDF download error:', err);
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+  };
 
   const createTx = useCreateTransaction();
   const { data: suppliersData } = useSuppliers({ perPage: 200 });
@@ -48,19 +69,19 @@ const PembayaranUtang = () => {
     ...(filterSupplier !== 'all' ? { supplier_id: filterSupplier } : {}),
   });
 
-   const suppliers = suppliersData?.data ?? [];
-   // Filter to only ones with remaining > 0 (outstanding utang)
-   const utangList: Transaction[] = (txData?.data ?? []).filter(t => (t.remaining ?? 0) > 0);
+  const suppliers = suppliersData?.data ?? [];
+  // Filter to only ones with remaining > 0 (outstanding utang)
+  const utangList: Transaction[] = (txData?.data ?? []).filter(t => (t.remaining ?? 0) > 0);
 
-   const debouncedSearch = useDebouncedValue(searchTerm, 300);
+  const debouncedSearch = useDebouncedValue(searchTerm, 300);
 
-   const filtered = utangList.filter(u => {
-     const supplierName = u.supplier ?? '';
-     const matchSearch = u.invoiceNumber.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-       supplierName.toLowerCase().includes(debouncedSearch.toLowerCase());
-     const matchSupplier = filterSupplier === 'all' || u.supplierId === filterSupplier;
-     return matchSearch && matchSupplier;
-   });
+  const filtered = utangList.filter(u => {
+    const supplierName = u.supplier ?? '';
+    const matchSearch = u.invoiceNumber.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+      supplierName.toLowerCase().includes(debouncedSearch.toLowerCase());
+    const matchSupplier = filterSupplier === 'all' || u.supplierId === filterSupplier;
+    return matchSearch && matchSupplier;
+  });
 
   const totalSelected = utangList.filter(u => selectedItems.includes(u.id)).reduce((s, u) => s + (u.remaining ?? 0), 0);
   const selectedUtang = utangList.filter(u => selectedItems.includes(u.id));
@@ -97,7 +118,8 @@ const PembayaranUtang = () => {
         items: [], // payment transaction — no items
       });
       setSavedCount(selectedItems.length); // Save count BEFORE clearing
-      setSavedTransaction(result as Transaction);
+      const responseData = (result as { data: Transaction }).data;
+      setSavedTransaction(responseData);
       setSelectedItems([]); // Clear selected items after successful save
       setSaved(true);
       toast({ title: 'Pembayaran utang berhasil dicatat', description: `${selectedItems.length} faktur dibayar` });
@@ -107,9 +129,9 @@ const PembayaranUtang = () => {
     }
   }, [selectedItems, metodePembayaran, jumlahBayarNum, hasMixedSuppliers, selectedSupplierIds, tanggal, catatan, createTx, toast]);
 
-   const reset = useCallback(() => {
-     setSelectedItems([]); setSaved(false); setSavedCount(0); setJumlahBayar(''); setMetodePembayaran(''); setCatatan(''); setSavedTransaction(null); setIsDraftPreviewOpen(false);
-   }, []);
+  const reset = useCallback(() => {
+    setSelectedItems([]); setSaved(false); setSavedCount(0); setJumlahBayar(''); setMetodePembayaran(''); setCatatan(''); setSavedTransaction(null); setIsDraftPreviewOpen(false);
+  }, []);
 
   const draftPreviewContent = useMemo(() => (
     <div className="w-full text-sm space-y-4 p-4">

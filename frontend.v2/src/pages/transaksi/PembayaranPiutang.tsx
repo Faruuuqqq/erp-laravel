@@ -12,18 +12,38 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useCustomers } from '@/hooks/api/useCustomers';
-import { useTransactions, useCreateTransaction } from '@/hooks/api/useTransactions';
+import { useTransactions, useCreateTransaction, useDownloadTransactionPdf } from '@/hooks/api/useTransactions';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { SearchInput } from '@/components/common';
 import { DraftPreviewDialog } from '@/components/dialogs/DraftPreviewDialog';
-import { PrintPreviewDialog } from '@/components/dialogs/PrintPreviewDialog';
-import { PembayaranPiutangPrint } from '@/components/print/PembayaranPiutangPrint';
 import { formatCurrency } from '@/lib/utils';
 import type { Transaction } from '@/types';
 
 const PembayaranPiutang = () => {
   const { toast } = useToast();
   const { canCreate, canPrint } = usePermissions();
+
+  const downloadPdfMutation = useDownloadTransactionPdf();
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+
+  const handleDownloadPdf = async () => {
+    if (!savedTransaction) return;
+    try {
+      setIsDownloadingPdf(true);
+      await downloadPdfMutation.mutateAsync({
+        transactionId: savedTransaction.id,
+        filename: `${savedTransaction.invoiceNumber ?? 'dokumen'}.pdf`,
+        documentType: 'document',
+      });
+      toast({ title: 'Berhasil', description: 'Dokumen berhasil diunduh' });
+    } catch (err) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Gagal mengunduh PDF';
+      toast({ title: 'Gagal Download', description: msg, variant: 'destructive' });
+      console.error('PDF download error:', err);
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+  };
 
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -34,7 +54,6 @@ const PembayaranPiutang = () => {
    const [tanggal] = useState(new Date().toISOString().split('T')[0]);
    const [saved, setSaved] = useState(false);
    const [isDraftPreviewOpen, setIsDraftPreviewOpen] = useState(false);
-   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
    const [savedTransaction, setSavedTransaction] = useState<Transaction | null>(null);
 
   const createTx = useCreateTransaction();
@@ -94,7 +113,7 @@ const PembayaranPiutang = () => {
         notes: catatan || `Terima bayar piutang: ${selectedItems.join(', ')}`,
         items: [],
       });
-      setSavedTransaction(result as Transaction);
+      setSavedTransaction((result as { data: Transaction }).data);
       setSaved(true);
       toast({ title: 'Pembayaran piutang berhasil dicatat', description: `${selectedItems.length} faktur dibayar` });
     } catch (err: unknown) {
@@ -185,27 +204,16 @@ const PembayaranPiutang = () => {
               <p className="text-sm text-muted-foreground mt-1">{selectedItems.length} faktur diselesaikan</p>
             </div>
              <div className="flex gap-3">
-               {canPrint('transactions.payment') && (
-                 <Button variant="outline" onClick={() => setIsPreviewOpen(true)}><Eye className="mr-2 h-4 w-4" />Preview & Cetak</Button>
+               {savedTransaction && canPrint('transactions.receivable') && (
+                 <Button variant="outline" onClick={handleDownloadPdf} disabled={isDownloadingPdf}>
+                   {isDownloadingPdf ? 'Mengunduh...' : 'Download PDF'}
+                 </Button>
                )}
                <Button onClick={reset}>Input Baru</Button>
              </div>
           </div>
         </MainLayout>
-        {savedTransaction && (
-          <PrintPreviewDialog
-            isOpen={isPreviewOpen}
-            onClose={() => setIsPreviewOpen(false)}
-            title="Bukti Pembayaran Piutang"
-            documentId="pembayaran-piutang-print"
-            filename={`pembayaran-piutang-${new Date().toISOString().slice(0, 10)}`}
-            backendPdf={{ transactionId: savedTransaction.id, documentType: 'document' }}
-          >
-            <div id="pembayaran-piutang-print">
-              <PembayaranPiutangPrint transaction={savedTransaction} />
-            </div>
-          </PrintPreviewDialog>
-        )}
+        
       </>
     );
   }
@@ -345,11 +353,7 @@ const PembayaranPiutang = () => {
                     </Button>
                   </div>
                 )}
-                {savedTransaction && (
-                  <Button variant="outline" className="w-full h-8 text-xs" onClick={() => setIsPreviewOpen(true)}>
-                    <Eye className="mr-1.5 h-3.5 w-3.5" />Preview & Cetak
-                  </Button>
-                )}
+                
             </CardContent>
           </Card>
         </div>
