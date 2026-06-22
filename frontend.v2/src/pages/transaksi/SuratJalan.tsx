@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
+import { SuccessScreen } from '@/components/layout/SuccessScreen';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,10 +15,11 @@ import { useProducts } from '@/hooks/api/useProducts';
 import { useCustomers } from '@/hooks/api/useCustomers';
 import { useSalesReps } from '@/hooks/api/useSalesReps';
 import { useWarehouses } from '@/hooks/api/useWarehouses';
-import { useCreateTransaction } from '@/hooks/api/useTransactions';
+import { useCreateTransaction, useDownloadTransactionPdf } from '@/hooks/api/useTransactions';
 import { DraftPreviewDialog } from '@/components/dialogs/DraftPreviewDialog';
 import { PrintPreviewDialog } from '@/components/dialogs/PrintPreviewDialog';
 import { SuratJalanPrint } from '@/components/print/SuratJalanPrint';
+import { extractErrorMessage } from '@/lib/api';
 import type { Transaction } from '@/types';
 
 /**
@@ -55,6 +57,26 @@ const SuratJalan = () => {
   const { toast } = useToast();
   const { canCreate, canPrint } = usePermissions();
   const createTx = useCreateTransaction();
+  const downloadPdfMutation = useDownloadTransactionPdf();
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+
+  const handleDownloadPdf = async () => {
+    if (!savedTrx) return;
+    try {
+      setIsDownloadingPdf(true);
+      await downloadPdfMutation.mutateAsync({
+        transactionId: savedTrx.id,
+        filename: `${savedTrx.invoiceNumber ?? 'dokumen'}.pdf`,
+        documentType: 'document',
+      });
+      toast({ title: 'Berhasil', description: 'Surat Jalan berhasil diunduh' });
+    } catch (err) {
+      toast({ title: 'Gagal Download', description: extractErrorMessage(err), variant: 'destructive' });
+      console.error('PDF download error:', err);
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+  };
 
   const [items, setItems] = useState<SJItem[]>([]);
   const [selectedProduct, setSelectedProduct] = useState('');
@@ -70,7 +92,7 @@ const SuratJalan = () => {
    const [isPreviewOpen, setIsPreviewOpen] = useState(false);
    const [isDraftPreviewOpen, setIsDraftPreviewOpen] = useState(false);
    const [isSaving, setIsSaving] = useState(false);
-   const [savedTransaction, setSavedTransaction] = useState<Transaction | null>(null);
+   const [savedTrx, setSavedTrx] = useState<Transaction | null>(null);
    const [noSJ, setNoSJ] = useState(() => generateNoSJ());
 
   // Real API data
@@ -129,17 +151,10 @@ const SuratJalan = () => {
         items: items.map(i => ({ productId: i.productId, quantity: i.qty, price: 0, discount: 0 })),
       });
       
-      setSavedTransaction(result as Transaction);
-      toast({ title: 'Surat Jalan disimpan', description: (result as Transaction).invoiceNumber });
+      const responseData = (result as { data: Transaction }).data;
+      setSavedTrx(responseData);
+      toast({ title: 'Surat Jalan disimpan', description: responseData.invoiceNumber });
       
-      // Generate new noSJ for next entry
-      setNoSJ(generateNoSJ());
-      setItems([]);
-      setSelectedCustomer('');
-      setSelectedGudang('');
-      setAlamatKirim('');
-      setPengirim('');
-      setCatatan('');
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Gagal menyimpan surat jalan';
       toast({ title: 'Error', description: msg, variant: 'destructive' });
@@ -147,6 +162,19 @@ const SuratJalan = () => {
        setIsSaving(false);
      }
    }, [items, selectedCustomer, selectedGudang, selectedSales, tanggal, catatan, createTx, toast]);
+
+   const reset = useCallback(() => {
+      setSavedTrx(null);
+      setNoSJ(generateNoSJ());
+      setItems([]);
+      setSelectedCustomer('');
+      setSelectedGudang('');
+      setAlamatKirim('');
+      setPengirim('');
+      setCatatan('');
+      setIsDraftPreviewOpen(false);
+      setIsPreviewOpen(false);
+   }, []);
 
    // Memoized draft preview content
    const draftPreviewContent = useMemo(() => (
@@ -228,6 +256,40 @@ const SuratJalan = () => {
        </div>
      </div>
    ), [noSJ, tanggal, customer?.name, alamatKirim, gudang?.name, pengirim, sales?.name, catatan, items, totalQty]);
+
+   if (savedTrx) {
+     return (
+       <>
+         <SuccessScreen
+           title="Surat Jalan Berhasil Dibuat"
+           subtitle="Dokumen surat jalan telah disimpan ke sistem"
+           invoiceNumber={savedTrx.invoiceNumber}
+           invoiceLabel="No. Surat Jalan"
+           total={items.length}
+           totalLabel="Total Jenis Barang"
+           iconColor="primary"
+           onPrint={() => setIsPreviewOpen(true)}
+           onDownloadPdf={handleDownloadPdf}
+           isDownloadingPdf={isDownloadingPdf}
+           canPrint={canPrint('transactions.delivery_note')}
+           onReset={reset}
+         />
+
+         <PrintPreviewDialog
+           isOpen={isPreviewOpen}
+           onClose={() => setIsPreviewOpen(false)}
+           title="Cetak Surat Jalan"
+           documentId="surat-jalan-print"
+           filename={`surat-jalan-${savedTrx.invoiceNumber}`}
+           backendPdf={{ transactionId: savedTrx.id, documentType: 'document' }}
+         >
+           <div id="surat-jalan-print">
+             <SuratJalanPrint transaction={savedTrx} />
+           </div>
+         </PrintPreviewDialog>
+       </>
+     );
+   }
 
    return (
     <MainLayout title="Surat Jalan" subtitle="Buat surat jalan untuk pengiriman barang">
@@ -384,54 +446,31 @@ const SuratJalan = () => {
                 <span className="font-medium truncate max-w-[120px]">{gudang?.name || '-'}</span>
               </div>
 
-              <div className="space-y-1.5 pt-1">
+               <div className="space-y-1.5 pt-1">
                 <Label className="text-xs">Catatan</Label>
                 <Input value={catatan} onChange={e => setCatatan(e.target.value)} placeholder="Catatan pengiriman..." className="text-xs h-8" />
               </div>
 
+              {items.length > 0 && (
+                <Button variant="outline" className="w-full h-8 text-xs" onClick={() => setIsDraftPreviewOpen(true)}>
+                  <Eye className="mr-1.5 h-3.5 w-3.5" />Lihat Preview
+                </Button>
+              )}
+
                {canCreate('transactions.delivery_note') && (
                   <div className="flex gap-2 pt-2">
-                    <Button variant="outline" className="flex-1 h-9 text-sm"
-                      onClick={() => { setItems([]); setSelectedCustomer(''); setSelectedGudang(''); setAlamatKirim(''); setPengirim(''); setNoSJ(generateNoSJ()); setIsDraftPreviewOpen(false); }}>
+                    <Button variant="outline" className="flex-1 h-9 text-sm" onClick={reset}>
                       Reset
                     </Button>
-                    <Button className="flex-1 h-9 text-sm" onClick={handleSimpan} disabled={isSaving}>
+                    <Button className="flex-1 h-9 text-sm" onClick={handleSimpan} disabled={isSaving || items.length === 0}>
                       {isSaving ? 'Menyimpan...' : 'Simpan'}
                     </Button>
                   </div>
-                )}
-
-                {items.length > 0 && (
-                  <Button variant="outline" className="w-full h-8 text-xs" onClick={() => setIsDraftPreviewOpen(true)}>
-                    <Eye className="mr-1.5 h-3.5 w-3.5" />Lihat Preview
-                  </Button>
-                )}
-
-                {canPrint('transactions.delivery_note') && savedTransaction && (
-                  <Button variant="outline" className="w-full h-9 text-sm" onClick={() => setIsPreviewOpen(true)}>
-                    <Eye className="mr-1.5 h-3.5 w-3.5" />Preview & Cetak
-                  </Button>
                 )}
             </CardContent>
           </Card>
         </div>
       </div>
-
-       {/* Print Preview - Only show after saved */}
-        {savedTransaction && (
-         <PrintPreviewDialog
-           isOpen={isPreviewOpen}
-           onClose={() => setIsPreviewOpen(false)}
-           title="Surat Jalan"
-           documentId="surat-jalan-print"
-           filename={`surat-jalan-${savedTransaction.invoiceNumber}`}
-           backendPdf={{ transactionId: savedTransaction.id, documentType: 'document' }}
-         >
-           <div id="surat-jalan-print">
-             <SuratJalanPrint transaction={savedTransaction} />
-           </div>
-         </PrintPreviewDialog>
-       )}
 
         {/* Draft Preview Dialog */}
         <DraftPreviewDialog
