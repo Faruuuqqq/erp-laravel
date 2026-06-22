@@ -20,7 +20,6 @@ class UserSeeder extends Seeder
                 'is_active' => true,
             ]
         );
-
         // Admin/Kasir – akses operasional harian
         User::firstOrCreate(
             ['email' => 'admin@tokosync.id'],
