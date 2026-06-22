@@ -18,12 +18,13 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { useCustomers } from '@/hooks/api/useCustomers';
 import { useTransactions } from '@/hooks/api/useTransactions';
 import { useProducts } from '@/hooks/api/useProducts';
-import { useCreateTransaction } from '@/hooks/api/useTransactions';
+import { useCreateTransaction, useDownloadTransactionPdf } from '@/hooks/api/useTransactions';
 import { DraftPreviewDialog } from '@/components/dialogs/DraftPreviewDialog';
 import { PrintPreviewDialog } from '@/components/dialogs/PrintPreviewDialog';
 import { SuccessScreen } from '@/components/layout/SuccessScreen';
 import { ReturPenjualanPrint } from '@/components/print/ReturPenjualanPrint';
 import { MainLayout } from '@/components/layout/MainLayout';
+import { extractErrorMessage } from '@/lib/api';
 import type { Transaction } from '@/types';
 
 /**
@@ -45,6 +46,28 @@ const ReturPenjualan = () => {
   const { toast } = useToast();
   const { canCreate } = usePermissions();
   const createTx = useCreateTransaction();
+
+  const downloadPdfMutation = useDownloadTransactionPdf();
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+
+  const handleDownloadPdf = async () => {
+    if (!savedTrx) return;
+    try {
+      setIsDownloadingPdf(true);
+      await downloadPdfMutation.mutateAsync({
+        transactionId: savedTrx.id,
+        filename: `${savedTrx.invoiceNumber ?? 'dokumen'}.pdf`,
+        documentType: 'document',
+      });
+      toast({ title: 'Berhasil', description: 'Dokumen berhasil diunduh' });
+    } catch (err) {
+      toast({ title: 'Gagal Download', description: extractErrorMessage(err), variant: 'destructive' });
+      console.error('PDF download error:', err);
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+  };
+
   const [items, setItems] = useState<ReturItem[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState('');
   const [selectedFaktur, setSelectedFaktur] = useState('');
@@ -54,12 +77,12 @@ const ReturPenjualan = () => {
   const [metodeKembalian, setMetodeKembalian] = useState('');
   const [catatan, setCatatan] = useState('');
   const [tanggal, setTanggal] = useState(new Date().toISOString().split('T')[0]);
-   const [confirmOpen, setConfirmOpen] = useState(false);
-   const [saved, setSaved] = useState(false);
-   const [savedTrx, setSavedTrx] = useState<Transaction | null>(null);
-   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-   const [isDraftPreviewOpen, setIsDraftPreviewOpen] = useState(false);
-   const [isSaving, setIsSaving] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [savedTrx, setSavedTrx] = useState<Transaction | null>(null);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [isDraftPreviewOpen, setIsDraftPreviewOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const { data: customersData } = useCustomers({ perPage: 200 });
   // Query both penjualan_tunai and penjualan_kredit separately or use types array
@@ -67,7 +90,7 @@ const ReturPenjualan = () => {
   const { data: transactionsDataKredit } = useTransactions({ type: 'penjualan_kredit' });
   const { data: productsData } = useProducts({ perPage: 999 });
 
-  const customers = customersData?.data ?? [];
+  const customers = useMemo(() => customersData?.data ?? [], [customersData?.data]);
   const allTransactions = useMemo(() => [
     ...(transactionsDataTunai?.data ?? []),
     ...(transactionsDataKredit?.data ?? [])
@@ -197,37 +220,38 @@ const ReturPenjualan = () => {
     setConfirmOpen(true);
   }, [items.length, alasan, metodeKembalian, toast]);
 
-if (saved) {
-      return (
-        <>
-          <SuccessScreen
-            title="Retur Penjualan Diproses"
-            invoiceNumber={noRetur}
-            invoiceLabel="No. Retur"
-            total={totalNilai}
-            totalLabel={`Nilai retur - metode: ${metodeKembalian}`}
-            iconColor="warning"
-            onPrint={() => setIsPreviewOpen(true)}
-            canPrint={!!savedTrx}
-            onReset={() => { setItems([]); setSaved(false); setSavedTrx(null); setSelectedFaktur(''); setSelectedCustomer(''); setAlasan(''); setMetodeKembalian(''); setCatatan(''); }}
-          />
-          {savedTrx && (
-            <PrintPreviewDialog
-              isOpen={isPreviewOpen}
-              onClose={() => setIsPreviewOpen(false)}
-              title="Surat Retur Penjualan"
-              documentId="retur-penjualan-print"
-              filename={`retur-penjualan-${savedTrx.invoiceNumber}`}
-              backendPdf={{ transactionId: savedTrx.id, documentType: 'document' }}
-            >
-              <div id="retur-penjualan-print">
-                <ReturPenjualanPrint transaction={savedTrx} />
-              </div>
-            </PrintPreviewDialog>
-          )}
-        </>
-      );
-    }
+  if (saved) {
+    return (
+      <>
+        <SuccessScreen
+          title="Retur Penjualan Diproses"
+          invoiceNumber={noRetur}
+          invoiceLabel="No. Retur"
+          total={totalNilai}
+          totalLabel={`Nilai retur - metode: ${metodeKembalian}`}
+          iconColor="warning"
+          onDownloadPdf={handleDownloadPdf}
+          isDownloadingPdf={isDownloadingPdf}
+          canPrint={!!savedTrx}
+          onReset={() => { setItems([]); setSaved(false); setSavedTrx(null); setSelectedFaktur(''); setSelectedCustomer(''); setAlasan(''); setMetodeKembalian(''); setCatatan(''); }}
+        />
+        {savedTrx && (
+          <PrintPreviewDialog
+            isOpen={isPreviewOpen}
+            onClose={() => setIsPreviewOpen(false)}
+            title="Surat Retur Penjualan"
+            documentId="retur-penjualan-print"
+            filename={`retur-penjualan-${savedTrx.invoiceNumber}`}
+            backendPdf={{ transactionId: savedTrx.id, documentType: 'document' }}
+          >
+            <div id="retur-penjualan-print">
+              <ReturPenjualanPrint transaction={savedTrx} />
+            </div>
+          </PrintPreviewDialog>
+        )}
+      </>
+    );
+  }
 
   return (
     <MainLayout title="Retur Penjualan" subtitle="Terima retur barang dari customer">
@@ -406,11 +430,12 @@ if (saved) {
                      notes: `${alasan} — ${catatan}`,
                      items: items.map(i => ({ productId: i.productId, quantity: i.qty, price: i.harga, discount: 0 })),
                    });
-                  setSavedTrx(result as Transaction);
+                  const responseData = (result as { data: Transaction }).data;
+                  setSavedTrx(responseData);
                   setConfirmOpen(false);
                   setSaved(true);
                   setIsDraftPreviewOpen(false);
-                  toast({ title: 'Retur berhasil diproses', description: (result as Transaction).invoiceNumber });
+                  toast({ title: 'Retur berhasil diproses', description: responseData.invoiceNumber });
                 } catch (err: unknown) {
                   const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Gagal menyimpan retur';
                   toast({ title: 'Error', description: msg, variant: 'destructive' });

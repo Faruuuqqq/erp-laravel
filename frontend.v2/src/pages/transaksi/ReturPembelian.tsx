@@ -16,13 +16,12 @@ import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useProducts } from '@/hooks/api/useProducts';
 import { useSuppliers } from '@/hooks/api/useSuppliers';
-import { useTransactions, useCreateTransaction } from '@/hooks/api/useTransactions';
+import { useTransactions, useCreateTransaction, useDownloadTransactionPdf } from '@/hooks/api/useTransactions';
 import { DraftPreviewDialog } from '@/components/dialogs/DraftPreviewDialog';
-import { PrintPreviewDialog } from '@/components/dialogs/PrintPreviewDialog';
 import { SuccessScreen } from '@/components/layout/SuccessScreen';
-import { ReturPembelianPrint } from '@/components/print/ReturPembelianPrint';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { formatCurrency } from '@/lib/utils';
+import { extractErrorMessage } from '@/lib/api';
 import type { Transaction } from '@/types';
 
 /**
@@ -58,6 +57,27 @@ const ALASAN_OPTIONS = [
 const ReturPembelian = () => {
   const { toast } = useToast();
   const { canCreate, canPrint } = usePermissions();
+
+  const downloadPdfMutation = useDownloadTransactionPdf();
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+
+  const handleDownloadPdf = async () => {
+    if (!savedTransaction) return;
+    try {
+      setIsDownloadingPdf(true);
+      await downloadPdfMutation.mutateAsync({
+        transactionId: savedTransaction.id,
+        filename: `${savedTransaction.invoiceNumber ?? 'dokumen'}.pdf`,
+        documentType: 'document',
+      });
+      toast({ title: 'Berhasil', description: 'Dokumen berhasil diunduh' });
+    } catch (err) {
+      toast({ title: 'Gagal Download', description: extractErrorMessage(err), variant: 'destructive' });
+      console.error('PDF download error:', err);
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+  };
   const createTx = useCreateTransaction();
 
   const [items, setItems] = useState<ReturItem[]>([]);
@@ -72,7 +92,6 @@ const ReturPembelian = () => {
   const [saved, setSaved] = useState(false);
   const [savedInvoice, setSavedInvoice] = useState('');
   const [savedTransaction, setSavedTransaction] = useState<Transaction | null>(null);
-  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isDraftPreviewOpen, setIsDraftPreviewOpen] = useState(false);
 
   const { data: suppliersData } = useSuppliers({ perPage: 200 });
@@ -84,9 +103,9 @@ const ReturPembelian = () => {
     ...(selectedSupplier ? { supplier_id: selectedSupplier } : {}),
   });
 
-  const suppliers = suppliersData?.data ?? [];
-  const products = productsData?.data ?? [];
-  const pembelianList: Transaction[] = pembelianData?.data ?? [];
+  const suppliers = useMemo(() => suppliersData?.data ?? [], [suppliersData?.data]);
+  const products = useMemo(() => productsData?.data ?? [], [productsData?.data]);
+  const pembelianList: Transaction[] = useMemo(() => pembelianData?.data ?? [], [pembelianData?.data]);
   const filteredPembelian = selectedSupplier
     ? pembelianList.filter(t => t.supplierId === selectedSupplier)
     : pembelianList;
@@ -139,10 +158,11 @@ const ReturPembelian = () => {
         notes: `${ALASAN_OPTIONS.find(a => a.value === alasan)?.label ?? alasan}${catatan ? ` — ${catatan}` : ''}`,
         items: items.map(i => ({ productId: i.productId, quantity: i.qty, price: i.harga, discount: 0 })),
       });
-      setSavedInvoice((result as Transaction).invoiceNumber ?? '');
-      setSavedTransaction(result as Transaction);
+      const responseData = (result as { data: Transaction }).data;
+      setSavedInvoice(responseData.invoiceNumber ?? '');
+      setSavedTransaction(responseData);
       setSaved(true);
-      toast({ title: 'Retur pembelian berhasil', description: (result as Transaction).invoiceNumber });
+      toast({ title: 'Retur pembelian berhasil', description: responseData.invoiceNumber });
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Gagal menyimpan';
       toast({ title: 'Error', description: msg, variant: 'destructive' });
@@ -232,24 +252,12 @@ const ReturPembelian = () => {
           total={totalNilai}
           totalLabel="Nilai retur dikurangi dari utang"
           iconColor="success"
-          onPrint={() => setIsPreviewOpen(true)}
+          onDownloadPdf={handleDownloadPdf}
+          isDownloadingPdf={isDownloadingPdf}
           canPrint={canPrint('transactions.return_purchase') && !!savedTransaction}
           onReset={reset}
         />
-        {savedTransaction && (
-          <PrintPreviewDialog
-            isOpen={isPreviewOpen}
-            onClose={() => setIsPreviewOpen(false)}
-            title="Surat Retur Pembelian"
-            documentId="retur-pembelian-print"
-            filename={`retur-pembelian-${savedInvoice}`}
-            backendPdf={{ transactionId: savedTransaction.id, documentType: 'document' }}
-          >
-            <div id="retur-pembelian-print">
-              <ReturPembelianPrint transaction={savedTransaction} />
-            </div>
-          </PrintPreviewDialog>
-        )}
+        
       </>
     );
   }
@@ -389,11 +397,7 @@ const ReturPembelian = () => {
                   <Eye className="mr-1.5 h-3.5 w-3.5" />Lihat Preview
                 </Button>
               )}
-              {savedTransaction && (
-                <Button variant="outline" className="w-full h-8 text-xs" onClick={() => setIsPreviewOpen(true)}>
-                  <Eye className="mr-1.5 h-3.5 w-3.5" />Preview & Cetak
-                </Button>
-              )}
+              
             </CardContent>
           </Card>
         </div>
