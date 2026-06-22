@@ -57,78 +57,83 @@ class KontraBonController extends Controller
             'filename' => ['nullable', 'string', 'max:180'],
         ]);
 
-        $customer = Customer::find($validated['customer_id']);
-        $transactions = Transaction::whereIn('id', $validated['transaction_ids'])
-            ->where('customer_id', $customer->id)
-            ->where('remaining', '>', 0)
-            ->with('details')
-            ->orderBy('date')
-            ->get();
+        try {
+            $customer = Customer::find($validated['customer_id']);
+            $transactions = Transaction::whereIn('id', $validated['transaction_ids'])
+                ->where('customer_id', $customer->id)
+                ->where('remaining', '>', 0)
+                ->with('details')
+                ->orderBy('date')
+                ->get();
 
-        if ($transactions->isEmpty()) {
+            if ($transactions->isEmpty()) {
+                return response()->json([
+                    'message' => 'Tidak ada transaksi piutang valid untuk customer ini.',
+                ], 422);
+            }
+
+            $totalAmount = $transactions->sum('remaining');
+            $interestRate = $validated['interest_rate'] ?? 0;
+            $interestAmount = $totalAmount * ($interestRate / 100);
+            $grandTotal = $totalAmount + $interestAmount;
+
+            $aging = $this->calculateAgingBuckets($transactions);
+            $dueDays = max(1, min(90, (int) Setting::get('billing_due_days', 7)));
+            $issuedDate = now();
+
+            $data = [
+                'billingNumber' => 'KB-' . $issuedDate->format('Ymd-His'),
+                'date' => $issuedDate->toDateString(),
+                'issuedAt' => $issuedDate->toDateString(),
+                'dueDate' => $issuedDate->copy()->addDays($dueDays)->toDateString(),
+                'dueDays' => $dueDays,
+                'customer' => $customer,
+                'transactions' => $transactions,
+                'totalAmount' => $totalAmount,
+                'interestRate' => $interestRate,
+                'interestAmount' => $interestAmount,
+                'grandTotal' => $grandTotal,
+                'aging' => $aging,
+            ];
+
+            $storeSettings = [
+                'name' => Setting::get('store_name') ?? 'Toko Sejahtera',
+                'phone' => Setting::get('phone') ?? Setting::get('store_phone', ''),
+                'address' => Setting::get('address') ?? Setting::get('store_address', ''),
+                'email' => Setting::get('email') ?? Setting::get('store_email', ''),
+                'npwp' => Setting::get('npwp') ?? Setting::get('store_npwp', ''),
+                'siup' => Setting::get('siup') ?? '',
+                'bank_name' => Setting::get('bank_name', ''),
+                'bank_account_name' => Setting::get('bank_account_name', ''),
+                'bank_account_number' => Setting::get('bank_account_number', ''),
+                'payment_terms' => Setting::get('billing_payment_terms', 'Pembayaran maksimal {due_days} hari sejak tanggal terbit dokumen.'),
+                'approver_name' => Setting::get('billing_approver_name', 'Finance'),
+                'approver_title' => Setting::get('billing_approver_title', 'AR Officer'),
+            ];
+
+            $pdf = PDF::loadView('pdf.billing-statement', compact('data', 'storeSettings'))
+                ->setPaper('a4')
+                ->setOption('isHtml5ParserEnabled', true);
+
+            $filename = "billing-statement-{$customer->id}-" . date('Ymd') . ".pdf";
+
+            if ($request->boolean('download')) {
+                $requestedFilename = (string) ($validated['filename'] ?? $filename);
+
+                return $pdf->download($this->sanitizePdfFilename($requestedFilename));
+            }
+
+            Storage::disk('public')->put("billing-statements/{$filename}", $pdf->output());
+
             return response()->json([
-                'message' => 'Tidak ada transaksi piutang valid untuk customer ini.',
-            ], 422);
+                'url' => asset("storage/billing-statements/{$filename}"),
+                'filename' => $filename,
+                'billing_number' => $data['billingNumber'],
+            ]);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Failed to generate billing PDF: ' . $e->getMessage(), ['customer_id' => $validated['customer_id']]);
+            return response()->json(['message' => 'Gagal membuat file PDF Kontra Bon. Silakan coba lagi.'], 500);
         }
-
-        $totalAmount = $transactions->sum('remaining');
-        $interestRate = $validated['interest_rate'] ?? 0;
-        $interestAmount = $totalAmount * ($interestRate / 100);
-        $grandTotal = $totalAmount + $interestAmount;
-
-        $aging = $this->calculateAgingBuckets($transactions);
-        $dueDays = max(1, min(90, (int) Setting::get('billing_due_days', 7)));
-        $issuedDate = now();
-
-        $data = [
-            'billingNumber' => 'KB-' . $issuedDate->format('Ymd-His'),
-            'date' => $issuedDate->toDateString(),
-            'issuedAt' => $issuedDate->toDateString(),
-            'dueDate' => $issuedDate->copy()->addDays($dueDays)->toDateString(),
-            'dueDays' => $dueDays,
-            'customer' => $customer,
-            'transactions' => $transactions,
-            'totalAmount' => $totalAmount,
-            'interestRate' => $interestRate,
-            'interestAmount' => $interestAmount,
-            'grandTotal' => $grandTotal,
-            'aging' => $aging,
-        ];
-
-        $storeSettings = [
-            'name' => Setting::get('store_name') ?? 'Toko Sejahtera',
-            'phone' => Setting::get('phone') ?? Setting::get('store_phone', ''),
-            'address' => Setting::get('address') ?? Setting::get('store_address', ''),
-            'email' => Setting::get('email') ?? Setting::get('store_email', ''),
-            'npwp' => Setting::get('npwp') ?? Setting::get('store_npwp', ''),
-            'siup' => Setting::get('siup') ?? '',
-            'bank_name' => Setting::get('bank_name', ''),
-            'bank_account_name' => Setting::get('bank_account_name', ''),
-            'bank_account_number' => Setting::get('bank_account_number', ''),
-            'payment_terms' => Setting::get('billing_payment_terms', 'Pembayaran maksimal {due_days} hari sejak tanggal terbit dokumen.'),
-            'approver_name' => Setting::get('billing_approver_name', 'Finance'),
-            'approver_title' => Setting::get('billing_approver_title', 'AR Officer'),
-        ];
-
-        $pdf = PDF::loadView('pdf.billing-statement', compact('data', 'storeSettings'))
-            ->setPaper('a4')
-            ->setOption('isHtml5ParserEnabled', true);
-
-        $filename = "billing-statement-{$customer->id}-" . date('Ymd') . ".pdf";
-
-        if ($request->boolean('download')) {
-            $requestedFilename = (string) ($validated['filename'] ?? $filename);
-
-            return $pdf->download($this->sanitizePdfFilename($requestedFilename));
-        }
-
-        Storage::disk('public')->put("billing-statements/{$filename}", $pdf->output());
-
-        return response()->json([
-            'url' => asset("storage/billing-statements/{$filename}"),
-            'filename' => $filename,
-            'billing_number' => $data['billingNumber'],
-        ]);
     }
 
     public function calculateAging(Request $request): JsonResponse

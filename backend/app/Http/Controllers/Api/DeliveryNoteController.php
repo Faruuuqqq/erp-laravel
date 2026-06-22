@@ -90,27 +90,36 @@ class DeliveryNoteController extends Controller
         return response()->json(['message' => 'Surat jalan berhasil dihapus.']);
     }
 
-    public function print(DeliveryNote $deliveryNote)
+    public function print(Request $request, DeliveryNote $deliveryNote)
     {
-        $deliveryNote->load(['transaction.details', 'customer']);
+        try {
+            $deliveryNote->load(['transaction.details', 'customer']);
 
-        $pdf = Pdf::loadView('pdf.delivery-note', compact([
-            'deliveryNote' => $deliveryNote,
-            'transaction' => $deliveryNote->transaction,
-            'customer' => $deliveryNote->customer,
-            'items' => $deliveryNote->transaction->details ?? [],
-        ]))->setPaper('a4')->setOption('isHtml5ParserEnabled', true);
+            $pdf = Pdf::loadView('pdf.delivery-note', compact([
+                'deliveryNote',
+                'transaction' => $deliveryNote->transaction,
+                'customer' => $deliveryNote->customer,
+                'items' => $deliveryNote->transaction->details ?? [],
+            ]))->setPaper('a4')->setOption('isHtml5ParserEnabled', true);
 
-        $filename = "surat-jalan-{$deliveryNote->delivery_number}.pdf";
+            $filename = "surat-jalan-{$deliveryNote->delivery_number}.pdf";
 
-        // Save to storage
-        Storage::disk('public')->put("delivery-notes/{$filename}", $pdf->output());
+            if ($request->boolean('download')) {
+                return $pdf->download($filename);
+            }
 
-        // Return download URL
-        return response()->json([
-            'url' => asset("storage/delivery-notes/{$filename}"),
-            'filename' => $filename,
-        ]);
+            // Save to storage
+            Storage::disk('public')->put("delivery-notes/{$filename}", $pdf->output());
+
+            // Return download URL
+            return response()->json([
+                'url' => asset("storage/delivery-notes/{$filename}"),
+                'filename' => $filename,
+            ]);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Failed to generate delivery note PDF: ' . $e->getMessage(), ['delivery_note_id' => $deliveryNote->id]);
+            return response()->json(['message' => 'Gagal membuat file PDF Surat Jalan. Silakan coba lagi.'], 500);
+        }
     }
 
     private function generateDeliveryNumber(): string

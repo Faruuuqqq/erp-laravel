@@ -99,10 +99,11 @@ class TransactionController extends Controller
                 'remaining'      => 0,
             ]);
 
-            // 2. Proses setiap item
+            // 2. Proses setiap item (jika ada)
             $stockDirection = $this->stockService->getStockDirection($request->type);
+            $items = $request->items ?? [];
 
-            foreach ($request->items as $item) {
+            foreach ($items as $item) {
                 $product = Product::findOrFail($item['productId']);
                 $itemDiscount = $item['discount'] ?? 0;
                 $itemSubtotal = $item['quantity'] * $item['price'] * (1 - ($itemDiscount / 100));
@@ -137,9 +138,17 @@ class TransactionController extends Controller
             }
 
             // 3. Hitung dan simpan total
-            $total     = $subtotal - $transaction->discount + $transaction->tax;
-            $paid      = min((float) $request->paid, $total); // paid tidak boleh melebihi total
-            $remaining = max(0, $total - $paid);
+            $isPaymentOnly = in_array($request->type, ['pembayaran_utang', 'pembayaran_piutang']);
+            
+            if ($isPaymentOnly) {
+                $total = (float) $request->paid;
+                $paid = $total;
+                $remaining = 0;
+            } else {
+                $total     = $subtotal - $transaction->discount + $transaction->tax;
+                $paid      = min((float) $request->paid, $total); // paid tidak boleh melebihi total
+                $remaining = max(0, $total - $paid);
+            }
 
             $transaction->update([
                 'subtotal'  => $subtotal,
@@ -234,107 +243,122 @@ class TransactionController extends Controller
     // ─── Print Invoice PDF (GET /transactions/{id}/print/invoice) ────────────
     public function printInvoice(Request $request, Transaction $transaction)
     {
-        $transaction->load(['details', 'customer', 'supplier', 'salesRep']);
-        
-        // Get store settings
-        $storeSettings = [
-            'name' => Setting::get('store_name') ?? 'Toko Sejahtera',
-            'phone' => Setting::get('phone') ?? Setting::get('store_phone', ''),
-            'address' => Setting::get('address') ?? Setting::get('store_address', ''),
-            'npwp' => Setting::get('npwp') ?? Setting::get('store_npwp', ''),
-            'siup' => Setting::get('siup') ?? '',
-        ];
+        try {
+            $transaction->load(['details', 'customer', 'supplier', 'salesRep']);
+            
+            // Get store settings
+            $storeSettings = [
+                'name' => Setting::get('store_name') ?? 'Toko Sejahtera',
+                'phone' => Setting::get('phone') ?? Setting::get('store_phone', ''),
+                'address' => Setting::get('address') ?? Setting::get('store_address', ''),
+                'npwp' => Setting::get('npwp') ?? Setting::get('store_npwp', ''),
+                'siup' => Setting::get('siup') ?? '',
+            ];
 
-        $pdf = PDF::loadView('pdf.invoice', compact([
-            'transaction',
-            'storeSettings',
-        ]))->setPaper('a4')->setOption('isHtml5ParserEnabled', true);
+            $pdf = PDF::loadView('pdf.invoice', compact([
+                'transaction',
+                'storeSettings',
+            ]))->setPaper('a4')->setOption('isHtml5ParserEnabled', true);
 
-        $filename = "invoice-{$transaction->invoice_number}.pdf";
+            $filename = "invoice-{$transaction->invoice_number}.pdf";
 
-        if ($request->boolean('download')) {
-            $requestedFilename = (string) $request->query('filename', $filename);
+            if ($request->boolean('download')) {
+                $requestedFilename = (string) $request->query('filename', $filename);
 
-            return $pdf->download($this->sanitizePdfFilename($requestedFilename));
+                return $pdf->download($this->sanitizePdfFilename($requestedFilename));
+            }
+
+            Storage::disk('public')->put("invoices/{$filename}", $pdf->output());
+
+            return response()->json([
+                'url' => asset("storage/invoices/{$filename}"),
+                'filename' => $filename,
+            ]);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Failed to generate invoice PDF: ' . $e->getMessage(), ['transaction_id' => $transaction->id]);
+            return response()->json(['message' => 'Gagal membuat file PDF. Silakan coba lagi.'], 500);
         }
-
-        Storage::disk('public')->put("invoices/{$filename}", $pdf->output());
-
-        return response()->json([
-            'url' => asset("storage/invoices/{$filename}"),
-            'filename' => $filename,
-        ]);
     }
 
     // ─── Print Generic Transaction PDF (GET /transactions/{id}/print/document) ────────────
     public function printDocument(Request $request, Transaction $transaction)
     {
-        $transaction->load(['details', 'customer', 'supplier', 'salesRep']);
+        try {
+            $transaction->load(['details', 'customer', 'supplier', 'salesRep']);
 
-        $storeSettings = [
-            'name' => Setting::get('store_name') ?? 'Toko Sejahtera',
-            'phone' => Setting::get('phone') ?? Setting::get('store_phone', ''),
-            'address' => Setting::get('address') ?? Setting::get('store_address', ''),
-            'npwp' => Setting::get('npwp') ?? Setting::get('store_npwp', ''),
-            'siup' => Setting::get('siup') ?? '',
-        ];
+            $storeSettings = [
+                'name' => Setting::get('store_name') ?? 'Toko Sejahtera',
+                'phone' => Setting::get('phone') ?? Setting::get('store_phone', ''),
+                'address' => Setting::get('address') ?? Setting::get('store_address', ''),
+                'npwp' => Setting::get('npwp') ?? Setting::get('store_npwp', ''),
+                'siup' => Setting::get('siup') ?? '',
+            ];
 
-        $title = $this->documentTitleForType($transaction->type);
-        $filename = "{$transaction->type}-{$transaction->invoice_number}.pdf";
+            $title = $this->documentTitleForType($transaction->type);
+            $filename = "{$transaction->type}-{$transaction->invoice_number}.pdf";
 
-        $pdf = PDF::loadView('pdf.transaction-document', [
-            'transaction' => $transaction,
-            'storeSettings' => $storeSettings,
-            'title' => $title,
-        ])->setPaper('a4')->setOption('isHtml5ParserEnabled', true);
+            $pdf = PDF::loadView('pdf.transaction-document', [
+                'transaction' => $transaction,
+                'storeSettings' => $storeSettings,
+                'title' => $title,
+            ])->setPaper('a4')->setOption('isHtml5ParserEnabled', true);
 
-        if ($request->boolean('download')) {
-            $requestedFilename = (string) $request->query('filename', $filename);
+            if ($request->boolean('download')) {
+                $requestedFilename = (string) $request->query('filename', $filename);
 
-            return $pdf->download($this->sanitizePdfFilename($requestedFilename));
+                return $pdf->download($this->sanitizePdfFilename($requestedFilename));
+            }
+
+            Storage::disk('public')->put("documents/{$filename}", $pdf->output());
+
+            return response()->json([
+                'url' => asset("storage/documents/{$filename}"),
+                'filename' => $filename,
+            ]);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Failed to generate document PDF: ' . $e->getMessage(), ['transaction_id' => $transaction->id]);
+            return response()->json(['message' => 'Gagal membuat file PDF dokumen. Silakan coba lagi.'], 500);
         }
-
-        Storage::disk('public')->put("documents/{$filename}", $pdf->output());
-
-        return response()->json([
-            'url' => asset("storage/documents/{$filename}"),
-            'filename' => $filename,
-        ]);
     }
 
     // ─── Print Receipt PDF (GET /transactions/{id}/print/receipt) ────────────
     public function printReceipt(Request $request, Transaction $transaction)
     {
-        $transaction->load(['details', 'customer', 'supplier']);
-        
-        // Get store settings
-        $storeSettings = [
-            'name' => Setting::get('store_name') ?? 'Toko Sejahtera',
-            'phone' => Setting::get('phone') ?? Setting::get('store_phone', ''),
-            'address' => Setting::get('address') ?? Setting::get('store_address', ''),
-        ];
+        try {
+            $transaction->load(['details', 'customer', 'supplier']);
+            
+            // Get store settings
+            $storeSettings = [
+                'name' => Setting::get('store_name') ?? 'Toko Sejahtera',
+                'phone' => Setting::get('phone') ?? Setting::get('store_phone', ''),
+                'address' => Setting::get('address') ?? Setting::get('store_address', ''),
+            ];
 
-        $pdf = PDF::loadView('pdf.receipt', compact([
-            'transaction',
-            'storeSettings',
-        ]))->setPaper([0, 0, 226.77, 600]) // 80mm thermal width
-            ->setOption('isHtml5ParserEnabled', true)
-            ->setOption('isRemoteEnabled', true);
+            $pdf = PDF::loadView('pdf.receipt', compact([
+                'transaction',
+                'storeSettings',
+            ]))->setPaper([0, 0, 226.77, 600]) // 80mm thermal width
+                ->setOption('isHtml5ParserEnabled', true)
+                ->setOption('isRemoteEnabled', true);
 
-        $filename = "receipt-{$transaction->invoice_number}.pdf";
+            $filename = "receipt-{$transaction->invoice_number}.pdf";
 
-        if ($request->boolean('download')) {
-            $requestedFilename = (string) $request->query('filename', $filename);
+            if ($request->boolean('download')) {
+                $requestedFilename = (string) $request->query('filename', $filename);
 
-            return $pdf->download($this->sanitizePdfFilename($requestedFilename));
+                return $pdf->download($this->sanitizePdfFilename($requestedFilename));
+            }
+
+            Storage::disk('public')->put("receipts/{$filename}", $pdf->output());
+
+            return response()->json([
+                'url' => asset("storage/receipts/{$filename}"),
+                'filename' => $filename,
+            ]);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Failed to generate receipt PDF: ' . $e->getMessage(), ['transaction_id' => $transaction->id]);
+            return response()->json(['message' => 'Gagal mencetak struk. Silakan coba lagi.'], 500);
         }
-
-        Storage::disk('public')->put("receipts/{$filename}", $pdf->output());
-
-        return response()->json([
-            'url' => asset("storage/receipts/{$filename}"),
-            'filename' => $filename,
-        ]);
     }
 
     private function sanitizePdfFilename(string $filename): string

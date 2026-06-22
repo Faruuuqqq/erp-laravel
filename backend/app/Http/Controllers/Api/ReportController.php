@@ -132,43 +132,48 @@ class ReportController extends Controller
      */
     public function printDaily(Request $request): JsonResponse
     {
-        $date = $request->date ?? today()->toDateString();
-        
-        $sales = Transaction::whereDate('date', $date)->sales()->get();
-        $purchases = Transaction::whereDate('date', $date)->purchases()->get();
-        
-        $totalSales = $sales->sum('total');
-        $totalPurchases = $purchases->sum('total');
-        
-        $data = [
-            'date' => $date,
-            'totalSales' => (float) $totalSales,
-            'totalPurchases' => (float) $totalPurchases,
-            'grossProfit' => (float) ($totalSales - $totalPurchases),
-            'salesCount' => $sales->count(),
-            'purchasesCount' => $purchases->count(),
-            'transactions' => $sales->concat($purchases)->load(['customer', 'supplier', 'details']),
-        ];
+        try {
+            $date = $request->date ?? today()->toDateString();
+            
+            $sales = Transaction::whereDate('date', $date)->sales()->get();
+            $purchases = Transaction::whereDate('date', $date)->purchases()->get();
+            
+            $totalSales = $sales->sum('total');
+            $totalPurchases = $purchases->sum('total');
+            
+            $data = [
+                'date' => $date,
+                'totalSales' => (float) $totalSales,
+                'totalPurchases' => (float) $totalPurchases,
+                'grossProfit' => (float) ($totalSales - $totalPurchases),
+                'salesCount' => $sales->count(),
+                'purchasesCount' => $purchases->count(),
+                'transactions' => $sales->concat($purchases)->load(['customer', 'supplier', 'details']),
+            ];
 
-        $storeSettings = [
-            'name' => Setting::get('store_name') ?? 'Toko Sejahtera',
-            'phone' => Setting::get('phone') ?? '',
-            'address' => Setting::get('address') ?? '',
-            'npwp' => Setting::get('npwp') ?? '',
-            'siup' => Setting::get('siup') ?? '',
-        ];
+            $storeSettings = [
+                'name' => Setting::get('store_name') ?? 'Toko Sejahtera',
+                'phone' => Setting::get('phone') ?? '',
+                'address' => Setting::get('address') ?? '',
+                'npwp' => Setting::get('npwp') ?? '',
+                'siup' => Setting::get('siup') ?? '',
+            ];
 
-        $pdf = PDF::loadView('pdf.report-daily', compact('data', 'storeSettings'))
-            ->setPaper('a4', 'landscape')
-            ->setOption('isHtml5ParserEnabled', true);
+            $pdf = PDF::loadView('pdf.report-daily', compact('data', 'storeSettings'))
+                ->setPaper('a4', 'landscape')
+                ->setOption('isHtml5ParserEnabled', true);
 
-        $filename = "laporan-harian-{$date}.pdf";
-        Storage::disk('public')->put("reports/{$filename}", $pdf->output());
+            $filename = "laporan-harian-{$date}.pdf";
+            Storage::disk('public')->put("reports/{$filename}", $pdf->output());
 
-        return response()->json([
-            'url' => asset("storage/reports/{$filename}"),
-            'filename' => $filename,
-        ]);
+            return response()->json([
+                'url' => asset("storage/reports/{$filename}"),
+                'filename' => $filename,
+            ]);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Failed to generate daily report PDF: ' . $e->getMessage());
+            return response()->json(['message' => 'Gagal membuat file PDF laporan harian.'], 500);
+        }
     }
 
     /**
@@ -176,39 +181,44 @@ class ReportController extends Controller
      */
     public function printStock(): JsonResponse
     {
-        $products = Product::with('category')->get();
-        
-        $data = [
-            'items' => $products->map(fn($p) => [
-                'code' => $p->code,
-                'name' => $p->name,
-                'category' => $p->category?->name,
-                'stock' => (int) $p->stock,
-                'unit' => $p->unit,
-                'buyPrice' => (float) $p->buy_price,
-                'sellPrice' => (float) $p->sell_price,
-                'stockValue' => round($p->stock * $p->buy_price, 2),
-            ]),
-            'totalValue' => $products->sum(fn($p) => $p->stock * $p->buy_price),
-        ];
+        try {
+            $products = Product::with('category')->get();
+            
+            $data = [
+                'items' => $products->map(fn($p) => [
+                    'code' => $p->code,
+                    'name' => $p->name,
+                    'category' => $p->category?->name,
+                    'stock' => (int) $p->stock,
+                    'unit' => $p->unit,
+                    'buyPrice' => (float) $p->buy_price,
+                    'sellPrice' => (float) $p->sell_price,
+                    'stockValue' => round($p->stock * $p->buy_price, 2),
+                ]),
+                'totalValue' => $products->sum(fn($p) => $p->stock * $p->buy_price),
+            ];
 
-        $storeSettings = [
-            'name' => Setting::get('store_name') ?? 'Toko Sejahtera',
-            'phone' => Setting::get('phone') ?? '',
-            'address' => Setting::get('address') ?? '',
-        ];
+            $storeSettings = [
+                'name' => Setting::get('store_name') ?? 'Toko Sejahtera',
+                'phone' => Setting::get('phone') ?? '',
+                'address' => Setting::get('address') ?? '',
+            ];
 
-        $pdf = PDF::loadView('pdf.report-stock', compact('data', 'storeSettings'))
-            ->setPaper('a4')
-            ->setOption('isHtml5ParserEnabled', true);
+            $pdf = PDF::loadView('pdf.report-stock', compact('data', 'storeSettings'))
+                ->setPaper('a4')
+                ->setOption('isHtml5ParserEnabled', true);
 
-        $filename = "laporan-stok-" . date('Y-m-d') . ".pdf";
-        Storage::disk('public')->put("reports/{$filename}", $pdf->output());
+            $filename = "laporan-stok-" . date('Y-m-d') . ".pdf";
+            Storage::disk('public')->put("reports/{$filename}", $pdf->output());
 
-        return response()->json([
-            'url' => asset("storage/reports/{$filename}"),
-            'filename' => $filename,
-        ]);
+            return response()->json([
+                'url' => asset("storage/reports/{$filename}"),
+                'filename' => $filename,
+            ]);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Failed to generate stock report PDF: ' . $e->getMessage());
+            return response()->json(['message' => 'Gagal membuat file PDF laporan stok.'], 500);
+        }
     }
 
     /**
@@ -216,38 +226,43 @@ class ReportController extends Controller
      */
     public function printBalance(Request $request): JsonResponse
     {
-        $from = $request->from ?? today()->startOfMonth()->toDateString();
-        $to = $request->to ?? today()->toDateString();
-        
-        $totalSales = Transaction::whereBetween('date', [$from, $to])->sales()->sum('total');
-        $totalPurchases = Transaction::whereBetween('date', [$from, $to])->purchases()->sum('total');
-        
-        $data = [
-            'from' => $from,
-            'to' => $to,
-            'totalSales' => (float) $totalSales,
-            'totalPurchases' => (float) $totalPurchases,
-            'grossProfit' => (float) ($totalSales - $totalPurchases),
-        ];
+        try {
+            $from = $request->from ?? today()->startOfMonth()->toDateString();
+            $to = $request->to ?? today()->toDateString();
+            
+            $totalSales = Transaction::whereBetween('date', [$from, $to])->sales()->sum('total');
+            $totalPurchases = Transaction::whereBetween('date', [$from, $to])->purchases()->sum('total');
+            
+            $data = [
+                'from' => $from,
+                'to' => $to,
+                'totalSales' => (float) $totalSales,
+                'totalPurchases' => (float) $totalPurchases,
+                'grossProfit' => (float) ($totalSales - $totalPurchases),
+            ];
 
-        $storeSettings = [
-            'name' => Setting::get('store_name') ?? 'Toko Sejahtera',
-            'phone' => Setting::get('phone') ?? '',
-            'address' => Setting::get('address') ?? '',
-            'npwp' => Setting::get('npwp') ?? '',
-            'siup' => Setting::get('siup') ?? '',
-        ];
+            $storeSettings = [
+                'name' => Setting::get('store_name') ?? 'Toko Sejahtera',
+                'phone' => Setting::get('phone') ?? '',
+                'address' => Setting::get('address') ?? '',
+                'npwp' => Setting::get('npwp') ?? '',
+                'siup' => Setting::get('siup') ?? '',
+            ];
 
-        $pdf = PDF::loadView('pdf.report-balance', compact('data', 'storeSettings'))
-            ->setPaper('a4')
-            ->setOption('isHtml5ParserEnabled', true);
+            $pdf = PDF::loadView('pdf.report-balance', compact('data', 'storeSettings'))
+                ->setPaper('a4')
+                ->setOption('isHtml5ParserEnabled', true);
 
-        $filename = "laporan-balance-{$from}-to-{$to}.pdf";
-        Storage::disk('public')->put("reports/{$filename}", $pdf->output());
+            $filename = "laporan-balance-{$from}-to-{$to}.pdf";
+            Storage::disk('public')->put("reports/{$filename}", $pdf->output());
 
-        return response()->json([
-            'url' => asset("storage/reports/{$filename}"),
-            'filename' => $filename,
-        ]);
+            return response()->json([
+                'url' => asset("storage/reports/{$filename}"),
+                'filename' => $filename,
+            ]);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Failed to generate balance report PDF: ' . $e->getMessage());
+            return response()->json(['message' => 'Gagal membuat file PDF laporan laba-rugi.'], 500);
+        }
     }
 }

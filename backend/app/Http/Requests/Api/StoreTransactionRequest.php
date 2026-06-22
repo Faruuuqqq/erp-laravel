@@ -20,10 +20,10 @@ class StoreTransactionRequest extends FormRequest
             'tax'                      => ['nullable', 'numeric', 'min:0'],
             'paid'                     => ['nullable', 'numeric', 'min:0'],
             'notes'                    => ['nullable', 'string', 'max:500'],
-            'items'                    => ['required', 'array', 'min:1'],
-            'items.*.productId'        => ['required', 'exists:products,id'],
-            'items.*.quantity'         => ['required', 'integer', 'min:1'],
-            'items.*.price'            => ['required', 'numeric', 'min:0'],
+            'items'                    => ['required_unless:type,pembayaran_utang,pembayaran_piutang', 'array', 'min:1'],
+            'items.*.productId'        => ['required_with:items', 'exists:products,id'],
+            'items.*.quantity'         => ['required_with:items', 'integer', 'min:1'],
+            'items.*.price'            => ['required_with:items', 'numeric', 'min:0'],
             'items.*.discount'         => ['nullable', 'numeric', 'min:0', 'max:100'],
         ];
     }
@@ -32,7 +32,7 @@ class StoreTransactionRequest extends FormRequest
     {
         return [
             'type.in'                  => 'Tipe transaksi tidak valid.',
-            'items.required'           => 'Minimal 1 produk harus ditambahkan.',
+            'items.required_unless'    => 'Minimal 1 produk harus ditambahkan.',
             'items.min'                => 'Minimal 1 produk harus ditambahkan.',
             'items.*.productId.exists' => 'Produk tidak ditemukan.',
             'items.*.quantity.min'     => 'Qty minimal 1.',
