@@ -14,7 +14,7 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { useProducts } from '@/hooks/api/useProducts';
 import { useSuppliers } from '@/hooks/api/useSuppliers';
 import { useWarehouses } from '@/hooks/api/useWarehouses';
-import { useCreateTransaction } from '@/hooks/api/useTransactions';
+import { useCreateTransaction, useDownloadTransactionPdf } from '@/hooks/api/useTransactions';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { SearchInput } from '@/components/common';
 import { DraftPreviewDialog } from '@/components/dialogs/DraftPreviewDialog';
@@ -62,6 +62,8 @@ const Pembelian = () => {
 
    const [state, setState] = useState(BLANK_STATE());
    const [saved, setSaved] = useState(false);
+   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+   const downloadPdfMutation = useDownloadTransactionPdf();
    const [savedInvoice, setSavedInvoice] = useState('');
    const [savedTotal, setSavedTotal] = useState(0);
    const [savedTrx, setSavedTrx] = useState<Transaction | null>(null);
@@ -282,6 +284,23 @@ const Pembelian = () => {
           subtitle="Transaksi berhasil disimpan"
           invoiceNumber={savedInvoice}
           total={savedTotal}
+          onDownloadPdf={async () => {
+            if (!savedTrx) return;
+            try {
+              setIsDownloadingPdf(true);
+              await downloadPdfMutation.mutateAsync({
+                transactionId: savedTrx.id,
+                filename: `${savedTrx.invoiceNumber ?? 'pembelian'}.pdf`,
+                documentType: 'invoice',
+              });
+              toast({ title: 'Berhasil', description: 'Nota berhasil diunduh' });
+            } catch (err: any) {
+              toast({ title: 'Gagal Download', description: err?.response?.data?.message ?? err.message, variant: 'destructive' });
+            } finally {
+              setIsDownloadingPdf(false);
+            }
+          }}
+          isDownloadingPdf={isDownloadingPdf}
           onPrint={() => setIsPreviewOpen(true)}
           canPrint={canPrint('transactions.pembelian') || canPrint('transactions.purchase')}
           onReset={reset}

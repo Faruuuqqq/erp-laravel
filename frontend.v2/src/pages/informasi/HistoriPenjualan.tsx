@@ -11,9 +11,9 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
-import { History, Eye, EyeOff, FileDown, ChevronLeft, ChevronRight, ArrowUp, ArrowDown } from 'lucide-react';
+import { History, Eye, EyeOff, FileDown, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, Printer, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { useTransactions, useToggleHideTransaction } from '@/hooks/api/useTransactions';
+import { useTransactions, useToggleHideTransaction, useDownloadTransactionPdf } from '@/hooks/api/useTransactions';
 import { useCustomers } from '@/hooks/api/useCustomers';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useLazyPdfExport } from '@/hooks/useLazyPdfExport';
@@ -42,6 +42,8 @@ const HistoriPenjualan = () => {
   const [isExportingXlsx, setIsExportingXlsx] = useState(false);
 
   const toggleHideMutation = useToggleHideTransaction();
+  const downloadPdfMutation = useDownloadTransactionPdf();
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   const typeParam = filterType === 'kredit' ? 'penjualan_kredit' : filterType === 'tunai' ? 'penjualan_tunai' : undefined;
 
@@ -100,6 +102,22 @@ const HistoriPenjualan = () => {
     if (sortBy !== field) return null;
     return sortDirection === 'asc' ? <ArrowUp className="h-3 w-3 ml-1" /> : <ArrowDown className="h-3 w-3 ml-1" />;
   };
+
+  const handleDownloadInvoice = useCallback(async (t: Transaction) => {
+    setDownloadingId(t.id);
+    try {
+      await downloadPdfMutation.mutateAsync({
+        transactionId: t.id,
+        filename: `${t.invoiceNumber ?? 'invoice'}.pdf`,
+        documentType: 'invoice',
+      });
+      toast({ title: 'Berhasil', description: `Invoice ${t.invoiceNumber} diunduh` });
+    } catch {
+      toast({ title: 'Gagal', description: 'Gagal mengunduh PDF invoice', variant: 'destructive' });
+    } finally {
+      setDownloadingId(null);
+    }
+  }, [downloadPdfMutation, toast]);
 
   const handleToggleHide = useCallback(async (id: string, currentlyHidden: boolean) => {
     setTogglingId(id);
@@ -343,7 +361,17 @@ const HistoriPenjualan = () => {
                       </TableCell>
                        <TableCell>
                          <div className="flex gap-0.5">
-                           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setSelectedTrx(t)}><Eye className="h-3.5 w-3.5" /></Button>
+                           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setSelectedTrx(t)} title="Lihat detail"><Eye className="h-3.5 w-3.5" /></Button>
+                           <Button
+                             variant="ghost"
+                             size="icon"
+                             className="h-7 w-7 text-muted-foreground hover:text-primary"
+                             title="Cetak invoice PDF"
+                             onClick={() => handleDownloadInvoice(t)}
+                             disabled={downloadingId === t.id}
+                           >
+                             {downloadingId === t.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Printer className="h-3.5 w-3.5" />}
+                           </Button>
                            {canHideTransactions() && (
                              <Button
                                variant="ghost"
@@ -403,7 +431,16 @@ const HistoriPenjualan = () => {
                 </Table>
               )}
               <div className="flex gap-2 justify-end">
-                <Button variant="outline" size="sm" onClick={handleExport}><FileDown className="mr-1.5 h-3.5 w-3.5" />Export PDF</Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => selectedTrx && handleDownloadInvoice(selectedTrx)}
+                  disabled={downloadingId === selectedTrx?.id}
+                >
+                  {downloadingId === selectedTrx?.id
+                    ? <><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />Mengunduh...</>
+                    : <><Printer className="mr-1.5 h-3.5 w-3.5" />Cetak Invoice</>}
+                </Button>
                 <Button size="sm" onClick={() => setSelectedTrx(null)}>Tutup</Button>
               </div>
             </div>

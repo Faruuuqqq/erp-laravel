@@ -8,10 +8,10 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Eye, EyeOff, FileDown, ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react';
+import { Eye, EyeOff, FileDown, ChevronLeft, ChevronRight, RotateCcw, Printer, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { usePermissions } from '@/hooks/usePermissions';
-import { useTransactions, useToggleHideTransaction } from '@/hooks/api/useTransactions';
+import { useTransactions, useToggleHideTransaction, useDownloadTransactionPdf } from '@/hooks/api/useTransactions';
 import { DateRangeFilter } from '@/components/common';
 import { formatCurrency } from '@/lib/utils';
 import { exportTransactionsToXlsx, getFilenameWithDate } from '@/lib/xlsx-export';
@@ -30,6 +30,8 @@ const HistoriReturPembelian = () => {
   const [isExportingXlsx, setIsExportingXlsx] = useState(false);
 
   const toggleHideMutation = useToggleHideTransaction();
+  const downloadPdfMutation = useDownloadTransactionPdf();
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   const { data, isLoading } = useTransactions({
     type: 'retur_pembelian',
@@ -52,6 +54,22 @@ const HistoriReturPembelian = () => {
 
   const hiddenCount = transactions.filter(t => t.isHidden).length;
   const totalNilai = filtered.reduce((s, t) => s + t.total, 0);
+
+  const handleDownloadInvoice = useCallback(async (t: Transaction) => {
+    setDownloadingId(t.id);
+    try {
+      await downloadPdfMutation.mutateAsync({
+        transactionId: t.id,
+        filename: `${t.invoiceNumber ?? 'retur'}.pdf`,
+        documentType: 'invoice',
+      });
+      toast({ title: 'Berhasil', description: `Dokumen ${t.invoiceNumber} diunduh` });
+    } catch {
+      toast({ title: 'Gagal', description: 'Gagal mengunduh PDF', variant: 'destructive' });
+    } finally {
+      setDownloadingId(null);
+    }
+  }, [downloadPdfMutation, toast]);
 
   const handleToggleHide = useCallback(async (id: string, currentlyHidden: boolean) => {
     setTogglingId(id);
@@ -162,23 +180,33 @@ const HistoriReturPembelian = () => {
                      <TableCell className="font-medium max-w-[140px] truncate">{t.supplier || '-'}</TableCell>
                      <TableCell className="text-right font-bold tabular-nums text-warning">{formatCurrency(t.total)}</TableCell>
                      <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">{t.notes || '-'}</TableCell>
-                      <TableCell>
-                        <div className="flex gap-0.5">
-                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setSelectedTrx(t)}><Eye className="h-3.5 w-3.5" /></Button>
-                          {canHideTransactions() && (
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              className="h-7 w-7 text-muted-foreground hover:text-foreground" 
-                              title={t.isHidden ? 'Tampilkan' : 'Sembunyikan'}
-                              onClick={() => handleToggleHide(t.id, t.isHidden ?? false)}
-                              disabled={togglingId === t.id}
-                            >
-                              {t.isHidden ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
+                       <TableCell>
+                         <div className="flex gap-0.5">
+                           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setSelectedTrx(t)} title="Lihat detail"><Eye className="h-3.5 w-3.5" /></Button>
+                           <Button
+                             variant="ghost"
+                             size="icon"
+                             className="h-7 w-7 text-muted-foreground hover:text-primary"
+                             title="Cetak dokumen PDF"
+                             onClick={() => handleDownloadInvoice(t)}
+                             disabled={downloadingId === t.id}
+                           >
+                             {downloadingId === t.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Printer className="h-3.5 w-3.5" />}
+                           </Button>
+                           {canHideTransactions() && (
+                             <Button 
+                               variant="ghost" 
+                               size="icon" 
+                               className="h-7 w-7 text-muted-foreground hover:text-foreground" 
+                               title={t.isHidden ? 'Tampilkan' : 'Sembunyikan'}
+                               onClick={() => handleToggleHide(t.id, t.isHidden ?? false)}
+                               disabled={togglingId === t.id}
+                             >
+                               {t.isHidden ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                             </Button>
+                           )}
+                         </div>
+                       </TableCell>
                    </TableRow>
                  ))}
                </TableBody>
@@ -227,7 +255,19 @@ const HistoriReturPembelian = () => {
                   </TableBody>
                 </Table>
               )}
-              <div className="flex justify-end"><Button size="sm" onClick={() => setSelectedTrx(null)}>Tutup</Button></div>
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => selectedTrx && handleDownloadInvoice(selectedTrx)}
+                  disabled={downloadingId === selectedTrx?.id}
+                >
+                  {downloadingId === selectedTrx?.id
+                    ? <><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />Mengunduh...</>
+                    : <><Printer className="mr-1.5 h-3.5 w-3.5" />Cetak Dokumen</>}
+                </Button>
+                <Button size="sm" onClick={() => setSelectedTrx(null)}>Tutup</Button>
+              </div>
             </div>
           )}
         </DialogContent>
